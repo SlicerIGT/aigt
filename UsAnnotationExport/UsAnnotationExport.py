@@ -147,14 +147,13 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     self.exportButton.enabled = self.inputSelector.currentNode() and self.fiducialsSelector.currentNode()
 
   def onExportButton(self):
-    logic = ExportUsBoxesLogic()
     proximityThreshold = self.proximityThresholdSliderWidget.value
 
     exportPath = self.saveDirectoryLineEdit.currentPath
     fileNamePrefix = self.filePrefixEdit.text
     self.exportButton.setEnabled(False)
-    logic.exportData(self.inputSelector.currentNode(), self.fiducialsSelector.currentNode(),
-                     proximityThreshold, exportPath, fileNamePrefix)
+    self.logic.exportData(self.inputSelector.currentNode(), self.fiducialsSelector.currentNode(),
+                          proximityThreshold, exportPath, fileNamePrefix)
     self.exportButton.setEnabled(True)
 
 
@@ -242,17 +241,12 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
     
     # Create folders if they don't exist already
     
-    self.trainImagesPath = os.path.join(self.exportPath, 'images', 'train')
-    self.testImagesPath = os.path.join(self.exportPath, 'images', 'test')
+    self.imagesPath = os.path.join(self.exportPath, 'images')
     self.annotationsPath = os.path.join(self.exportPath, 'annotations')
 
-    if not os.path.exists(self.trainImagesPath):
-      os.makedirs(self.trainImagesPath)
-      logging.info("Creating folder: " + self.trainImagesPath)
-
-    if not os.path.exists(self.testImagesPath):
-      os.makedirs(self.testImagesPath)
-      logging.info("Creating folder: " + self.testImagesPath)
+    if not os.path.exists(self.imagesPath):
+      os.makedirs(self.imagesPath)
+      logging.info("Creating folder: " + self.imagesPath)
 
     if not os.path.exists(self.annotationsPath):
       os.makedirs(self.annotationsPath)
@@ -306,7 +300,7 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
       imageData = imageNode.GetImageData()
       pngWriter.SetInputData(imageData)
       pngFileName = fileNamePrefix + "_%04d" % i + ".png"
-      pngFilePathName = os.path.join(self.trainImagesPath, pngFileName)
+      pngFilePathName = os.path.join(self.imagesPath, pngFileName)
       logging.info("Writing: " + pngFilePathName)
       pngWriter.SetFileName(pngFilePathName)
       pngWriter.Update()
