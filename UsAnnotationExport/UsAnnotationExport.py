@@ -253,7 +253,7 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
       logging.info("Creating folder: " + self.annotationsPath)
 
 
-  def exportData(self, inputBrowserNode, inputFiducials, proximityThreshold, exportPath, fileNamePrefix=""):
+  def exportData(self, inputBrowserNode, inputFiducials, proximityThresholdMm, exportPath, fileNamePrefix=""):
     logging.info('Processing started')
 
     if len(exportPath) < 3:
@@ -313,12 +313,18 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
       referenceToImageMatrix = vtk.vtkMatrix4x4()
       referenceToImageMatrix.DeepCopy(imageToReferenceMatrix)
       referenceToImageMatrix.Invert()
+      
+      # Get PixelsToMm scaling
+      
+      imageToReferenceTransform = vtk.vtkTransform()
+      imageToReferenceTransform.SetMatrix(imageToReferenceMatrix)
+      pixelToMm = imageToReferenceTransform.GetScale()[0]
 
       # Create fiducial list in the Image coordinate system
 
       fiducials_Image = self.transformFiducialArrayByMatrix(self.fiducialCoordinates_Reference, referenceToImageMatrix)
 
-      (closestIndex, closestDistanceMm) = self.findClosestPoint(imageExtent, fiducials_Image)
+      (closestIndex, closestDistancePixels) = self.findClosestPoint(imageExtent, fiducials_Image)
       
       p = fiducials_Image[closestIndex]
       p[1] = imageExtent[1] - p[1]  # Second dimension is reversed between IJK and PNG coordinates.
@@ -326,7 +332,7 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
       x = int(round(p[0]))
       y = int(round(p[1]))
 
-      if closestDistanceMm < proximityThreshold:
+      if (closestDistancePixels * pixelToMm) < proximityThresholdMm:
         logging.info("Saving landmark for image " + pngFileName)
         csvWriter.writerow([pngFileName, str(imageExtent[1] + 1), str(imageExtent[3] + 1),
                             fiducialLabels[closestIndex], x, y])
