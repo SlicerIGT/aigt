@@ -77,34 +77,6 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     self.inputSelector.setToolTip( "Pick the input sequence" )
     parametersFormLayout.addRow("Input sequence browser: ", self.inputSelector)
 
-    #
-    # input fiducials selector
-    #
-    self.fiducialsSelector = slicer.qMRMLNodeComboBox()
-    self.fiducialsSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
-    self.fiducialsSelector.selectNodeUponCreation = True
-    self.fiducialsSelector.addEnabled = True
-    self.fiducialsSelector.removeEnabled = True
-    self.fiducialsSelector.noneEnabled = False
-    self.fiducialsSelector.showHidden = False
-    self.fiducialsSelector.showChildNodeTypes = False
-    self.fiducialsSelector.setMRMLScene(slicer.mrmlScene)
-    self.fiducialsSelector.setToolTip("Pick the fiducial list that marks objects to detect")
-    parametersFormLayout.addRow("Input fiducials: ", self.fiducialsSelector)
-
-    #
-    # threshold value
-    #
-    self.proximityThresholdSliderWidget = ctk.ctkSliderWidget()
-    self.proximityThresholdSliderWidget.singleStep = 0.1
-    self.proximityThresholdSliderWidget.minimum = 0
-    self.proximityThresholdSliderWidget.maximum = 100
-    self.proximityThresholdSliderWidget.value = 2
-    self.proximityThresholdSliderWidget.setToolTip("Set distance threshold for landmark detection")
-    parametersFormLayout.addRow("Fiducial proximity threshold (mm)", self.proximityThresholdSliderWidget)
-
-    
-
     self.saveDirectoryLineEdit = ctk.ctkPathLineEdit()
     node = self.logic.getParameterNode()
     saveDirectory = node.GetParameter('SaveDirectory')
@@ -120,19 +92,70 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     self.filePrefixEdit = qt.QLineEdit()
     parametersFormLayout.addRow("File name prefix", self.filePrefixEdit)
     
-    #
-    # Apply Button
-    #
-    self.exportButton = qt.QPushButton("Export")
-    self.exportButton.toolTip = "Export all images from sequence to files"
-    self.exportButton.enabled = False
-    parametersFormLayout.addRow(self.exportButton)
+    # Group with fiducials
+    
+    fiducialGroupBox = qt.QGroupBox(parametersCollapsibleButton)
+    fiducialGroupLayout = qt.QFormLayout(fiducialGroupBox)
+    fiducialGroupBox.setTitle("Fiducial annotations")
+    fiducialGroupBox.setLayout(fiducialGroupLayout)
 
+    self.fiducialsSelector = slicer.qMRMLNodeComboBox()
+    self.fiducialsSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+    self.fiducialsSelector.selectNodeUponCreation = True
+    self.fiducialsSelector.addEnabled = True
+    self.fiducialsSelector.removeEnabled = True
+    self.fiducialsSelector.noneEnabled = False
+    self.fiducialsSelector.showHidden = False
+    self.fiducialsSelector.showChildNodeTypes = False
+    self.fiducialsSelector.setMRMLScene(slicer.mrmlScene)
+    self.fiducialsSelector.setToolTip("Pick the fiducial list that marks objects to detect")
+    fiducialGroupLayout.addRow("Input fiducials: ", self.fiducialsSelector)
+
+    self.proximityThresholdSliderWidget = ctk.ctkSliderWidget()
+    self.proximityThresholdSliderWidget.singleStep = 0.1
+    self.proximityThresholdSliderWidget.minimum = 0
+    self.proximityThresholdSliderWidget.maximum = 100
+    self.proximityThresholdSliderWidget.value = 2
+    self.proximityThresholdSliderWidget.setToolTip("Set distance threshold for landmark detection")
+    fiducialGroupLayout.addRow("Fiducial proximity threshold (mm)", self.proximityThresholdSliderWidget)
+
+    self.exportFiducialsButton = qt.QPushButton("Export with fiducial annotations")
+    self.exportFiducialsButton.toolTip = "Export all images from sequence to files"
+    self.exportFiducialsButton.enabled = False
+    fiducialGroupLayout.addRow(self.exportFiducialsButton)
+    
+    # Group with model
+    
+    modelGroupBox = qt.QGroupBox(parametersCollapsibleButton)
+    modelGroupLayout = qt.QFormLayout(modelGroupBox)
+    modelGroupBox.setTitle("Model annotations")
+    modelGroupBox.setLayout(modelGroupLayout)
+
+    self.modelSelector = slicer.qMRMLNodeComboBox()
+    self.modelSelector.nodeTypes = ["vtkMRMLModelNode"]
+    self.modelSelector.selectNodeUponCreation = True
+    self.modelSelector.addEnabled = False
+    self.modelSelector.removeEnabled = True
+    self.modelSelector.noneEnabled = False
+    self.modelSelector.showHidden = False
+    self.modelSelector.showChildNodeTypes = False
+    self.modelSelector.setMRMLScene(slicer.mrmlScene)
+    self.modelSelector.setToolTip("Pick the model that marks objects to detect")
+    modelGroupLayout.addRow("Input model: ", self.modelSelector)
+
+    self.exportModelButton = qt.QPushButton("Export with model annotations")
+    modelGroupLayout.addRow(self.exportModelButton)
+    
+    # Adding groups to main layout
+
+    parametersFormLayout.addRow(fiducialGroupBox)
+    parametersFormLayout.addRow(modelGroupBox)
+    
     # connections
-    self.exportButton.connect('clicked(bool)', self.onExportButton)
+    self.exportFiducialsButton.connect('clicked(bool)', self.onExportButton)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.fiducialsSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-
+    
     # Add vertical spacer
     self.layout.addStretch(1)
 
@@ -144,17 +167,17 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     pass
 
   def onSelect(self):
-    self.exportButton.enabled = self.inputSelector.currentNode() and self.fiducialsSelector.currentNode()
+    self.exportFiducialsButton.enabled = self.inputSelector.currentNode() and self.fiducialsSelector.currentNode()
 
   def onExportButton(self):
     proximityThreshold = self.proximityThresholdSliderWidget.value
 
     exportPath = self.saveDirectoryLineEdit.currentPath
     fileNamePrefix = self.filePrefixEdit.text
-    self.exportButton.setEnabled(False)
+    self.exportFiducialsButton.setEnabled(False)
     self.logic.exportData(self.inputSelector.currentNode(), self.fiducialsSelector.currentNode(),
                           proximityThreshold, exportPath, fileNamePrefix)
-    self.exportButton.setEnabled(True)
+    self.exportFiducialsButton.setEnabled(True)
 
 
 #
