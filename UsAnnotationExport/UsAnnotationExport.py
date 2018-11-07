@@ -62,9 +62,13 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
 
-    #
-    # input browser node selector
-    #
+    # Common parameters group
+
+    commonGroupBox = qt.QGroupBox(parametersCollapsibleButton)
+    commonGroupLayout = qt.QFormLayout(commonGroupBox)
+    commonGroupBox.setTitle("Common parameters")
+    commonGroupBox.setLayout(commonGroupLayout)
+
     self.inputSelector = slicer.qMRMLNodeComboBox()
     self.inputSelector.nodeTypes = ["vtkMRMLSequenceBrowserNode"]
     self.inputSelector.selectNodeUponCreation = True
@@ -75,7 +79,7 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     self.inputSelector.showChildNodeTypes = False
     self.inputSelector.setMRMLScene( slicer.mrmlScene )
     self.inputSelector.setToolTip( "Pick the input sequence" )
-    parametersFormLayout.addRow("Input sequence browser: ", self.inputSelector)
+    commonGroupLayout.addRow("Input sequence browser: ", self.inputSelector)
 
     self.saveDirectoryLineEdit = ctk.ctkPathLineEdit()
     node = self.logic.getParameterNode()
@@ -87,11 +91,13 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     self.saveDirectoryLineEdit.showHistoryButton = True
     self.saveDirectoryLineEdit.setMinimumWidth(100)
     self.saveDirectoryLineEdit.setMaximumWidth(500)
-    parametersFormLayout.addRow("Save directory", self.saveDirectoryLineEdit)
+    commonGroupLayout.addRow("Save directory", self.saveDirectoryLineEdit)
 
     self.filePrefixEdit = qt.QLineEdit()
-    parametersFormLayout.addRow("File name prefix", self.filePrefixEdit)
-    
+    commonGroupLayout.addRow("File name prefix", self.filePrefixEdit)
+
+    parametersFormLayout.addRow(commonGroupBox)
+
     # Group with fiducials
     
     fiducialGroupBox = qt.QGroupBox(parametersCollapsibleButton)
@@ -153,6 +159,7 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     
     # connections
     self.exportFiducialsButton.connect('clicked(bool)', self.onExportButton)
+    self.exportModelButton.connect('clicked(bool)', self.onExportModel)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.fiducialsSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     
@@ -178,6 +185,15 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     self.logic.exportData(self.inputSelector.currentNode(), self.fiducialsSelector.currentNode(),
                           proximityThreshold, exportPath, fileNamePrefix)
     self.exportFiducialsButton.setEnabled(True)
+
+
+  def onExportModel(self):
+    modelNode = self.modelSelector.currentNode()
+    modelNodeId = modelNode.GetID()
+    exportPath = self.saveDirectoryLineEdit.currentPath
+    fileNamePrefix = self.filePrefixEdit.text
+    self.logic.exportModelData(self.inputSelector.currentNode(), modelNodeId,
+                               exportPath, fileNamePrefix)
 
 
 #
@@ -275,6 +291,120 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
       os.makedirs(self.annotationsPath)
       logging.info("Creating folder: " + self.annotationsPath)
 
+
+  def exportModelData(self, inputBrowserNode, inputModelId, exportPath, fileNamePrefix=""):
+    logging.info('Exporting model annotation data')
+
+    if len(exportPath) < 3:
+      logging.warning('Export path not specified')
+      return
+
+    self.setupExportPaths(exportPath)
+
+    # Get the model polydata and its transform to RAS
+
+    modelNode = slicer.util.getNode(inputModelId)
+    polyData = modelNode.GetPolyData()
+
+    modelToRasMatrix = vtk.vtkMatrix4x4()
+    modelToRasMatrix.Identity()
+
+    modelTransformNodeId = modelNode.GetTransformNodeID()
+    if modelTransformNodeId != None:
+      modelTransformNode = slicer.util.getNode(modelTransformNodeId)
+      modelTransformNode.GetMatrixTransformToWorld(modelToRasMatrix)
+
+
+    # Assume that the selected browser node has a master image node, and it has a transform node
+
+    self.browserNode = inputBrowserNode
+    masterNode = self.browserNode.GetMasterSequenceNode()
+    imageNode = self.browserNode.GetProxyNode(masterNode)
+
+    imageTransformId = imageNode.GetTransformNodeID()
+    imageToReferenceNode = slicer.util.getNode(imageTransformId)
+
+    imageData = imageNode.GetImageData()
+    imageExtent = imageData.GetExtent()
+    self.browserNode.SelectFirstItem()
+    numItems = self.browserNode.GetNumberOfItems()
+
+    if len(fileNamePrefix) < 1:
+      fileNamePrefix = self.browserNode.GetName()
+    csvFileName = fileNamePrefix + ".csv"
+    csvFilePath = os.path.join(self.annotationsPath, csvFileName)
+    csvFile = open(csvFilePath, 'wb')
+    csvWriter = csv.writer(csvFile, delimiter=',')
+    csvWriter.writerow(['filename', 'width', 'height', 'class', 'x', 'y'])
+
+    pngWriter = vtk.vtkPNGWriter()
+
+    for i in range(numItems - 1):
+      self.browserNode.SelectNextItem()
+      imageData = imageNode.GetImageData()
+      pngWriter.SetInputData(imageData)
+      pngFileName = fileNamePrefix + "_%04d" % i + ".png"
+      pngFilePathName = os.path.join(self.imagesPath, pngFileName)
+      logging.info("Writing: " + pngFilePathName)
+      pngWriter.SetFileName(pngFilePathName)
+      pngWriter.Update()
+      pngWriter.Write()
+
+      # Compute RasToImage transform of current time
+
+      imageToRasMatrix = vtk.vtkMatrix4x4()
+      imageToReferenceNode.GetMatrixTransformToWorld(imageToRasMatrix)
+      rasToImageMatrix = vtk.vtkMatrix4x4()
+      rasToImageMatrix.DeepCopy(imageToRasMatrix)
+      rasToImageMatrix.Invert()
+
+      # Get PixelsToMm scaling
+
+      imageToRasTransform = vtk.vtkTransform()
+      imageToRasTransform.SetMatrix(imageToRasMatrix)
+      pixelToMm = imageToRasTransform.GetScale()[0]
+
+      # Transform model to Image coordinate system
+
+      modelToImageTransform = vtk.vtkTransform()
+      modelToImageTransform.Concatenate(rasToImageMatrix)
+      modelToImageTransform.Concatenate(modelToRasMatrix)
+
+      transformModelFilter = vtk.vtkTransformPolyDataFilter()
+      transformModelFilter.SetInputData(polyData)
+      transformModelFilter.SetTransform(modelToImageTransform)
+      transformModelFilter.Update()
+      model_Image = transformModelFilter.GetOutput()
+
+      # Compute image-model intersection
+
+
+
+      # Save annotation
+
+      '''
+      fiducials_Image = self.transformFiducialArrayByMatrix(self.fiducialCoordinates_Reference, rasToImageMatrix)
+
+      (closestIndex, closestDistancePixels) = self.findClosestPoint(imageExtent, fiducials_Image)
+
+      p = fiducials_Image[closestIndex]
+      p[1] = imageExtent[1] - p[1]  # Second dimension is reversed between IJK and PNG coordinates.
+
+      x = int(round(p[0]))
+      y = int(round(p[1]))
+
+      if (closestDistancePixels * pixelToMm) < proximityThresholdMm:
+        logging.info("Saving landmark for image " + pngFileName)
+        csvWriter.writerow([pngFileName, str(imageExtent[1] + 1), str(imageExtent[3] + 1),
+                            fiducialLabels[closestIndex], x, y])
+      '''
+
+      slicer.app.processEvents()
+
+    csvFile.close()
+
+    logging.info('Processing completed')
+    return True
 
   def exportData(self, inputBrowserNode, inputFiducials, proximityThresholdMm, exportPath, fileNamePrefix=""):
     logging.info('Processing started')
