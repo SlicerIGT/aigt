@@ -11,7 +11,7 @@ set EnvironmentPath=%ProjectPath%\Env
 call conda create -y -n %EnvironmentPath% python=3.6
 call activate %EnvironmentPath%
 
-call pip install tensorflow-gpu keras pandas
+call pip install tensorflow-gpu keras pandas keras-vis
 call conda install -y pillow=5.0 lxml=4.2 jupyter=1.0 matplotlib=2.2 opencv=3.3 scikit-learn=0.20 scikit-image
 
 call git clone https://github.com/tensorflow/models.git %ProjectPath%\models
