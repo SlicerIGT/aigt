@@ -91,10 +91,19 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     self.saveDirectoryLineEdit.showHistoryButton = True
     self.saveDirectoryLineEdit.setMinimumWidth(100)
     self.saveDirectoryLineEdit.setMaximumWidth(500)
-    commonGroupLayout.addRow("Save directory", self.saveDirectoryLineEdit)
+    commonGroupLayout.addRow("Save directory: ", self.saveDirectoryLineEdit)
 
     self.filePrefixEdit = qt.QLineEdit()
     commonGroupLayout.addRow("File name prefix", self.filePrefixEdit)
+    
+    self.intensityThresholdSliderWidget = ctk.ctkSliderWidget()
+    self.intensityThresholdSliderWidget.singleStep = 1
+    self.intensityThresholdSliderWidget.minimum = 0
+    self.intensityThresholdSliderWidget.maximum = 255
+    self.intensityThresholdSliderWidget.value = 20
+    self.intensityThresholdSliderWidget.setToolTip("Set intensity threshold under which images are ignored")
+    commonGroupLayout.addRow("Minimum average image intensity: ", self.intensityThresholdSliderWidget)
+
 
     parametersFormLayout.addRow(commonGroupBox)
 
@@ -182,8 +191,12 @@ class UsAnnotationExportWidget(ScriptedLoadableModuleWidget):
     exportPath = self.saveDirectoryLineEdit.currentPath
     fileNamePrefix = self.filePrefixEdit.text
     self.exportFiducialsButton.setEnabled(False)
-    self.logic.exportData(self.inputSelector.currentNode(), self.fiducialsSelector.currentNode(),
-                          proximityThreshold, exportPath, fileNamePrefix)
+    self.logic.exportData(self.inputSelector.currentNode(),
+                          self.fiducialsSelector.currentNode(),
+                          proximityThreshold,
+                          self.intensityThresholdSliderWidget.value,
+                          exportPath,
+                          fileNamePrefix)
     self.exportFiducialsButton.setEnabled(True)
 
 
@@ -406,7 +419,13 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
     logging.info('Processing completed')
     return True
 
-  def exportData(self, inputBrowserNode, inputFiducials, proximityThresholdMm, exportPath, fileNamePrefix=""):
+  def exportData(self,
+                 inputBrowserNode,
+                 inputFiducials,
+                 proximityThresholdMm,
+                 intensityThreshold,
+                 exportPath,
+                 fileNamePrefix=""):
     logging.info('Processing started')
 
     if len(exportPath) < 3:
@@ -450,6 +469,13 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
     
     for i in range(numItems - 1):
       self.browserNode.SelectNextItem()
+      
+      imageArray = slicer.util.arrayFromVolume(imageNode)
+      avgIntensity = numpy.average(imageArray)
+      if avgIntensity <= intensityThreshold:
+        logging.info("Skipping image due to low intensity: {0:.2f}".format(avgIntensity))
+        continue
+      
       imageData = imageNode.GetImageData()
       pngWriter.SetInputData(imageData)
       pngFileName = fileNamePrefix + "_%04d" % i + ".png"
