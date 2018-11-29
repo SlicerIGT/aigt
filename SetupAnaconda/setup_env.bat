@@ -16,7 +16,7 @@ call activate %EnvironmentPath%
 :: Installing non-problematic packages
 
 call pip install tensorflow-gpu keras pandas
-call conda install -y pillow=5.0 lxml=4.2 jupyter=1.0 matplotlib=2.2 opencv=3.3 scikit-learn=0.20 scikit-image
+call conda install -y pillow=5.0 lxml=4.2 jupyter=1.0 matplotlib=2.2 opencv=3.3 scikit-learn=0.20 scikit-image vtk
 
 :: Compile research modules, like for object detection
 :: Executable only needed on Windows. protoc will work on Linux as installed. Todo: Create setup script for bash
