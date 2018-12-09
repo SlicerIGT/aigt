@@ -454,6 +454,7 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
 
     imageData = imageNode.GetImageData()
     imageExtent = imageData.GetExtent()
+    imageDimensions = imageData.GetDimensions()
     self.browserNode.SelectFirstItem()
     numItems = self.browserNode.GetNumberOfItems()
     
@@ -508,8 +509,8 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
       p = fiducials_Image[closestIndex]
       p[1] = imageExtent[1] - p[1]  # Second dimension is reversed between IJK and PNG coordinates.
       
-      x = int(round(p[0]))
-      y = int(round(p[1]))
+      x = p[0] / imageDimensions[0]
+      y = p[1] / imageDimensions[1]
 
       if (closestDistancePixels * pixelToMm) < proximityThresholdMm:
         logging.info("Saving landmark for image " + pngFileName)
