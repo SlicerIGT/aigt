@@ -11,13 +11,11 @@
       <DataSources>
         <DataSource Type="Tool" Id="Reference" />
         <DataSource Type="Tool" Id="Probe" />
-        <DataSource Type="Tool" Id="Stylus2" />
       </DataSources>
       <OutputChannels>
         <OutputChannel Id="TrackerStream">
           <DataSource Type="Tool" Id="Reference" />
           <DataSource Type="Tool" Id="Probe" />
-          <DataSource Type="Tool" Id="Stylus2" />
         </OutputChannel>
       </OutputChannels>
     </Device>
@@ -79,9 +77,7 @@
       <TransformNames>
         <Transform Name="ProbeToTracker" />
         <Transform Name="ReferenceToTracker" />
-        <Transform Name="TransdToReference" />
-        <Transform Name="ImageToTransd" />
-        <Transform Name="Stylus2ToReference" />
+        <Transform Name="ImageToReference" />
       </TransformNames>
       <ImageNames>
         <Image Name="Image" EmbeddedTransformToFrame="Image" />
