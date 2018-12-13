@@ -516,7 +516,10 @@ class UsAnnotationExportLogic(ScriptedLoadableModuleLogic):
         logging.info("Saving landmark for image " + pngFileName)
         csvWriter.writerow([pngFileName, str(imageExtent[1] + 1), str(imageExtent[3] + 1),
                             fiducialLabels[closestIndex], x, y])
-
+      else:
+        csvWriter.writerow([pngFileName, str(imageExtent[1] + 1), str(imageExtent[3] + 1),
+                            '0', 0, 0])
+      
       slicer.app.processEvents()
 
     csvFile.close()
