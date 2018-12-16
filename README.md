@@ -19,6 +19,7 @@ Notebooks also contain scripts for processing exported data, and some example de
 - Record Image_Image (the ultrasound in the Image coordinate system) and ImageToReference transform sequences.
 - Create annotations by placing fiducials or creating a segmentation.
 - Save the Slicer scene.
+- Use Notebooks/Slicer/AverageIntensities to determine intensity threshold to filter out images with no skin contact.
 - Use scripts in the Notebooks/Slicer folder to export images and annotations. These scripts will automatically open a Slicer managed by Jupyter. Load the Slicer scenes in these managed Slicer instances and run the notebooks to export data.
 
 # Process exported data
