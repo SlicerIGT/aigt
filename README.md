@@ -24,3 +24,4 @@ Notebooks also contain scripts for processing exported data, and some example de
 
 # Process exported data
 - Use Notebooks/SplitAnnotatedData to separate part of the data into testing, validation, and training folders.
+- Use Notebooks/FoldersToSavedArrays to save data sequences as single files for faster data loading during training.
