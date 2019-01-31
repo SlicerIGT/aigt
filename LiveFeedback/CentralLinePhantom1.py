@@ -1,6 +1,8 @@
 import os
 import keras
 import sys
+import time
+import numpy as np
 
 from keras.models import Sequential
 from keras.layers import Activation, GlobalAveragePooling2D
@@ -11,10 +13,11 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.layers.normalization import BatchNormalization
 from keras.layers.convolutional import *
 from keras.utils import Sequence
+from pyIGTLink import pyIGTLink
 
 # Parameters
 
-image_size = 128
+image_size = 512
 
 # Check command line arguments
 
@@ -25,7 +28,6 @@ if len(sys.argv) < 2:
 weights_file_name = sys.argv[1]
 
 print("Loading weights from: {}".format(weights_file_name))
-
 
 # Building the model. Should be the same as the weights to be loaded.
 
@@ -53,4 +55,28 @@ model.add(Dropout(.2))
 model.add(Dense(2, activation='sigmoid'))
 
 model.summary()
+
+print("Server starting...")
+client = pyIGTLink.PyIGTLinkClient(host="127.0.0.1")
+client.start()
+print("Server running...")
+try:
+    while True:
+      messages = client.get_latest_messages()
+      if len(messages) > 0:
+        for message in messages:
+          if message._type == "IMAGE":
+            image = (np.reshape(message._image, [1,image_size, image_size, 1]))
+            image = message._image
+            prediction = model.predict(image).tolist()
+            print("Predicted center line: " + str(prediction[0]))
+            client.send_message(pyIGTLink.StringMessage(str(prediction[0]), device_name=message._device_name+"Predicted"))
+            print("Message sent")
+            #client.send_message(pyIGTLink.ImageMessage(image, device_name=message._device_name+"Predicted"))
+      time.sleep(0.1)
+except KeyboardInterrupt:
+    pass
+
+client.stop()
+
 
