@@ -60,8 +60,9 @@ client = pyIGTLink.PyIGTLinkClient(host="127.0.0.1")
 client.start()
 print("Server running...")
 try:
-    image_squeezed = np.zeros([image_size, image_size])
-    image_input = np.zeros([1, image_size, image_size, 1])
+    image_squeezed = np.zeros([image_size, image_size]).astype(np.uint8)
+    image_padded = np.zeros([1, image_size, image_size, 1]).astype(np.uint8)
+    image_input = np.zeros([1, image_size, image_size, 1]).astype(np.uint8)
     while True:
       messages = client.get_latest_messages()
       if len(messages) > 0:
@@ -71,7 +72,8 @@ try:
             #image = np.flip(image, 1)
             #image = np.flip(image, 2)
             image_squeezed = np.squeeze(image)
-            image_input[0,:,:,0] = cv2.resize(image_squeezed, (image_size, image_size)).astype(np.uint8)
+            image_padded[0,:,:,0] = cv2.resize(image_squeezed, (image_size, image_size)).astype(np.uint8)
+            image_input = image_padded / 255.0
             prediction = model.predict(image_input).tolist()
             print("Predicted center line: " + str(prediction[0]))
             client.send_message(pyIGTLink.StringMessage(str(prediction[0]), device_name=message._device_name+"Predicted"))
