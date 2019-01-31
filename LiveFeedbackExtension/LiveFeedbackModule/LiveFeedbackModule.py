@@ -43,7 +43,7 @@ class LiveFeedbackModuleWidget(ScriptedLoadableModuleWidget):
     ScriptedLoadableModuleWidget.setup(self)
 
     self.logic = LiveFeedbackModuleLogic()
-    
+
     # Instantiate and connect widgets ...
 
     #
@@ -70,7 +70,7 @@ class LiveFeedbackModuleWidget(ScriptedLoadableModuleWidget):
     self.volumeNodeSelector.setMRMLScene( slicer.mrmlScene )
     self.volumeNodeSelector.setToolTip( "Pick the input to the algorithm." )
     parametersFormLayout.addRow("Input volume: ", self.volumeNodeSelector)
-    
+
     self.textNodeSelector = slicer.qMRMLNodeComboBox()
     self.textNodeSelector.nodeTypes = ["vtkMRMLTextNode"]
     self.textNodeSelector.selectNodeUponCreation = True
@@ -94,7 +94,7 @@ class LiveFeedbackModuleWidget(ScriptedLoadableModuleWidget):
     self.onSelect()
 
   def cleanup(self):
-    pass
+    self.logic.cleanup()
 
   def onSelect(self):
     self.logic.setTextNode(self.textNodeSelector.currentNode())
@@ -121,33 +121,37 @@ class LiveFeedbackModuleLogic(ScriptedLoadableModuleLogic):
     self.volumeNode = None
     self.fiducialNode = None
 
-  
+  def cleanup(self):
+    self.removeTextNodeObservers()
+
+  def removeTextNodeObservers(self):
+    if self.textNode is not None:
+      self.textNode.RemoveObserver(self.textNodeObserverTag)
+
   def setConnectorNode(self, connectorNode):
     """
     """
     pass
-    
+
   def setVolumeNode(self, volumeNode):
     """
     """
     self.volumeNode = volumeNode
-    
+
   def setTextNode(self, textNode):
     """
     """
     if self.textNode is textNode:
       return
-      
-    if self.textNode is not None:
-      self.textNode.RemoveObserver(self.textNodeObserverTag)
-    
+
+    self.removeTextNodeObservers()
     self.textNode = textNode
-    
+
     if self.textNode is not None:
       self.textNodeObserverTag = self.textNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onTextNodeModified)
     else:
       self.textNodeObserverTag = None
-  
+
   def onTextNodeModified(self, object, event):
     """
     """
@@ -157,20 +161,23 @@ class LiveFeedbackModuleLogic(ScriptedLoadableModuleLogic):
     predictedLocation = json.loads(text)
 
     extent = self.volumeNode.GetImageData().GetExtent()
-    i = (1.0-predictedLocation[0]) * extent[1]-extent[0]
-    j = predictedLocation[1] * extent[3]-extent[2]
+    i = extent[0] + predictedLocation[0] * extent[1]-extent[0]
+    #i = extent[0] + (1.0 - predictedLocation[0]) * extent[1]-extent[0]
+    j = extent[2] + predictedLocation[1] * extent[3]-extent[2]
+    #j = extent[2] + (1.0 - predictedLocation[1]) * extent[3]-extent[2]
     k = 0.0
     #print str(i) + ", " + str(j) + ", " + str(k)
-    
+
     mat = vtk.vtkMatrix4x4()
     self.volumeNode.GetIJKToRASMatrix(mat)
     rasPoint = mat.MultiplyPoint([i,j,k,1])
-    
-    if self.fiducialNode is None:
-      self.fiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-    if self.fiducialNode.GetNumberOfFiducials() < 1:
-      self.fiducialNode.AddFiducial(0,0,0)
-    self.fiducialNode.SetNthFiducialPosition(0, rasPoint[0], rasPoint[1], rasPoint[2])
+
+    centerlineFiducialNode = slicer.util.getFirstNodeByName("CenterLine")
+    if centerlineFiducialNode is None:
+      centerlineFiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "CenterLine")
+    if centerlineFiducialNode.GetNumberOfFiducials() < 1:
+      centerlineFiducialNode.AddFiducial(0,0,0)
+    centerlineFiducialNode.SetNthFiducialPosition(0, rasPoint[0], rasPoint[1], rasPoint[2])
 
 class LiveFeedbackModuleTest(ScriptedLoadableModuleTest):
   """

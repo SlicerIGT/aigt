@@ -66,13 +66,12 @@ try:
       if len(messages) > 0:
         for message in messages:
           if message._type == "IMAGE":
-            image = (np.reshape(message._image, [1,image_size, image_size, 1]))
             image = message._image
+            #image = np.flip(image, 1)
+            #image = np.flip(image, 2)
             prediction = model.predict(image).tolist()
             print("Predicted center line: " + str(prediction[0]))
             client.send_message(pyIGTLink.StringMessage(str(prediction[0]), device_name=message._device_name+"Predicted"))
-            print("Message sent")
-            #client.send_message(pyIGTLink.ImageMessage(image, device_name=message._device_name+"Predicted"))
       time.sleep(0.1)
 except KeyboardInterrupt:
     pass
