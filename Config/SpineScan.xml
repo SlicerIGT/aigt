@@ -21,7 +21,11 @@
         </OutputChannel>
       </OutputChannels>
     </Device>
-    <Device Id="VideoDevice" LocalTimeOffsetSec="0.0" Type="TelemedVideo" DepthMm="90">
+    <Device
+	  Id="VideoDevice"
+	  LocalTimeOffsetSec="0.0"
+	  Type="TelemedVideo"
+	  DepthMm="90">
       <DataSources>
         <DataSource Type="Video" Id="Video" PortUsImageOrientation="UF" />
       </DataSources>
@@ -50,6 +54,15 @@
       </InputChannels>
     </Device>
   </DataCollection>
+  
+  
+  <Transform From="Image" To="Probe"
+      Matrix="
+         0.184378 -0.0433156 -0.0202858 -52.3266 
+        -0.0186914 0.00911175 -0.189342 -63.7447 
+         0.0440271 0.185266 0.00456936 87.9794 
+         0 0 0 1 " />
+  
 
   <PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18944" SendValidTransformsOnly="true" OutputChannelId="TrackedVideoStream">
     <DefaultClientInfo>
