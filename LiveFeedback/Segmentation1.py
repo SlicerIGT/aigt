@@ -48,9 +48,6 @@ try:
     image_padded = np.zeros([1, image_size, image_size, 1]).astype(np.uint8)
     image_input = np.zeros([1, image_size, image_size, 1]).astype(np.uint8)
     
-    # cv2.imshow("image", image_input[0,:,:,0])
-    # cv2.waitKey(10)
-
     while True:
       messages = client.get_latest_messages()
       if len(messages) > 0:
@@ -67,7 +64,6 @@ try:
             image_message = pyIGTLink.ImageMessage(prediction_resized, device_name=message._device_name + "Predicted")
             image_message._matrix[0][3] = image.shape[1] / 2
             image_message._matrix[1][3] = image.shape[2] / 2
-            print(image_message._matrix)
             client.send_message(image_message)
       time.sleep(0.05)
 except KeyboardInterrupt:
