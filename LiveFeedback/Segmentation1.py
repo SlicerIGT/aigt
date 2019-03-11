@@ -36,9 +36,7 @@ print("Loading weights from: {}".format(weights_file_name))
 
 # Building the model. Should be the same as the weights to be loaded.
 
-model = unet()
-
-model.load_weights(weights_file_name)
+model = unet(weights_file_name)
 
 print("Server starting...")
 client = pyIGTLink.PyIGTLinkClient(host="127.0.0.1")

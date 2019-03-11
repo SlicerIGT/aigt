@@ -56,7 +56,7 @@ def unet(pretrained_weights=None, input_size=(unet_input_image_size, unet_input_
 
     model = Model(inputs=inputs, outputs=conv10)
 
-    model.compile(optimizer=Adam(lr=step_size), loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=Adam(lr=unet_feature_nstep_size), loss='binary_crossentropy', metrics=['accuracy'])
 
     if (pretrained_weights):
         model.load_weights(pretrained_weights)
