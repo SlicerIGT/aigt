@@ -61,8 +61,12 @@ try:
             image_squeezed = np.squeeze(image)
             image_padded[0,:,:,0] = cv2.resize(image_squeezed, (unet_input_image_size, unet_input_image_size)).astype(np.uint8)
             image_input = image_padded / 255.0
-            prediction = model.predict(image_input)
-            client.send_message(pyIGTLink.ImageMessage(prediction), device_name=message._device_name+"Predicted")
+            prediction = model.predict(image_input) * 255
+            prediction_resized = np.zeros([1, 512, 512, 1])
+            prediction_resized[0, :, :, 0] = cv2.resize(prediction[0, :, :, 0], (512, 512)).astype(np.uint8)
+            image_message = pyIGTLink.ImageMessage(prediction_resized, device_name=message._device_name + "Predicted")
+            print(image_message._matrix)
+            client.send_message(image_message)
       time.sleep(0.1)
 except KeyboardInterrupt:
     pass
