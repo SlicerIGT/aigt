@@ -9,6 +9,12 @@ Notebooks also contain scripts for processing exported data, and some example de
 - Install Anaconda
 ## Set up Anaconda environment with GPU version of TensorFlow
 - Run the setup_env.bat file (in SetupAnaconda folder) to create project folder with dedicated Anaconda environment.
+<font color="red">
+- Due to a numpy version conflict between scikit libraries and TensorFlow, you need to run these three commands in the new environment:
+-- pip uninstall numpy
+-- pip uninstall numpy
+-- pip install numpy==1.14.5
+</font>
 - Clone this repository on your computer.
 - Some notebooks will require that you createa a new file in the Notebooks folder, named local_vars.py, and define the root_folder variable in that file, e.g. root_folder = r"c:\Data"
 - Install Slicer 4.10 or newer version.
