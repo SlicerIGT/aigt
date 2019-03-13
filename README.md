@@ -4,15 +4,11 @@ Notebooks also contain scripts for processing exported data, and some example de
 
 # Getting started
 ## Install CUDA and Anaconda
-- Install CUDA 9.0
-- Install CuDNN for CUDA 9.0
-- Install Anaconda
+- Install CUDA 10.0 (10.1 is not working with TensorFlow at the time of writing this guide)
+- Install CuDNN for CUDA 10.0 (need to register Nvidia account to download it)
+- Install Anaconda (with Python 3.7)
 ## Set up Anaconda environment with GPU version of TensorFlow
-- Run the setup_env.bat file (in SetupAnaconda folder) to create project folder with dedicated Anaconda environment.
-- **Due to a numpy version conflict between scikit libraries and TensorFlow, you need to run these three commands in the new environment:**
--- pip uninstall numpy
--- pip uninstall numpy
--- pip install numpy==1.14.5
+- Run the *setup_cuda10.bat* file (in SetupAnaconda folder) to create project folder with dedicated Anaconda environment.
 - Clone this repository on your computer.
 - Some notebooks will require that you createa a new file in the Notebooks folder, named local_vars.py, and define the root_folder variable in that file, e.g. root_folder = r"c:\Data"
 - Install Slicer 4.10 or newer version.
