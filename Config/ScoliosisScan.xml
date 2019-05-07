@@ -24,7 +24,7 @@
     
     <Device
       Id="VideoDevice"
-      LocalTimeOffsetSec="0.26"
+      LocalTimeOffsetSec="0.3"
       Type="TelemedVideo"
       DepthMm="90">
       <DataSources>
@@ -59,10 +59,11 @@
   <CoordinateDefinitions>
     <Transform From="Image" To="Probe"
       Matrix="
-        -0.120335	0.159953	-0.0211547	42.1602
-        -0.0183469	0.0126539	0.200041	1.66931
-        0.1603	0.121523	0.00701487	59.151
-        0	0	0	1" />
+        0.208517    0.0316779 -0.0147954 -25.6333 
+       -0.00967117 -0.0337209 -0.208498  -66.4642 
+       -0.0335985   0.206304  -0.0318077  93.3286 
+        0 0 0 1 
+        " />
     <Transform From="Image" To="TransdPixel"
       Matrix="
         1	0	0	-260
@@ -71,9 +72,9 @@
         0	0	0	1" />
     <Transform From="TransdPixel" To="Transd"
       Matrix="
-        0.193681	0	0	0
-        0	0.193681	0	0
-        0	0	0.193681	0
+        0.208	0	0	0
+        0	0.208	0	0
+        0	0	0.208	0
         0	0	0	1" />
     <Transform From="Reference" To="Stylus"
       Matrix="

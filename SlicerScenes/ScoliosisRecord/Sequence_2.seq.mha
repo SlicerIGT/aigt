@@ -1,0 +1,12 @@
+ObjectType = Image
+NDims = 3
+AnatomicalOrientation = RAI
+BinaryData = True
+CompressedData = False
+DimSize = 0 0 0
+ElementSpacing = 1 1 1
+Offset = 0 0 0
+TransformMatrix = 1 0 0 0 1 0 0 0 1
+ElementType = MET_UCHAR
+Kinds = domain domain list
+ElementDataFile = LOCAL
