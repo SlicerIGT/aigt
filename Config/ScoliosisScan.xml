@@ -1,11 +1,13 @@
 <PlusConfiguration version="2.5" PlusRevision="Plus-2.7.0.e4d528e1 - Win32">
   <DataCollection StartupDelaySec="1.0">
-    <DeviceSet Name="SpineUs OptiTrack V120:Duo" Description="OptiTrack Duo and Telemed ultrasound." />
+    <DeviceSet Name="OptiTrack Telemed flat marker coronal" Description="OptiTrack Duo and Telemed ultrasound." />
+    
     <Device
       Id="TrackerDevice"
+      LocalTimeOffsetSec="0.0"
       Type="OptiTrack"
       ToolReferenceFrame="Tracker"
-      ProjectFile="ScoliUsFlatMarkers2.ttp"
+      ProjectFile="ScoliosisFlatMarkers2.ttp"
       AttachToRunningMotive="FALSE"
       MotiveDataDescriptionsUpdateTimeSec="1.0">
       <DataSources>
@@ -19,7 +21,12 @@
         </OutputChannel>
       </OutputChannels>
     </Device>
-    <Device Id="VideoDevice" LocalTimeOffsetSec="0.0" Type="TelemedVideo" DepthMm="90">
+    
+    <Device
+      Id="VideoDevice"
+      LocalTimeOffsetSec="0.26"
+      Type="TelemedVideo"
+      DepthMm="90">
       <DataSources>
         <DataSource Type="Video" Id="Video" PortUsImageOrientation="UF" />
       </DataSources>
@@ -27,6 +34,7 @@
         <OutputChannel Id="VideoStream" VideoDataSourceId="Video" />
       </OutputChannels>
     </Device>
+    
     <Device Id="TrackedVideoDevice" Type="VirtualMixer">
       <InputChannels>
         <InputChannel Id="TrackerStream" />
@@ -67,6 +75,12 @@
         0	0.193681	0	0
         0	0	0.193681	0
         0	0	0	1" />
+    <Transform From="Reference" To="Stylus"
+      Matrix="
+        1 0	0	0
+        0	1	0	0
+        0	0	1	0
+        0	0	0	1" /> <!-- this is for ultrasound calibration -->
   </CoordinateDefinitions>
   <PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18944" SendValidTransformsOnly="true" OutputChannelId="TrackedVideoStream">
     <DefaultClientInfo>
@@ -77,7 +91,9 @@
       <TransformNames>
         <Transform Name="ProbeToTracker" />
         <Transform Name="ReferenceToTracker" />
-        <Transform Name="ImageToReference" />
+        <Transform Name="ImageToTransd" />
+        <Transform Name="TransdToReference" />
+        <Transform Name="StylusToProbe" /> <!-- this is for ultrasound calibration -->
       </TransformNames>
       <ImageNames>
         <Image Name="Image" EmbeddedTransformToFrame="Image" />

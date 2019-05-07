@@ -1,6 +1,6 @@
 <PlusConfiguration version="2.5" PlusRevision="Plus-2.7.0.e4d528e1 - Win32">
   <DataCollection StartupDelaySec="1.0">
-    <DeviceSet Name="Spine scan" Description="OptiTrack Trio and Telemed ultrasound." />
+    <DeviceSet Name="Spine scan Telemed OptiTrack" Description="OptiTrack Trio and Telemed ultrasound." />
     <Device
       Id="TrackerDevice"
       Type="OptiTrack"
@@ -11,13 +11,13 @@
       <DataSources>
         <DataSource Type="Tool" Id="Stylus" />
         <DataSource Type="Tool" Id="Probe" />
-		<DataSource Type="Tool" Id="Reference" />
+		    <DataSource Type="Tool" Id="Reference" />
       </DataSources>
       <OutputChannels>
         <OutputChannel Id="TrackerStream">
           <DataSource Type="Tool" Id="Stylus" />
           <DataSource Type="Tool" Id="Probe" />
-		  <DataSource Type="Tool" Id="Reference" />
+		      <DataSource Type="Tool" Id="Reference" />
         </OutputChannel>
       </OutputChannels>
     </Device>
@@ -55,7 +55,6 @@
     </Device>
   </DataCollection>
   
-  
   <Transform From="Image" To="Probe"
       Matrix="
          0.184378 -0.0433156 -0.0202858 -52.3266 
@@ -63,8 +62,12 @@
          0.0440271 0.185266 0.00456936 87.9794 
          0 0 0 1 " />
   
-
-  <PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18944" SendValidTransformsOnly="true" OutputChannelId="TrackedVideoStream">
+  <PlusOpenIGTLinkServer
+    MaxNumberOfIgtlMessagesToSend="1"
+    MaxTimeSpentWithProcessingMs="50"
+    ListeningPort="18944"
+    SendValidTransformsOnly="true"
+    OutputChannelId="TrackedVideoStream">
     <DefaultClientInfo>
       <MessageTypes>
         <Message Type="IMAGE" />
@@ -72,8 +75,8 @@
       </MessageTypes>
       <TransformNames>
         <Transform Name="StylusToReference" />
-		<Transform Name="ImageToReference" />
-		<Transform Name="ProbeToReference" />
+		    <Transform Name="ImageToReference" />
+		    <Transform Name="ProbeToReference" />
       </TransformNames>
       <ImageNames>
         <Image Name="Image" EmbeddedTransformToFrame="Image" />
