@@ -197,6 +197,15 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     png_writer.Update()
     png_writer.Write()
 
+    # Assuming we are working with one (or the first) segment
+
+    segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(0)
+    labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
+    labelMapRep.Initialize()
+    labelMapRep.Modified()
+    selectedSegmentation.Modified()
+
+
 
   def hasImageData(self,volumeNode):
     """This is an example logic method that
