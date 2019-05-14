@@ -62,3 +62,38 @@ def unet(pretrained_weights=None, input_size=(unet_input_image_size, unet_input_
         model.load_weights(pretrained_weights)
 
     return model
+
+
+def small_unet(patch_size=128, pretrained_weights=False):
+    input_ = Input((patch_size, patch_size, 1))
+    skips = []
+    output = input_
+    for shape, filters in zip([5, 3, 3, 3, 3, 3, 3], [16, 32, 64, 64, 64, 64, 64]):
+        skips.append(output)
+        print(output.shape)
+        output= Conv2D(filters, (shape, shape), strides=2, padding="same", activation="relu")(output)
+        #output = BatchNormalization()(output)
+        #if shape != 7:
+        #   output = BatchNormalization()(output)
+    for shape, filters in zip([4, 4, 4, 4, 4, 4, 4, 4], [64, 64, 64, 64,32, 16, 2]):
+        output = keras.layers.UpSampling2D()(output)
+
+        skip_output = skips.pop()
+        output = concatenate([output, skip_output], axis=3)
+
+        if filters != 2:
+            activation = "relu"
+        else:
+            activation = "softmax"
+        output = Conv2D(filters if filters != 2 else 2, (shape, shape), activation=activation, padding="same")(output)
+        
+        if filters != 2:
+            output = BatchNormalization(momentum=.9)(output)
+    assert len(skips) == 0
+    m = Model([input_], [output])
+
+    if pretrained_weights:
+        m.load_weights(pretrained_weights)
+
+    m.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+    return m
