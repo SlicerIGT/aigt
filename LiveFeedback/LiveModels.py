@@ -76,7 +76,7 @@ def small_unet(patch_size=128, pretrained_weights=False):
         #if shape != 7:
         #   output = BatchNormalization()(output)
     for shape, filters in zip([4, 4, 4, 4, 4, 4, 4, 4], [64, 64, 64, 64,32, 16, 2]):
-        output = keras.layers.UpSampling2D()(output)
+        output = UpSampling2D()(output)
 
         skip_output = skips.pop()
         output = concatenate([output, skip_output], axis=3)
