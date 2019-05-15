@@ -17,7 +17,7 @@ import numpy as np
 import cv2
 from pyIGTLink import pyIGTLink
 
-from LiveModels import unet
+from LiveModels import small_unet
 from LiveModels import unet_input_image_size
 
 # Parameters
@@ -36,7 +36,7 @@ print("Loading weights from: {}".format(weights_file_name))
 
 # Building the model. Should be the same as the weights to be loaded.
 
-model = unet(weights_file_name)
+model = small_unet(weights_file_name)
 
 print("Server starting...")
 client = pyIGTLink.PyIGTLinkClient(host="127.0.0.1")
