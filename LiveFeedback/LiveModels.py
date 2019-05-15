@@ -64,7 +64,7 @@ def unet(pretrained_weights=None, input_size=(unet_input_image_size, unet_input_
     return model
 
 
-def small_unet(patch_size=128, pretrained_weights=False):
+def small_unet(pretrained_weights=False, patch_size=128):
     input_ = Input((patch_size, patch_size, 1))
     skips = []
     output = input_
