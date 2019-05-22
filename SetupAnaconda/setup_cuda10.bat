@@ -15,7 +15,7 @@ call activate %EnvironmentPath%
 
 :: Installing non-problematic packages
 
-call pip install tensorflow-gpu==1.13.1 keras=2.2.4 pandas
+call pip install tensorflow-gpu==1.13.1 keras==2.2.4 pandas
 call conda install -y pillow lxml jupyter matplotlib opencv
 
 call git clone -b pyIGTLink_client https://github.com/Sunderlandkyl/pyIGTLink.git %ProjectPath%\pyIGTLink
