@@ -15,12 +15,12 @@ class SingleSliceSegmentation(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "SingleSliceSegmentation" # TODO make this more human readable by adding spaces
+    self.parent.title = "Single Slice Segmentation" # TODO make this more human readable by adding spaces
     self.parent.categories = ["Ultrasound"]
     self.parent.dependencies = []
-    self.parent.contributors = ["Tamas Ungi"] # replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Tamas Ungi (Queen's University), Victoria Wu (Queen's University)"] # replace with "Firstname Lastname (Organization)"
     self.parent.helpText = """
-This is an example of scripted loadable module bundled in an extension.
+This is an example of scripted loadable module bundled in an extension. 
 It performs a simple thresholding on the input volume and optionally captures a screenshot.
 """
     self.parent.helpText += self.getDefaultModuleDocumentationLink()
@@ -47,7 +47,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # Parameters Area
     #
     parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    parametersCollapsibleButton.text = "Parameters"
+    parametersCollapsibleButton.text = "Export parameters"
     self.layout.addWidget(parametersCollapsibleButton)
 
     # Layout within the dummy collapsible button
@@ -109,6 +109,39 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
 
+    #
+    # Segmentation Sequence  Area
+    #
+    segmentationCollapsibleButton = ctk.ctkCollapsibleButton()
+    segmentationCollapsibleButton.text = "Segmentation Sequence"
+    self.layout.addWidget( segmentationCollapsibleButton )
+
+    # Layout within the dummy collapsible button
+    segmentationFormLayout = qt.QFormLayout(segmentationCollapsibleButton)
+
+    #
+    # Segmentation sequence selector
+    #
+    self.segmentationSequenceSelector = slicer.qMRMLNodeComboBox()
+    self.segmentationSequenceSelector.nodeTypes = ["vtkMRMLSequenceBrowserNode"]
+    self.segmentationSequenceSelector.selectNodeUponCreation = True
+    self.segmentationSequenceSelector.addEnabled = False
+    self.segmentationSequenceSelector.removeEnabled = False
+    self.segmentationSequenceSelector.noneEnabled = False
+    self.segmentationSequenceSelector.setMRMLScene(slicer.mrmlScene)
+    segmentationFormLayout.addRow("Segmentation sequence browser: ", self.segmentationSequenceSelector)
+
+
+    #
+    # Capture Frame Button
+    #
+    self.captureFrame = qt.QPushButton("Capture slice")
+    self.captureFrame.toolTip = "Run the algorithm."
+    segmentationFormLayout.addRow(self.captureFrame)
+
+    # connections
+    self.captureFrame.connect('clicked(bool)', self.onCaptureFrame)
+
     # Add vertical spacer
     self.layout.addStretch(1)
 
@@ -136,6 +169,28 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     logic = SingleSliceSegmentationLogic()
     logic.exportSlice(selectedImage, selectedSegmentation, outputFolder, filenamePrefix, itemNumber)
+
+  def onCaptureFrame(self):
+    browserNode = self.sequenceBrowserSelector.currentNode() #The original sequence we are capturing the image from
+    selectedSegmentationSequence = self.segmentationSequenceSelector.currentNode() #The segmentation sequence we want to add the image to
+    selectedImage = self.inputSelector.currentNode()
+    selectedSegmentation = self.segmentationSelector.currentNode()
+
+    if selectedImage is None:
+      logging.error("No input image selected!")
+      return
+    if selectedSegmentation is None:
+      logging.error("No segmentation selected!")
+      return
+    if selectedSegmentationSequence is None:
+      logging.error("No segmentation sequence browser selected!")
+      return
+    if browserNode is None:
+      logging.error("No browser node selected!")
+      return
+
+    logic = SingleSliceSegmentationLogic()
+    logic.captureSlice(selectedSegmentationSequence, selectedSegmentation)
 
 #
 # SingleSliceSegmentationLogic
@@ -199,6 +254,20 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
     # Assuming we are working with one (or the first) segment
 
+    segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(0)
+    labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
+    labelMapRep.Initialize()
+    labelMapRep.Modified()
+    selectedSegmentation.Modified()
+
+  def captureSlice(self, selectedSegmentationSequence, selectedSegmentation):
+
+    #Capture image into selectedSegmentationSequence
+    #Make sure in the sequence browser GUI to create segmentation proxy node and save changes
+    selectedSegmentationSequence.SaveProxyNodesState()
+
+    #Assuming we are working with one (or the first) segment
+    #Erases the current segmentation
     segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(0)
     labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
     labelMapRep.Initialize()
