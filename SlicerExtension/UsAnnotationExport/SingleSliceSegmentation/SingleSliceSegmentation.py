@@ -2,6 +2,7 @@ import os
 import unittest
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
+from slicer.util import VTKObservationMixin
 import logging
 
 #
@@ -29,14 +30,28 @@ This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc
 and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
 """ # replace with organization, grant and thanks.
 
+    def setup(self):
+      # Register subject hierarchy plugin
+      import SubjectHierarchyPlugins
+      scriptedPlugin = slicer.qSlicerSubjectHierarchyScriptedPlugin(None)
+      scriptedPlugin.setPythonSource(SubjectHierarchyPlugins.SegmentEditorSubjectHierarchyPlugin.filePath)
+
+
 #
 # SingleSliceSegmentationWidget
 #
 
-class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
+class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   """Uses ScriptedLoadableModuleWidget base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
+  def __init__(self, parent):
+    ScriptedLoadableModuleWidget.__init__(self, parent)
+    VTKObservationMixin.__init__(self)
+
+    # Members
+    self.parameterSetNode = None
+    self.editor = None
 
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
@@ -142,12 +157,141 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # connections
     self.captureFrame.connect('clicked(bool)', self.onCaptureFrame)
 
-    # Add vertical spacer
-    self.layout.addStretch(1)
+    #
+    # Segmentation Editor  Area
+    #
+    segmentEditorCollapsibleButton = ctk.ctkCollapsibleButton()
+    segmentEditorCollapsibleButton.text = "Segment Editor"
+    self.layout.addWidget( segmentEditorCollapsibleButton )
+
+    # Layout within the dummy collapsible button
+    segmentEditorFormLayout = qt.QFormLayout(segmentEditorCollapsibleButton)
+
+    import qSlicerSegmentationsModuleWidgetsPythonQt
+    self.editor = qSlicerSegmentationsModuleWidgetsPythonQt.qMRMLSegmentEditorWidget()
+    self.editor.setMaximumNumberOfUndoStates(10)
+    # Set parameter node first so that the automatic selections made when the scene is set are saved
+    self.selectParameterNode()
+    self.editor.setMRMLScene(slicer.mrmlScene)
+    segmentEditorFormLayout.addWidget(self.editor)
+
+    import qSlicerSegmentationsEditorEffectsPythonQt
+    #TODO: For some reason the instance() function cannot be called as a class function although it's static
+    factory = qSlicerSegmentationsEditorEffectsPythonQt.qSlicerSegmentEditorEffectFactory()
+    self.effectFactorySingleton = factory.instance()
+    self.effectFactorySingleton.connect('effectRegistered(QString)', self.editorEffectRegistered)
+
+    # Connect observers to scene events
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndImportEvent, self.onSceneEndImport)
+
+
+  #Segment Editor Functionalities
+  def editorEffectRegistered(self):
+    self.editor.updateEffectList()
+
+  def selectParameterNode(self):
+    # Select parameter set node if one is found in the scene, and create one otherwise
+    segmentEditorSingletonTag = "SegmentEditor"
+    segmentEditorNode = slicer.mrmlScene.GetSingletonNode(segmentEditorSingletonTag, "vtkMRMLSegmentEditorNode")
+    if segmentEditorNode is None:
+      segmentEditorNode = slicer.vtkMRMLSegmentEditorNode()
+      segmentEditorNode.SetSingletonTag(segmentEditorSingletonTag)
+      segmentEditorNode = slicer.mrmlScene.AddNode(segmentEditorNode)
+    if self.parameterSetNode == segmentEditorNode:
+      # nothing changed
+      return
+    self.parameterSetNode = segmentEditorNode
+    self.editor.setMRMLSegmentEditorNode(self.parameterSetNode)
+
+  def getCompositeNode(self, layoutName):
+    """ use the Red slice composite node to define the active volumes """
+    count = slicer.mrmlScene.GetNumberOfNodesByClass('vtkMRMLSliceCompositeNode')
+    for n in xrange(count):
+      compNode = slicer.mrmlScene.GetNthNodeByClass(n, 'vtkMRMLSliceCompositeNode')
+      if layoutName and compNode.GetLayoutName() != layoutName:
+        continue
+      return compNode
+
+  def getDefaultMasterVolumeNodeID(self):
+    layoutManager = slicer.app.layoutManager()
+    # Use first background volume node in any of the displayed layouts
+    for layoutName in layoutManager.sliceViewNames():
+      compositeNode = self.getCompositeNode(layoutName)
+      if compositeNode.GetBackgroundVolumeID():
+        return compositeNode.GetBackgroundVolumeID()
+    # Use first background volume node in any of the displayed layouts
+    for layoutName in layoutManager.sliceViewNames():
+      compositeNode = self.getCompositeNode(layoutName)
+      if compositeNode.GetForegroundVolumeID():
+        return compositeNode.GetForegroundVolumeID()
+    # Not found anything
+    return None
+
+  def enter(self):
+    """Runs whenever the module is reopened
+    """
+    if self.editor.turnOffLightboxes():
+      slicer.util.warningDisplay('Segment Editor is not compatible with slice viewers in light box mode.'
+        'Views are being reset.', windowTitle='Segment Editor')
+
+    # Allow switching between effects and selected segment using keyboard shortcuts
+    self.editor.installKeyboardShortcuts()
+
+    # Set parameter set node if absent
+    self.selectParameterNode()
+    self.editor.updateWidgetFromMRML()
+
+    # If no segmentation node exists then create one so that the user does not have to create one manually
+    if not self.editor.segmentationNodeID():
+      segmentationNode = slicer.mrmlScene.GetFirstNode(None, "vtkMRMLSegmentationNode")
+      if not segmentationNode:
+        segmentationNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSegmentationNode')
+      self.editor.setSegmentationNode(segmentationNode)
+      if not self.editor.masterVolumeNodeID():
+        masterVolumeNodeID = self.getDefaultMasterVolumeNodeID()
+        self.editor.setMasterVolumeNodeID(masterVolumeNodeID)
+
+  def selectParameterNode(self):
+    # Select parameter set node if one is found in the scene, and create one otherwise
+    segmentEditorSingletonTag = "SegmentEditor"
+    segmentEditorNode = slicer.mrmlScene.GetSingletonNode(segmentEditorSingletonTag, "vtkMRMLSegmentEditorNode")
+    if segmentEditorNode is None:
+      segmentEditorNode = slicer.vtkMRMLSegmentEditorNode()
+      segmentEditorNode.SetSingletonTag(segmentEditorSingletonTag)
+      segmentEditorNode = slicer.mrmlScene.AddNode(segmentEditorNode)
+    if self.parameterSetNode == segmentEditorNode:
+      # nothing changed
+      return
+    self.parameterSetNode = segmentEditorNode
+    self.editor.setMRMLSegmentEditorNode(self.parameterSetNode)
+
+  def exit(self):
+    self.editor.setActiveEffect(None)
+    self.editor.uninstallKeyboardShortcuts()
+    self.editor.removeViewObservations()
+
+  def onSceneStartClose(self, caller, event):
+    self.parameterSetNode = None
+    self.editor.setSegmentationNode(None)
+    self.editor.removeViewObservations()
+
+  def onSceneEndClose(self, caller, event):
+    if self.parent.isEntered:
+      self.selectParameterNode()
+      self.editor.updateWidgetFromMRML()
+
+  def onSceneEndImport(self, caller, event):
+    if self.parent.isEntered:
+      self.selectParameterNode()
+      self.editor.updateWidgetFromMRML()
 
   def cleanup(self):
-    pass
+    self.removeObservers()
+    self.effectFactorySingleton.disconnect('effectRegistered(QString)', self.editorEffectRegistered)
 
+  #Export Slice
   def onApplyButton(self):
     selectedImage = self.inputSelector.currentNode()
     selectedSegmentation = self.segmentationSelector.currentNode()
@@ -170,6 +314,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     logic = SingleSliceSegmentationLogic()
     logic.exportSlice(selectedImage, selectedSegmentation, outputFolder, filenamePrefix, itemNumber)
 
+  #Capture Slice
   def onCaptureFrame(self):
     browserNode = self.sequenceBrowserSelector.currentNode() #The original sequence we are capturing the image from
     selectedSegmentationSequence = self.segmentationSequenceSelector.currentNode() #The segmentation sequence we want to add the image to
