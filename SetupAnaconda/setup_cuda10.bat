@@ -18,7 +18,7 @@ call activate %EnvironmentPath%
 call pip install tensorflow-gpu==1.13.1 keras==2.2.4 pandas
 call conda install -y pillow lxml jupyter matplotlib opencv
 
-call git clone -b pyIGTLink_client https://github.com/Sunderlandkyl/pyIGTLink.git %ProjectPath%\pyIGTLink
+call git clone -b pyIGTLink_client https://github.com/SlicerIGT/pyIGTLink.git %ProjectPath%\pyIGTLink
 call pip install -e %ProjectPath%\pyIGTLink
 
 :: Compile research modules, like for object detection
