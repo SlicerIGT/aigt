@@ -124,16 +124,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservation
         self.applyButton.toolTip = "Run the algorithm."
         parametersFormLayout.addRow(self.applyButton)
 
-        #
-        # Apply .numpy Button
-        #
-        self.numpyButton = qt.QPushButton("Export slice as .numpy")
-        self.numpyButton.toolTip = "Run the algorithm."
-        parametersFormLayout.addRow(self.numpyButton)
-
         # connections
         self.applyButton.connect('clicked(bool)', self.onApplyButton)
-        self.numpyButton.connect('clicked(bool)', self.onNumpyButton)
 
         #
         # Segmentation Sequence  Area
@@ -164,8 +156,16 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservation
         self.captureFrame.toolTip = "Run the algorithm."
         segmentationFormLayout.addRow(self.captureFrame)
 
+        #
+        # Apply .numpy Button
+        #
+        self.numpyButton = qt.QPushButton("Export sequence as .numpy array")
+        self.numpyButton.toolTip = "Run the algorithm."
+        segmentationFormLayout.addRow(self.numpyButton)
+
         # connections
         self.captureFrame.connect('clicked(bool)', self.onCaptureFrame)
+        self.numpyButton.connect('clicked(bool)', self.onNumpyButton)
 
         #
         # Segmentation Editor  Area
@@ -323,13 +323,12 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservation
         logic = SingleSliceSegmentationLogic()
         logic.exportSlice(selectedImage, selectedSegmentation, outputFolder, filenamePrefix, itemNumber)
 
-    # Export Slice as .numpy
+    # Export sequence as .numpy
     def onNumpyButton(self):
         selectedImage = self.inputSelector.currentNode()
         selectedSegmentation = self.segmentationSelector.currentNode()
         outputFolder = str(self.outputDirButton.directory)
-        filenamePrefix = str(self.filenamePrefixEdit.text)
-        browserNode = self.sequenceBrowserSelector.currentNode()
+        selectedSegmentationSequence = self.segmentationSequenceSelector.currentNode()
 
         if selectedImage is None:
             logging.error("No input image selected!")
@@ -337,14 +336,12 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservation
         if selectedSegmentation is None:
             logging.error("No segmentation selected!")
             return
-        if browserNode is None:
+        if selectedSegmentationSequence is None:
             logging.error("No browser node selected!")
             return
 
-        itemNumber = browserNode.GetSelectedItemNumber()
-
         logic = SingleSliceSegmentationLogic()
-        logic.exportNumpySlice(selectedImage, selectedSegmentation, outputFolder, filenamePrefix, itemNumber)
+        logic.exportNumpySlice(selectedImage, selectedSegmentation, selectedSegmentationSequence, outputFolder)
 
     # Capture Slice
     def onCaptureFrame(self):
@@ -440,9 +437,8 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     def exportNumpySlice(self,
                          selectedImage,
                          selectedSegmentation,
-                         outputFolder,
-                         filenamePrefix,
-                         itemNumber):
+                         selectedSegmentationSequence,
+                         outputFolder):
         import numpy as np
         from vtk.util import numpy_support
 
@@ -450,40 +446,47 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
             logging.error("Export folder does not exist {}".format(outputFolder))
             return
 
-        slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(
-            selectedSegmentation, self.LabelmapNode, selectedImage)
-        segmentedImageData = self.LabelmapNode.GetImageData()
-        ultrasoundData = selectedImage.GetImageData()
-
-        seg_file_name = filenamePrefix + "_%04d_segmentation" % itemNumber
-        img_file_name = filenamePrefix + "_%04d_ultrasound" % itemNumber
+        seg_file_name = r"segmentation"
+        img_file_name = r"ultrasound"
         seg_fullname = os.path.join(outputFolder, seg_file_name)
         img_fullname = os.path.join(outputFolder, img_file_name)
 
-        seg_rows, seg_cols, _ = segmentedImageData.GetDimensions()
-        seg_sc = segmentedImageData.GetPointData().GetScalars()
-        seg_numpy = numpy_support.vtk_to_numpy(seg_sc)
-        seg_numpy = seg_numpy.reshape(seg_rows, seg_cols, -1)
+        num_items = selectedSegmentationSequence.GetNumberOfItems()
+        n = num_items
+        selectedSegmentationSequence.SelectFirstItem()
 
-        assert seg_numpy.shape == segmentedImageData.GetDimensions()
+        for i in range(n):
+            slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
+                                                                                     self.LabelmapNode, selectedImage)
+            segmentedImageData = self.LabelmapNode.GetImageData()
+            ultrasoundData = selectedImage.GetImageData()
 
-        img_rows, img_cols, _ = ultrasoundData.GetDimensions()
-        img_sc = ultrasoundData.GetPointData().GetScalars()
-        img_numpy = numpy_support.vtk_to_numpy(img_sc)
-        img_numpy = img_numpy.reshape(img_rows, img_cols, -1)
+            seg_rows, seg_cols, _ = segmentedImageData.GetDimensions()
+            seg_sc = segmentedImageData.GetPointData().GetScalars()
+            seg_numpy = numpy_support.vtk_to_numpy(seg_sc)
+            seg_numpy = seg_numpy.reshape(seg_rows, seg_cols, -1)
 
-        assert img_numpy.shape == ultrasoundData.GetDimensions()
+            assert seg_numpy.shape == segmentedImageData.GetDimensions()
 
-        np.save(img_fullname, img_numpy)
-        np.save(seg_fullname, seg_numpy)
+            img_rows, img_cols, _ = ultrasoundData.GetDimensions()
+            img_sc = ultrasoundData.GetPointData().GetScalars()
+            img_numpy = numpy_support.vtk_to_numpy(img_sc)
+            img_numpy = img_numpy.reshape(img_rows, img_cols, -1)
 
-        # Assuming we are working with one (or the first) segment
-        # print()
-        segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(0)
-        labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
-        labelMapRep.Initialize()
-        labelMapRep.Modified()
-        selectedSegmentation.Modified()
+            assert img_numpy.shape == ultrasoundData.GetDimensions()
+
+            if i == 0:
+                seg_seq_numpy = seg_numpy
+                img_seq_numpy = img_numpy
+            else:
+                seg_seq_numpy = np.concatenate((seg_seq_numpy, seg_numpy))
+                img_seq_numpy = np.concatenate((img_seq_numpy, img_numpy))
+
+            selectedSegmentationSequence.SelectNextItem()
+
+        np.save(img_fullname, img_seq_numpy)
+        np.save(seg_fullname, seg_seq_numpy)
+
 
     def captureSlice(self, selectedSegmentationSequence, selectedSegmentation):
 
