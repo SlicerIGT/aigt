@@ -8,7 +8,7 @@ set EnvironmentPath=%1
 
 :: Create the environment and activate it
 
-call conda create -y -n %EnvironmentPath% tensorflow-gpu
+call conda create -y -p %EnvironmentPath% tensorflow-gpu
 call activate %EnvironmentPath%
 
 :: Install additional packages
