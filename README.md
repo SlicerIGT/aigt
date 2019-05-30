@@ -3,9 +3,8 @@ Notebooks for 3D Slicer  to export ultrasound annotations for machine learning.
 Notebooks also contain scripts for processing exported data, and some example deep learning methods.
 
 # Getting started
-## Install Anaconda
+## Install and set up Anaconda environment
 - Install Anaconda (with Python 3.7)
-## Set up Anaconda environment with GPU version of TensorFlow
 - Run the *setup_env.bat* file (in SetupAnaconda folder) to create environment in a folder.
 - Clone this repository on your computer.
 - Some notebooks will require that you createa a new file in the Notebooks folder of your local clone, named local_vars.py, and define the root_folder variable in that file, e.g. root_folder = r"c:\Data". Please do not commit/push your local_vars.py!
