@@ -9,9 +9,11 @@ Notebooks also contain scripts for processing exported data, and some example de
 - Clone this repository on your computer.
 - Some notebooks will require that you createa a new file in the Notebooks folder of your local clone, named local_vars.py, and define the root_folder variable in that file, e.g. root_folder = r"c:\Data". Please do not commit/push your local_vars.py!
 ## To run Slicer notebooks
-- Install Slicer 4.10 or newer version.
+- Install Slicer 4.11 or newer version (after 2019-05-31, for full functionality)
 - Install the Jupyter extension for Slicer, and follow the extension user guide to add the Python environment of Slicer as a kernel in Jupyter Notebook.
+- Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Open a cmd terminal as Administrator, go the Slicer bin folder, and use this command *PythonSlicer.exe -m pip install tensorflow keras scikit-learn ipywidgets*
 - To run notebooks, start the Anaconda command prompt, navigate to the Notebooks folder of your clone of this repository, and type the "jupyter notebook" command.
+**Note:** Some Slicer notebooks are written for Slicer 4.10 (Python 2.7). They will be gradually updated for Slicer 4.11 (Python 3.7).
 
 # Acquire tracked ultrasound
 - Use the Sequences extension in 3D Slicer to record tracked ultrasound sequences.
