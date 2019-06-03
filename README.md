@@ -13,7 +13,7 @@ Notebooks also contain scripts for processing exported data, and some example de
 - Install the Jupyter extension for Slicer, and follow the extension user guide to add the Python environment of Slicer as a kernel in Jupyter Notebook.
 - Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Open a cmd terminal as Administrator, go the Slicer bin folder, and use this command *PythonSlicer.exe -m pip install tensorflow keras scikit-learn ipywidgets*
 - To run notebooks, start the Anaconda command prompt, navigate to the Notebooks folder of your clone of this repository, and type the "jupyter notebook" command.
-**Note:** Some Slicer notebooks are written for Slicer 4.10 (Python 2.7). They will be gradually updated for Slicer 4.11 (Python 3.7).
+**Note:** Some Slicer notebooks are written for Slicer 4.10 (Python 2.7). They will be gradually updated for Slicer 4.11 (Python 3.6).
 
 # Acquire tracked ultrasound
 - Use the Sequences extension in 3D Slicer to record tracked ultrasound sequences.
