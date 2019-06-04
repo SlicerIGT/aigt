@@ -426,13 +426,16 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
         png_writer.Update()
         png_writer.Write()
 
-        # Assuming we are working with one (or the first) segment
+        num_segments = selectedSegmentation.GetSegmentation().GetNumberOfSegments()
 
-        segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(0)
-        labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
-        labelMapRep.Initialize()
-        labelMapRep.Modified()
-        selectedSegmentation.Modified()
+        # Assuming we are working with one (or the first) segment
+        # Erases the current segmentation
+        for i in range(num_segments):
+            segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(i)
+            labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
+            labelMapRep.Initialize()
+            labelMapRep.Modified()
+            selectedSegmentation.Modified()
 
     def exportNumpySlice(self,
                          selectedImage,
@@ -487,20 +490,22 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
         np.save(img_fullname, img_seq_numpy)
         np.save(seg_fullname, seg_seq_numpy)
 
-
     def captureSlice(self, selectedSegmentationSequence, selectedSegmentation):
 
         # Capture image into selectedSegmentationSequence
         # Make sure in the sequence browser GUI to create segmentation proxy node and save changes
         selectedSegmentationSequence.SaveProxyNodesState()
 
+        num_segments = selectedSegmentation.GetSegmentation().GetNumberOfSegments()
+
         # Assuming we are working with one (or the first) segment
         # Erases the current segmentation
-        segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(0)
-        labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
-        labelMapRep.Initialize()
-        labelMapRep.Modified()
-        selectedSegmentation.Modified()
+        for i in range(num_segments):
+            segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(i)
+            labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
+            labelMapRep.Initialize()
+            labelMapRep.Modified()
+            selectedSegmentation.Modified()
 
     def hasImageData(self, volumeNode):
         """This is an example logic method that
