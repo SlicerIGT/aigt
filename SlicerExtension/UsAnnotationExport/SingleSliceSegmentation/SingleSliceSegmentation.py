@@ -468,22 +468,20 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
             seg_sc = segmentedImageData.GetPointData().GetScalars()
             seg_numpy = numpy_support.vtk_to_numpy(seg_sc)
             seg_numpy = seg_numpy.reshape(seg_rows, seg_cols, -1)
-
-            assert seg_numpy.shape == segmentedImageData.GetDimensions()
+            resize_seg_numpy = np.expand_dims(seg_numpy, axis=0)
 
             img_rows, img_cols, _ = ultrasoundData.GetDimensions()
             img_sc = ultrasoundData.GetPointData().GetScalars()
             img_numpy = numpy_support.vtk_to_numpy(img_sc)
             img_numpy = img_numpy.reshape(img_rows, img_cols, -1)
-
-            assert img_numpy.shape == ultrasoundData.GetDimensions()
+            resize_img_numpy = np.expand_dims(img_numpy, axis = 0)
 
             if i == 0:
-                seg_seq_numpy = seg_numpy
-                img_seq_numpy = img_numpy
+                seg_seq_numpy = resize_seg_numpy
+                img_seq_numpy = resize_img_numpy
             else:
-                seg_seq_numpy = np.concatenate((seg_seq_numpy, seg_numpy))
-                img_seq_numpy = np.concatenate((img_seq_numpy, img_numpy))
+                seg_seq_numpy = np.concatenate((seg_seq_numpy, resize_seg_numpy))
+                img_seq_numpy = np.concatenate((img_seq_numpy, resize_img_numpy))
 
             selectedSegmentationSequence.SelectNextItem()
 
