@@ -5,6 +5,10 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 import logging
 
+import numpy as np
+from vtk.util import numpy_support
+
+
 
 #
 # SingleSliceSegmentation
@@ -51,10 +55,13 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservation
     def __init__(self, parent):
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)
+        
+        self.logic = SingleSliceSegmentationLogic()
 
         # Members
         self.parameterSetNode = None
         self.editor = None
+
 
     def setup(self):
         ScriptedLoadableModuleWidget.setup(self)
@@ -162,10 +169,14 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservation
         self.numpyButton = qt.QPushButton("Export sequence as .numpy array")
         self.numpyButton.toolTip = "Run the algorithm."
         segmentationFormLayout.addRow(self.numpyButton)
+        
+        self.exportSequencePngButton = qt.QPushButton("Export sequence as .png files")
+        segmentationFormLayout.addRow(self.exportSequencePngButton)
 
         # connections
         self.captureFrame.connect('clicked(bool)', self.onCaptureFrame)
         self.numpyButton.connect('clicked(bool)', self.onNumpyButton)
+        self.exportSequencePngButton.connect('clicked(bool)', self.onExportSequencePngButtonClicked)
 
         #
         # Segmentation Editor  Area
@@ -238,9 +249,9 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservation
         # Not found anything
         return None
 
+
     def enter(self):
-        """Runs whenever the module is reopened
-    """
+        """Runs whenever the module is reopened"""
         if self.editor.turnOffLightboxes():
             slicer.util.warningDisplay('Segment Editor is not compatible with slice viewers in light box mode.'
                                        'Views are being reset.', windowTitle='Segment Editor')
@@ -343,6 +354,31 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservation
         logic = SingleSliceSegmentationLogic()
         logic.exportNumpySlice(selectedImage, selectedSegmentation, selectedSegmentationSequence, outputFolder)
 
+
+    def onExportSequencePngButtonClicked(self):
+        selectedImage = self.inputSelector.currentNode()
+        selectedSegmentation = self.segmentationSelector.currentNode()
+        outputFolder = str(self.outputDirButton.directory)
+        selectedSegmentationSequence = self.segmentationSequenceSelector.currentNode()
+        baseName = self.filenamePrefixEdit.text
+    
+        if selectedImage is None:
+            logging.error("No input image selected!")
+            return
+        if selectedSegmentation is None:
+            logging.error("No segmentation selected!")
+            return
+        if selectedSegmentationSequence is None:
+            logging.error("No browser node selected!")
+            return
+    
+        self.logic.exportPngSequence(selectedImage,
+                                     selectedSegmentation,
+                                     selectedSegmentationSequence,
+                                     outputFolder,
+                                     baseName)
+
+
     # Capture Slice
     def onCaptureFrame(self):
         browserNode = self.sequenceBrowserSelector.currentNode()  # The original sequence we are capturing the image from
@@ -442,9 +478,6 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
                          selectedSegmentation,
                          selectedSegmentationSequence,
                          outputFolder):
-        import numpy as np
-        from vtk.util import numpy_support
-
         if not os.path.exists(outputFolder):
             logging.error("Export folder does not exist {}".format(outputFolder))
             return
@@ -489,6 +522,55 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         np.save(img_fullname, img_seq_numpy)
         np.save(seg_fullname, seg_seq_numpy)
+    
+    
+    def exportPngSequence(self,
+                          selectedImage,
+                          selectedSegmentation,
+                          selectedSegmentationSequence,
+                          outputFolder,
+                          baseName):
+        if not os.path.exists(outputFolder):
+            logging.error("Export folder does not exist {}".format(outputFolder))
+            return
+        
+        imageCast = vtk.vtkImageCast()
+        imageCast.SetOutputScalarTypeToUnsignedChar()
+        imageCast.Update()
+        
+        pngWriter = vtk.vtkPNGWriter()
+        
+        num_items = selectedSegmentationSequence.GetNumberOfItems()
+        selectedSegmentationSequence.SelectFirstItem()
+        for i in range(num_items):
+            slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
+                                                                                     self.LabelmapNode,
+                                                                                     selectedImage)
+            segmentedImageData = self.LabelmapNode.GetImageData()
+            ultrasoundData = selectedImage.GetImageData()
+        
+            segmentationFileName = baseName + "_%04d_segmentation" % i + ".png"
+            ultrasoundFileName = baseName + "_%04d_ultrasound" % i + ".png"
+            segmentationFullname = os.path.join(outputFolder, segmentationFileName)
+            ultrasoundFullname = os.path.join(outputFolder, ultrasoundFileName)
+            
+            imageCast.SetInputData(segmentedImageData)
+            imageCast.Update()
+            pngWriter.SetInputData(imageCast.GetOutput())
+            pngWriter.SetFileName(segmentationFullname)
+            pngWriter.Update()
+            pngWriter.Write()
+            
+            imageCast.SetInputData(ultrasoundData)
+            imageCast.Update()
+            pngWriter.SetInputData(imageCast.GetOutput())
+            pngWriter.SetFileName(ultrasoundFullname)
+            pngWriter.Update()
+            pngWriter.Write()
+            
+            selectedSegmentationSequence.SelectNextItem()
+            slicer.app.processEvents()
+
 
     def captureSlice(self, selectedSegmentationSequence, selectedSegmentation):
 
