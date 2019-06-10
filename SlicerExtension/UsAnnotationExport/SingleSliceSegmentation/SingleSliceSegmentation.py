@@ -494,20 +494,11 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
         for i in range(n):
             slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
                                                                                      self.LabelmapNode, selectedImage)
-            segmentedImageData = self.LabelmapNode.GetImageData()
-            ultrasoundData = selectedImage.GetImageData()
+            seg_numpy =  slicer.util.arrayFromVolume(self.LabelmapNode)
+            resize_seg_numpy = np.expand_dims(seg_numpy, axis=3)
 
-            seg_rows, seg_cols, _ = segmentedImageData.GetDimensions()
-            seg_sc = segmentedImageData.GetPointData().GetScalars()
-            seg_numpy = numpy_support.vtk_to_numpy(seg_sc)
-            seg_numpy = seg_numpy.reshape(seg_rows, seg_cols, -1)
-            resize_seg_numpy = np.expand_dims(seg_numpy, axis=0)
-
-            img_rows, img_cols, _ = ultrasoundData.GetDimensions()
-            img_sc = ultrasoundData.GetPointData().GetScalars()
-            img_numpy = numpy_support.vtk_to_numpy(img_sc)
-            img_numpy = img_numpy.reshape(img_rows, img_cols, -1)
-            resize_img_numpy = np.expand_dims(img_numpy, axis = 0)
+            img_numpy = slicer.util.arrayFromVolume(selectedImage)
+            resize_img_numpy = np.expand_dims(img_numpy, axis=3)
 
             if i == 0:
                 seg_seq_numpy = resize_seg_numpy
