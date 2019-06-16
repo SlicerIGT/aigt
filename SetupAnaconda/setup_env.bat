@@ -17,8 +17,8 @@ call conda install -y keras==2.2.4 pandas==0.24.2 opencv==3.4.2 jupyter git==2.2
 
 :: Install pyIGTLink from source
 
-call git clone -b pyIGTLink_client https://github.com/SlicerIGT/pyIGTLink.git %ProjectPath%\pyIGTLink
-call pip install -e %ProjectPath%\pyIGTLink
+call git clone -b pyIGTLink_client https://github.com/SlicerIGT/pyIGTLink.git %EnvironmentPath%\pyIGTLink
+call pip install -e %EnvironmentPath%\pyIGTLink
 
 :: Install keras-vis from source
 
