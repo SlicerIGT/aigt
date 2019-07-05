@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import unittest
 import vtk, qt, ctk, slicer
@@ -51,9 +52,8 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
 """
   ATTRIBUTE_PREFIX = 'SingleSliceSegmentation_'
   INPUT_BROWSER = ATTRIBUTE_PREFIX + 'InputBrowser'
+  INPUT_LAST_INDEX = ATTRIBUTE_PREFIX + 'InputLastIndex'
   INPUT_IMAGE = ATTRIBUTE_PREFIX + 'InputImage'
-  OUTPUT_PATH = ATTRIBUTE_PREFIX + 'OutputPath'
-  FILENAME_PREFIX = ATTRIBUTE_PREFIX + 'FileNamePrefix'
   SEGMENTATION = ATTRIBUTE_PREFIX + 'Segmentation'
   OUTPUT_BROWSER = ATTRIBUTE_PREFIX + 'OutputBrowser'
   
@@ -77,12 +77,10 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     #
     # Parameters Area
     #
-    parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    parametersCollapsibleButton.text = "Export parameters"
-    self.layout.addWidget(parametersCollapsibleButton)
-    
-    # Layout within the dummy collapsible button
-    parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
+    self.inputCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.inputCollapsibleButton.text = "Input"
+    self.layout.addWidget(self.inputCollapsibleButton)
+    parametersFormLayout = qt.QFormLayout(self.inputCollapsibleButton)
     
     #
     # input selector
@@ -124,32 +122,13 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     parametersFormLayout.addRow("Segmentation: ", self.segmentationSelector)
     self.segmentationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSegmentationSelected)
     
-    self.filenamePrefixEdit = qt.QLineEdit()
-    parametersFormLayout.addRow("File name prefix", self.filenamePrefixEdit)
     #
-    # output volume selector
-    #
-    self.outputDirButton = ctk.ctkDirectoryButton()
-    
-    parametersFormLayout.addRow("Output folder: ", self.outputDirButton)
-    
-    #
-    # Apply .png Button
-    #
-    self.applyButton = qt.QPushButton("Export slice as .png")
-    self.applyButton.toolTip = "Run the algorithm."
-    parametersFormLayout.addRow(self.applyButton)
-    
-    # connections
-    self.applyButton.connect('clicked(bool)', self.onApplyButton)
-    
-    #
-    # Segmentation Sequence  Area
+    # Segmentation area
     #
     segmentationCollapsibleButton = ctk.ctkCollapsibleButton()
-    segmentationCollapsibleButton.text = "Segmentation Sequence"
+    segmentationCollapsibleButton.text = "Segmentation"
     self.layout.addWidget(segmentationCollapsibleButton)
-    
+
     # Layout within the dummy collapsible button
     segmentationFormLayout = qt.QFormLayout(segmentationCollapsibleButton)
     
@@ -170,25 +149,41 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     # Capture Frame Button
     #
     self.captureFrame = qt.QPushButton("Capture slice")
-    self.captureFrame.toolTip = "Run the algorithm."
+    self.captureFrame.toolTip = "Add ultrasound image and segmentation to Segmentation Sequence Browswer. " \
+                                "Erase all current segmentation after it is recorded in Sequence."
     segmentationFormLayout.addRow(self.captureFrame)
-    
-    #
-    # Apply .numpy Button
-    #
-    self.numpyButton = qt.QPushButton("Export sequence as .numpy array")
-    self.numpyButton.toolTip = "Run the algorithm."
-    segmentationFormLayout.addRow(self.numpyButton)
-    
-    
-    self.exportSequencePngButton = qt.QPushButton("Export sequence as .png files")
-    segmentationFormLayout.addRow(self.exportSequencePngButton)
-    
-    # connections
     self.captureFrame.connect('clicked(bool)', self.onCaptureFrame)
+    
+    
+    # Export section
+
+    self.exportCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.exportCollapsibleButton.text = "Export"
+    self.layout.addWidget(self.exportCollapsibleButton)
+    exportFormLayout = qt.QFormLayout(self.exportCollapsibleButton)
+    self.exportCollapsibleButton.collapsed = True
+
+    self.filenamePrefixEdit = qt.QLineEdit()
+    exportFormLayout.addRow("File name prefix", self.filenamePrefixEdit)
+    
+    self.outputDirButton = ctk.ctkDirectoryButton()
+    exportFormLayout.addRow("Output folder: ", self.outputDirButton)
+
+    self.numpyButton = qt.QPushButton("Export sequence as .numpy array")
+    self.numpyButton.toolTip = "Numpy arrays will be saved in the Output folder."
+    exportFormLayout.addRow(self.numpyButton)
+
+    self.exportSequencePngButton = qt.QPushButton("Export sequence as .png files")
+    exportFormLayout.addRow(self.exportSequencePngButton)
+
     self.numpyButton.connect('clicked(bool)', self.onNumpyButton)
     self.exportSequencePngButton.connect('clicked(bool)', self.onExportSequencePngButtonClicked)
-    
+
+    self.applyButton = qt.QPushButton("Export slice as .png")
+    self.applyButton.toolTip = "Run the algorithm."
+    exportFormLayout.addRow(self.applyButton)
+    self.applyButton.connect('clicked(bool)', self.onApplyButton)
+
     #
     # Segmentation Editor  Area
     #
@@ -212,6 +207,8 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     factory = qSlicerSegmentationsEditorEffectsPythonQt.qSlicerSegmentEditorEffectFactory()
     self.effectFactorySingleton = factory.instance()
     self.effectFactorySingleton.connect('effectRegistered(QString)', self.editorEffectRegistered)
+
+    self.layout.addStretch(1)
     
     # Connect observers to scene events
     self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
@@ -375,9 +372,15 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
   
   def updateSelections(self):
     browserNodes = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
+    self.inputCollapsibleButton.collapsed = False
     for browser in browserNodes:
       if browser.GetAttribute(self.INPUT_BROWSER) == "True":
         self.sequenceBrowserSelector.setCurrentNode(browser)
+        slicer.modules.sequencebrowser.setToolBarActiveBrowserNode(browser)
+        self.inputCollapsibleButton.collapsed = True
+        selectedItem = browser.GetAttribute(self.INPUT_LAST_INDEX)
+        if selectedItem is not None:
+          browser.SetSelectedItemNumber(int(selectedItem))
       if browser.GetAttribute(self.OUTPUT_BROWSER) == "True":
         self.segmentationSequenceSelector.setCurrentNode(browser)
   
@@ -385,18 +388,23 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     for volume in volumeNodes:
       if volume.GetAttribute(self.INPUT_IMAGE) == "True":
         self.inputSelector.setCurrentNode(volume)
+        layoutManager = slicer.app.layoutManager()
+        sliceLogic = layoutManager.sliceWidget('Red').sliceLogic()
+        compositeNode = sliceLogic.GetSliceCompositeNode()
+        compositeNode.SetBackgroundVolumeID(volume.GetID())
   
     segmentationNodes = slicer.util.getNodesByClass('vtkMRMLSegmentationNode')
     for segmentation in segmentationNodes:
       if segmentation.GetAttribute(self.SEGMENTATION) == "True":
         self.segmentationSelector.setCurrentNode(segmentation)
+        self.logic.eraseCurrentSegmentation(segmentation)
 
 
   def cleanup(self):
     self.removeObservers()
     self.effectFactorySingleton.disconnect('effectRegistered(QString)', self.editorEffectRegistered)
   
-  # Export Slice as .png
+  
   def onApplyButton(self):
     selectedImage = self.inputSelector.currentNode()
     selectedSegmentation = self.segmentationSelector.currentNode()
@@ -419,7 +427,7 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     logic = SingleSliceSegmentationLogic()
     logic.exportSlice(selectedImage, selectedSegmentation, outputFolder, filenamePrefix, itemNumber)
   
-  # Export sequence as .numpy
+  
   def onNumpyButton(self):
     selectedImage = self.inputSelector.currentNode()
     selectedSegmentation = self.segmentationSelector.currentNode()
@@ -482,9 +490,12 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
     if browserNode is None:
       logging.error("No browser node selected!")
       return
+
+    currentItem = str(browserNode.GetSelectedItemNumber())
+    browserNode.SetAttribute(self.INPUT_LAST_INDEX, currentItem)
+    self.logic.captureSlice(selectedSegmentationSequence, selectedSegmentation)
     
-    logic = SingleSliceSegmentationLogic()
-    logic.captureSlice(selectedSegmentationSequence, selectedSegmentation)
+    browserNode.SelectNextItem(3)
 
 
 #
@@ -645,21 +656,21 @@ https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadable
       slicer.app.processEvents()
   
   def captureSlice(self, selectedSegmentationSequence, selectedSegmentation):
-    
-    # Capture image into selectedSegmentationSequence
-    # Make sure in the sequence browser GUI to create segmentation proxy node and save changes
     selectedSegmentationSequence.SaveProxyNodesState()
+    self.eraseCurrentSegmentation(selectedSegmentation)
     
+    
+  def eraseCurrentSegmentation(self, selectedSegmentation):
     num_segments = selectedSegmentation.GetSegmentation().GetNumberOfSegments()
-    
-    # Assuming we are working with one (or the first) segment
-    # Erases the current segmentation
     for i in range(num_segments):
       segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(i)
       labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
-      labelMapRep.Initialize()
+      # labelMapRep.Initialize()
+      numpy_data = numpy_support.vtk_to_numpy(labelMapRep.GetPointData().GetScalars())
+      numpy_data.fill(0)
       labelMapRep.Modified()
       selectedSegmentation.Modified()
+  
   
   def hasImageData(self, volumeNode):
     """This is an example logic method that
