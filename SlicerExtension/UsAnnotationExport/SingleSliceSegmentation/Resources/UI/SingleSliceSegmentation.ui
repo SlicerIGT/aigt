@@ -34,7 +34,7 @@
         </property>
         <property name="nodeTypes">
          <stringlist>
-          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLSequenceBrowserNode</string>
          </stringlist>
         </property>
         <property name="showChildNodeTypes">
@@ -97,6 +97,11 @@
         <property name="enabled">
          <bool>true</bool>
         </property>
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLSegmentationNode</string>
+         </stringlist>
+        </property>
         <property name="noneEnabled">
          <bool>true</bool>
         </property>
@@ -116,6 +121,11 @@
        <widget class="qMRMLNodeComboBox" name="segmentationBrowserSelector">
         <property name="enabled">
          <bool>true</bool>
+        </property>
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLSequenceBrowserNode</string>
+         </stringlist>
         </property>
         <property name="noneEnabled">
          <bool>true</bool>
@@ -160,7 +170,7 @@
       <string>Export</string>
      </property>
      <property name="collapsed">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
       <item row="0" column="0">

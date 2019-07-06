@@ -33,6 +33,12 @@ This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc
 and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
 """ # replace with organization, grant and thanks.
 
+    def setup(self):
+      # Register subject hierarchy plugin
+      import SubjectHierarchyPlugins
+      scriptedPlugin = slicer.qSlicerSubjectHierarchyScriptedPlugin(None)
+      scriptedPlugin.setPythonSource(SubjectHierarchyPlugins.SegmentEditorSubjectHierarchyPlugin.filePath)
+
 #
 # SingleSliceSegmentationWidget
 #
@@ -87,6 +93,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.captureButton.connect('clicked(bool)', self.onCaptureButton)
     self.ui.captureButton.connect('clicked(bool)', self.onExportButton)
 
+    self.ui.editor.setMRMLScene(slicer.mrmlScene)
+    
     import qSlicerSegmentationsEditorEffectsPythonQt
     # TODO: For some reason the instance() function cannot be called as a class function although it's static
     factory = qSlicerSegmentationsEditorEffectsPythonQt.qSlicerSegmentEditorEffectFactory()
@@ -145,10 +153,22 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
 
   def onCaptureButton(self):
-    logic = SingleSliceSegmentationLogic()
-    enableScreenshotsFlag = self.ui.enableScreenshotsFlagCheckBox.checked
-    imageThreshold = self.ui.imageThresholdSliderWidget.value
-    logic.run(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(), imageThreshold, enableScreenshotsFlag)
+    inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
+    selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
+    selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
+
+    if inputBrowserNode is None:
+      logging.error("No browser node selected!")
+      return
+    if selectedSegmentation is None:
+      logging.error("No segmentation selected!")
+      return
+    if selectedSegmentationSequence is None:
+      logging.error("No segmentation sequence browser selected!")
+      return
+    
+    self.logic.captureSlice(selectedSegmentationSequence, selectedSegmentation)
+    inputBrowserNode.SelectNextItem(3)
 
 
   def onExportButton(self):
@@ -285,6 +305,13 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       if browser.GetAttribute(self.OUTPUT_BROWSER) == "True":
         self.ui.segmentationBrowserSelector.setCurrentNode(browser)
 
+    segmentationNodes = slicer.util.getNodesByClass('vtkMRMLSegmentationNode')
+    for segmentation in segmentationNodes:
+      if segmentation.GetAttribute(self.SEGMENTATION) == "True":
+        self.ui.inputSegmentationSelector.setCurrentNode(segmentation)
+        self.logic.eraseCurrentSegmentation(segmentation)
+        self.ui.editor.setSegmentationNode(segmentation)
+    
     volumeNodes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
     for volume in volumeNodes:
       if volume.GetAttribute(self.INPUT_IMAGE) == "True":
@@ -293,12 +320,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
         sliceLogic = layoutManager.sliceWidget('Red').sliceLogic()
         compositeNode = sliceLogic.GetSliceCompositeNode()
         compositeNode.SetBackgroundVolumeID(volume.GetID())
-
-    segmentationNodes = slicer.util.getNodesByClass('vtkMRMLSegmentationNode')
-    for segmentation in segmentationNodes:
-      if segmentation.GetAttribute(self.SEGMENTATION) == "True":
-        self.ui.inputSegmentationSelector.setCurrentNode(segmentation)
-        self.logic.eraseCurrentSegmentation(segmentation)
+        self.ui.editor.setMasterVolumeNode(volume)
 
 
 #
@@ -319,6 +341,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     ScriptedLoadableModuleLogic.__init__(self, parent)
 
     self.LabelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
+
 
   def exportSlice(self,
                   selectedImage,
@@ -371,6 +394,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       labelMapRep.Modified()
       selectedSegmentation.Modified()
 
+
   def exportNumpySlice(self,
                        selectedImage,
                        selectedSegmentation,
@@ -410,6 +434,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
     np.save(img_fullname, img_seq_numpy)
     np.save(seg_fullname, seg_seq_numpy)
+
 
   def exportPngSequence(self,
                         selectedImage,
@@ -458,60 +483,22 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       selectedSegmentationSequence.SelectNextItem()
       slicer.app.processEvents()
 
+
   def captureSlice(self, selectedSegmentationSequence, selectedSegmentation):
     selectedSegmentationSequence.SaveProxyNodesState()
     self.eraseCurrentSegmentation(selectedSegmentation)
+
 
   def eraseCurrentSegmentation(self, selectedSegmentation):
     num_segments = selectedSegmentation.GetSegmentation().GetNumberOfSegments()
     for i in range(num_segments):
       segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(i)
 
-      # editor = slicer.modules.singleslicesegmentation.widgetRepresentation().self().editor
-      # editor.setActiveEffectByName("Logical operators")
-      # effect = editor.activeEffect()
-      # effect.setParameter("Operation", "CLEAR")
-      # effect.self().onApply()
-
-      # import vtkSegmentationCorePython as vtkSegmentationCore
+      import vtkSegmentationCorePython as vtkSegmentationCore
       labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
       slicer.vtkOrientedImageDataResample.FillImage(labelMapRep, 0, labelMapRep.GetExtent())
       slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(
         labelMapRep, selectedSegmentation, segmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
-
-      # labelMapRep.Initialize()
-      ## numpy_data = numpy_support.vtk_to_numpy(labelMapRep.GetPointData().GetScalars())
-      ## numpy_data.fill(0)
-      # labelMapRep.Modified()
-      # selectedSegmentation.Modified()
-
-  def hasImageData(self, volumeNode):
-    """This is an example logic method that
-returns true if the passed in volume
-node has valid image data
-"""
-    if not volumeNode:
-      logging.debug('hasImageData failed: no volume node')
-      return False
-    if volumeNode.GetImageData() is None:
-      logging.debug('hasImageData failed: no image data in volume node')
-      return False
-    return True
-
-  def isValidInputOutputData(self, inputVolumeNode, outputVolumeNode):
-    """Validates if the output is not the same as input
-"""
-    if not inputVolumeNode:
-      logging.debug('isValidInputOutputData failed: no input volume node defined')
-      return False
-    if not outputVolumeNode:
-      logging.debug('isValidInputOutputData failed: no output volume node defined')
-      return False
-    if inputVolumeNode.GetID() == outputVolumeNode.GetID():
-      logging.debug(
-        'isValidInputOutputData failed: input and output volume is the same. Create a new volume for output to avoid this error.')
-      return False
-    return True
 
 
 class SingleSliceSegmentationTest(ScriptedLoadableModuleTest):
@@ -536,30 +523,4 @@ class SingleSliceSegmentationTest(ScriptedLoadableModuleTest):
 
 
   def test_SingleSliceSegmentation1(self):
-    """ Ideally you should have several levels of tests.  At the lowest level
-    tests should exercise the functionality of the logic with different inputs
-    (both valid and invalid).  At higher levels your tests should emulate the
-    way the user would interact with your code and confirm that it still works
-    the way you intended.
-    One of the most important features of the tests is that it should alert other
-    developers when their changes will have an impact on the behavior of your
-    module.  For example, if a developer removes a feature that you depend on,
-    your test should break so they know that the feature is needed.
-    """
-
-    self.delayDisplay("Starting the test")
-    #
-    # first, get some data
-    #
-    import SampleData
-    SampleData.downloadFromURL(
-      nodeNames='FA',
-      fileNames='FA.nrrd',
-      uris='http://slicer.kitware.com/midas3/download?items=5767',
-      checksums='SHA256:12d17fba4f2e1f1a843f0757366f28c3f3e1a8bb38836f0de2a32bb1cd476560')
-    self.delayDisplay('Finished with download and loading')
-
-    volumeNode = slicer.util.getNode(pattern="FA")
-    logic = SingleSliceSegmentationLogic()
-    self.assertIsNotNone( logic.hasImageData(volumeNode) )
-    self.delayDisplay('Test passed!')
+    pass
