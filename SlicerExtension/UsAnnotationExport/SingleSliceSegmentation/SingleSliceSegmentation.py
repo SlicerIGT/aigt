@@ -91,7 +91,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.segmentationBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSegmentationBrowserChanged)
 
     self.ui.captureButton.connect('clicked(bool)', self.onCaptureButton)
-    self.ui.captureButton.connect('clicked(bool)', self.onExportButton)
+    self.ui.exportButton.connect('clicked(bool)', self.onExportButton)
 
     self.ui.editor.setMRMLScene(slicer.mrmlScene)
     
@@ -172,7 +172,28 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
 
   def onExportButton(self):
-    pass
+    selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
+    selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
+    selectedImage = self.ui.inputVolumeSelector.currentNode()
+    outputFolder = self.ui.outputDirectoryButton.directory
+    baseName = self.ui.filenamePrefixEdit.text
+
+    if selectedSegmentation is None:
+      logging.error("No segmentation selected!")
+      return
+    if selectedSegmentationSequence is None:
+      logging.error("No segmentation sequence browser selected!")
+      return
+    if selectedImage is None:
+      logging.error("No image selected!")
+      return
+
+    self.logic.exportPngSequence(selectedImage,
+                                 selectedSegmentation,
+                                 selectedSegmentationSequence,
+                                 outputFolder,
+                                 baseName)
+
 
 
   # Segment Editor Functionalities
