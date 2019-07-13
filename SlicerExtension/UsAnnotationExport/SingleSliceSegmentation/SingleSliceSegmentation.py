@@ -49,6 +49,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
   """
   ATTRIBUTE_PREFIX = 'SingleSliceSegmentation_'
   INPUT_BROWSER = ATTRIBUTE_PREFIX + 'InputBrowser'
+  INPUT_SKIP_NUMBER = ATTRIBUTE_PREFIX + 'InputSkipNumber'
+  DEFAULT_INPUT_SKIP_NUMBER = 4
   INPUT_LAST_INDEX = ATTRIBUTE_PREFIX + 'InputLastIndex'
   INPUT_IMAGE = ATTRIBUTE_PREFIX + 'InputImage'
   SEGMENTATION = ATTRIBUTE_PREFIX + 'Segmentation'
@@ -91,6 +93,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.segmentationBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSegmentationBrowserChanged)
 
     self.ui.captureButton.connect('clicked(bool)', self.onCaptureButton)
+    self.ui.clearSegmentationButton.connect('clicked(bool)', self.onClearButton)
+    self.ui.skipImageButton.connect('clicked(bool)', self.onSkipButton)
     self.ui.exportButton.connect('clicked(bool)', self.onExportButton)
 
     self.ui.editor.setMRMLScene(slicer.mrmlScene)
@@ -109,6 +113,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
   def onInputBrowserChanged(self, currentNode):
     browserNodes = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
+    numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
     for browser in browserNodes:
       browser.SetAttribute(self.INPUT_BROWSER, "False")
 
@@ -116,6 +121,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
 
     currentNode.SetAttribute(self.INPUT_BROWSER, "True")
+    currentNode.SetAttribute(self.INPUT_SKIP_NUMBER, str(numSkip))
     logging.debug("onSequenceBrowserSelected: {}".format(currentNode.GetName()))
 
 
@@ -156,6 +162,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
+    numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
 
     if inputBrowserNode is None:
       logging.error("No browser node selected!")
@@ -166,11 +173,35 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     if selectedSegmentationSequence is None:
       logging.error("No segmentation sequence browser selected!")
       return
-    
+
+    ssid = self.ui.editor.mrmlSegmentEditorNode().GetSelectedSegmentID()
     self.logic.captureSlice(selectedSegmentationSequence, selectedSegmentation)
-    inputBrowserNode.SelectNextItem(3)
+    self.ui.editor.mrmlSegmentEditorNode().SetSelectedSegmentID(ssid)
+    inputBrowserNode.SelectNextItem(numSkip)
 
 
+  def onClearButton(self):
+    selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
+    if selectedSegmentation is None:
+      logging.error("No segmentation selected!")
+      return
+    self.logic.eraseCurrentSegmentation(selectedSegmentation)
+  
+  
+  def onSkipButton(self):
+    inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
+    selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
+    numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
+    if inputBrowserNode is None:
+      logging.error("No browser node selected!")
+      return
+    if selectedSegmentation is None:
+      logging.error("No segmentation selected!")
+      return
+    self.logic.eraseCurrentSegmentation(selectedSegmentation)
+    inputBrowserNode.SelectNextItem(numSkip)
+  
+  
   def onExportButton(self):
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
@@ -247,6 +278,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
   def enter(self):
     """Runs whenever the module is reopened"""
+    logging.debug('Entered SingleSliceSegmentation module widget')
+    
     if self.ui.editor.turnOffLightboxes():
       slicer.util.warningDisplay('Segment Editor is not compatible with slice viewers in light box mode.'
                                  'Views are being reset.', windowTitle='Segment Editor')
@@ -323,6 +356,10 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
         selectedItem = browser.GetAttribute(self.INPUT_LAST_INDEX)
         if selectedItem is not None:
           browser.SetSelectedItemNumber(int(selectedItem))
+        skipNumber = browser.GetAttribute(self.INPUT_SKIP_NUMBER)
+        if skipNumber is None:
+          skipNumber = self.DEFAULT_INPUT_SKIP_NUMBER
+        self.ui.skipImagesSpinBox.value = skipNumber
       if browser.GetAttribute(self.OUTPUT_BROWSER) == "True":
         self.ui.segmentationBrowserSelector.setCurrentNode(browser)
 
