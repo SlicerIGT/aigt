@@ -174,7 +174,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Skip</string>
+        <string>Skip (S)</string>
        </property>
       </widget>
      </item>
@@ -198,7 +198,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Clear</string>
+        <string>Delete (D)</string>
        </property>
       </widget>
      </item>
@@ -230,7 +230,7 @@
         <string>Run the algorithm.</string>
        </property>
        <property name="text">
-        <string>Capture segmentation</string>
+        <string>Capture (C)</string>
        </property>
       </widget>
      </item>

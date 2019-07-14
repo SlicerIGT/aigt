@@ -67,6 +67,15 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.parameterSetNode = None
     self.editor = None
     self.ui = None
+    
+    # Shortcuts
+
+    self.shortcutS = qt.QShortcut(slicer.util.mainWindow())
+    self.shortcutS.setKey(qt.QKeySequence('s'))
+    self.shortcutD = qt.QShortcut(slicer.util.mainWindow())
+    self.shortcutD.setKey(qt.QKeySequence('d'))
+    self.shortcutC = qt.QShortcut(slicer.util.mainWindow())
+    self.shortcutC.setKey(qt.QKeySequence('c'))
 
 
   def setup(self):
@@ -91,6 +100,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputVolumeChanged)
     self.ui.inputSegmentationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSegmentationChanged)
     self.ui.segmentationBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSegmentationBrowserChanged)
+    self.ui.skipImagesSpinBox.connect("valueChanged(int)", self.onSkipImagesNumChanged)
 
     self.ui.captureButton.connect('clicked(bool)', self.onCaptureButton)
     self.ui.clearSegmentationButton.connect('clicked(bool)', self.onClearButton)
@@ -104,7 +114,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     factory = qSlicerSegmentationsEditorEffectsPythonQt.qSlicerSegmentEditorEffectFactory()
     self.effectFactorySingleton = factory.instance()
     self.effectFactorySingleton.connect('effectRegistered(QString)', self.editorEffectRegistered)
-
 
 
   def cleanup(self):
@@ -156,7 +165,13 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
     else:
       currentNode.SetAttribute(self.OUTPUT_BROWSER, "True")
-
+  
+  
+  def onSkipImagesNumChanged(self, value):
+    inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
+    if inputBrowserNode is not None:
+      inputBrowserNode.SetAttribute(self.INPUT_SKIP_NUMBER, str(value))
+  
 
   def onCaptureButton(self):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
@@ -292,6 +307,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.editor.updateWidgetFromMRML()
 
     self.updateSelections()
+    self.connectKeyboardShortcuts()
 
     # If no segmentation node exists then create one so that the user does not have to create one manually
     if not self.ui.editor.segmentationNodeID():
@@ -302,7 +318,19 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       if not self.ui.editor.masterVolumeNodeID():
         masterVolumeNodeID = self.getDefaultMasterVolumeNodeID()
         self.ui.editor.setMasterVolumeNodeID(masterVolumeNodeID)
-
+  
+  
+  def connectKeyboardShortcuts(self):
+    self.shortcutS.connect('activated()', self.onSkipButton)
+    self.shortcutD.connect('activated()', self.onClearButton)
+    self.shortcutC.connect('activated()', self.onCaptureButton)
+  
+  
+  def disconnectKeyboardShortcuts(self):
+    self.shortcutS.activated.disconnect()
+    self.shortcutD.activated.disconnect()
+    self.shortcutC.activated.disconnect()
+  
 
   def selectParameterNode(self):
     # Select parameter set node if one is found in the scene, and create one otherwise
@@ -323,6 +351,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.editor.setActiveEffect(None)
     self.ui.editor.uninstallKeyboardShortcuts()
     self.ui.editor.removeViewObservations()
+    
+    self.disconnectKeyboardShortcuts()
 
 
   def onSceneStartClose(self, caller, event):
@@ -359,7 +389,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
         skipNumber = browser.GetAttribute(self.INPUT_SKIP_NUMBER)
         if skipNumber is None:
           skipNumber = self.DEFAULT_INPUT_SKIP_NUMBER
-        self.ui.skipImagesSpinBox.value = skipNumber
+        self.ui.skipImagesSpinBox.value = int(skipNumber)
       if browser.GetAttribute(self.OUTPUT_BROWSER) == "True":
         self.ui.segmentationBrowserSelector.setCurrentNode(browser)
 
