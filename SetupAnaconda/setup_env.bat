@@ -1,4 +1,3 @@
-
 @echo OFF
 
 if %1.==. goto No1
@@ -6,14 +5,10 @@ if %1.==. goto No1
 set CurrentPath=%cd%
 set EnvironmentPath=%1
 
-:: Create the environment and activate it
+:: Create the environment with modules and activate it
 
-call conda create -y -p %EnvironmentPath% tensorflow-gpu
+call conda create -y -p %EnvironmentPath% tensorflow-gpu keras pandas opencv jupyter scikit-learn matplotlib
 call activate %EnvironmentPath%
-
-:: Install additional packages
-
-call conda install -y keras==2.2.4 pandas==0.24.2 opencv==3.4.2 jupyter git==2.20.1 scikit-learn==0.21.1
 
 :: Install pyIGTLink from source
 
