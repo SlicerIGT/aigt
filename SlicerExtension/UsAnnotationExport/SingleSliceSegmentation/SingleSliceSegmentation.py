@@ -55,6 +55,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
   INPUT_IMAGE = ATTRIBUTE_PREFIX + 'InputImage'
   SEGMENTATION = ATTRIBUTE_PREFIX + 'Segmentation'
   OUTPUT_BROWSER = ATTRIBUTE_PREFIX + 'OutputBrowser'
+  ORIGINAL_IMAGE_INDEX = ATTRIBUTE_PREFIX + 'OriginalImageIndex'
 
 
   def __init__(self, parent):
@@ -165,7 +166,12 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
     else:
       currentNode.SetAttribute(self.OUTPUT_BROWSER, "True")
-  
+
+  def onImageChange(self, browserNode):
+    inputImageIndex = browserNode.GetSelectedItemNumber()
+
+    if inputImageIndex is not None:
+      inputBrowserNode.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
   
   def onSkipImagesNumChanged(self, value):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
@@ -175,9 +181,16 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
   def onCaptureButton(self):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
+    inputImage = self.ui.inputVolumeSelector.currentNode()
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
     numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
+
+    inputImageIndex = inputBrowserNode.GetSelectedItemNumber()
+    print(inputImageIndex)
+
+    if inputImageIndex is not None:
+      inputImage.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
 
     if inputBrowserNode is None:
       logging.error("No browser node selected!")
@@ -190,7 +203,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
 
     ssid = self.ui.editor.mrmlSegmentEditorNode().GetSelectedSegmentID()
-    self.logic.captureSlice(selectedSegmentationSequence, selectedSegmentation)
+    self.logic.captureSlice(selectedSegmentationSequence, selectedSegmentation, inputImage)
     self.ui.editor.mrmlSegmentEditorNode().SetSelectedSegmentID(ssid)
     inputBrowserNode.SelectNextItem(numSkip)
 
@@ -572,8 +585,14 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       slicer.app.processEvents()
 
 
-  def captureSlice(self, selectedSegmentationSequence, selectedSegmentation):
+  def captureSlice(self, selectedSegmentationSequence, selectedSegmentation, inputImage):
+    i = inputImage.GetAttribute("SingleSliceSegmentation_OriginalImageIndex")
+    print(i)
     selectedSegmentationSequence.SaveProxyNodesState()
+    node = selectedSegmentationSequence.GetMasterSequenceNode()
+    indexValue = node.GetNumberOfDataNodes()
+    sequenceNode  = node.GetNthDataNode(indexValue - 1)
+    sequenceNode.SetAttribute('SingleSliceSegmentation_OriginalImageIndex', i)
     self.eraseCurrentSegmentation(selectedSegmentation)
 
 
