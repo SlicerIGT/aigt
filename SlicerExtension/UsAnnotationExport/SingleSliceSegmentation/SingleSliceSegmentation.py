@@ -115,6 +115,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     factory = qSlicerSegmentationsEditorEffectsPythonQt.qSlicerSegmentEditorEffectFactory()
     self.effectFactorySingleton = factory.instance()
     self.effectFactorySingleton.connect('effectRegistered(QString)', self.editorEffectRegistered)
+    
+    
 
 
   def cleanup(self):
@@ -182,15 +184,9 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
   def onCaptureButton(self):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
     inputImage = self.ui.inputVolumeSelector.currentNode()
-    selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
+    selectedSegmentationBrowser = self.ui.segmentationBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
     numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
-
-    inputImageIndex = inputBrowserNode.GetSelectedItemNumber()
-    print(inputImageIndex)
-
-    if inputImageIndex is not None:
-      inputImage.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
 
     if inputBrowserNode is None:
       logging.error("No browser node selected!")
@@ -198,15 +194,22 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     if selectedSegmentation is None:
       logging.error("No segmentation selected!")
       return
-    if selectedSegmentationSequence is None:
+    if selectedSegmentationBrowser is None:
       logging.error("No segmentation sequence browser selected!")
       return
 
-    ssid = self.ui.editor.mrmlSegmentEditorNode().GetSelectedSegmentID()
-    self.logic.captureSlice(selectedSegmentationSequence, selectedSegmentation, inputImage)
-    self.ui.editor.mrmlSegmentEditorNode().SetSelectedSegmentID(ssid)
-    inputBrowserNode.SelectNextItem(numSkip)
-
+    inputImageIndex = inputBrowserNode.GetSelectedItemNumber()
+    
+    original_index = inputImage.GetAttribute(self.ORIGINAL_IMAGE_INDEX)
+    if original_index is None or original_index == "None":
+      inputImage.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
+      self.logic.captureSlice(selectedSegmentationBrowser, selectedSegmentation, inputImage)
+      self.logic.eraseCurrentSegmentation(selectedSegmentation)
+      inputImage.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
+      inputBrowserNode.SelectNextItem(numSkip)
+    else:
+      self.logic.captureSlice(selectedSegmentationBrowser, selectedSegmentation, inputImage)
+    
 
   def onClearButton(self):
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
@@ -318,7 +321,9 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # Set parameter set node if absent
     self.selectParameterNode()
     self.ui.editor.updateWidgetFromMRML()
-
+    
+    # Update UI
+    slicer.modules.sequencebrowser.setToolBarVisible(True)
     self.updateSelections()
     self.connectKeyboardShortcuts()
 
@@ -586,14 +591,54 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
 
   def captureSlice(self, selectedSegmentationSequence, selectedSegmentation, inputImage):
-    i = inputImage.GetAttribute("SingleSliceSegmentation_OriginalImageIndex")
-    print(i)
-    selectedSegmentationSequence.SaveProxyNodesState()
+    originalIndex = inputImage.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
+    
+    #todo overwrite existing segmentation of the same image
+    
+    # Figure out which sequence of the selected browser has the proxy node inputImage and selectedSegmentation
+    
+    segmentedImageSequenceNode = selectedSegmentationSequence.GetSequenceNode(inputImage)
+    if segmentedImageSequenceNode is None:
+      logging.error("Sequence not found for input image: {}".format(inputImage.GetName()))
+      return
+    
+    segmentationSequenceNode = selectedSegmentationSequence.GetSequenceNode(selectedSegmentation)
+    if segmentationSequenceNode is None:
+      logging.error("Sequence not found for segmentation: {}".format(selectedSegmentation.GetName()))
+      return
+    
+    # Check all nodes saved in sequence if anyone has the same attribute (this image already recorded)
+    
+    numDataNodes = segmentedImageSequenceNode.GetNumberOfDataNodes()
+    recordedOriginalIndex = None
+    for i in range(numDataNodes):
+      imageNode = segmentedImageSequenceNode.GetNthDataNode(i)
+      savedIndex = imageNode.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
+      if originalIndex == savedIndex:
+        recordedOriginalIndex = i
+        break
+    
+    # If this image has been saved previously, overwrite instead of add new
+    
+    try:
+      recordedOriginalIndex = int(recordedOriginalIndex)
+    except:
+      recordedOriginalIndex = None
+    
+    if recordedOriginalIndex is None:
+      selectedSegmentationSequence.SaveProxyNodesState()
+    else:
+      recordedIndexValue = segmentedImageSequenceNode.GetNthIndexValue(recordedOriginalIndex)
+      segmentationSequenceNode.SetDataNodeAtValue(selectedSegmentation, recordedIndexValue)
+    
+    #Todo: What is this section doing below???
+    
     node = selectedSegmentationSequence.GetMasterSequenceNode()
     indexValue = node.GetNumberOfDataNodes()
     sequenceNode  = node.GetNthDataNode(indexValue - 1)
-    sequenceNode.SetAttribute('SingleSliceSegmentation_OriginalImageIndex', i)
-    self.eraseCurrentSegmentation(selectedSegmentation)
+    sequenceNode.SetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX, originalIndex)
+    
+    # self.eraseCurrentSegmentation(selectedSegmentation)
 
 
   def eraseCurrentSegmentation(self, selectedSegmentation):
