@@ -125,7 +125,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
   def onInputBrowserChanged(self, currentNode):
     browserNodes = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
-    numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
     for browser in browserNodes:
       browser.SetAttribute(self.INPUT_BROWSER, "False")
 
@@ -133,7 +132,14 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
 
     currentNode.SetAttribute(self.INPUT_BROWSER, "True")
-    currentNode.SetAttribute(self.INPUT_SKIP_NUMBER, str(numSkip))
+    
+    savedSkip = currentNode.GetAttribute(self.INPUT_SKIP_NUMBER)
+    if savedSkip is not None:
+      slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value = int(savedSkip)
+    else:
+      numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
+      currentNode.SetAttribute(self.INPUT_SKIP_NUMBER, str(numSkip))
+    
     logging.debug("onSequenceBrowserSelected: {}".format(currentNode.GetName()))
 
 
