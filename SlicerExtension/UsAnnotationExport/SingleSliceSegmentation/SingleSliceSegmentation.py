@@ -223,6 +223,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       logging.error("No segmentation selected!")
       return
     self.logic.eraseCurrentSegmentation(selectedSegmentation)
+    selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
   
   
   def onSkipButton(self):
