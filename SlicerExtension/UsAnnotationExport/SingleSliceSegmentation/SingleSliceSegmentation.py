@@ -200,12 +200,12 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     inputImageIndex = inputBrowserNode.GetSelectedItemNumber()
     
-    original_index = inputImage.GetAttribute(self.ORIGINAL_IMAGE_INDEX)
-    if original_index is None or original_index == "None":
-      inputImage.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
+    original_index_str = selectedSegmentation.GetAttribute(self.ORIGINAL_IMAGE_INDEX)
+    if original_index_str is None or original_index_str == "None" or original_index_str == "":
+      selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
       self.logic.captureSlice(selectedSegmentationBrowser, selectedSegmentation, inputImage)
       self.logic.eraseCurrentSegmentation(selectedSegmentation)
-      inputImage.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
+      selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
       inputBrowserNode.SelectNextItem(numSkip)
     else:
       self.logic.captureSlice(selectedSegmentationBrowser, selectedSegmentation, inputImage)
@@ -591,13 +591,13 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
 
   def captureSlice(self, selectedSegmentationSequence, selectedSegmentation, inputImage):
-    originalIndex = inputImage.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
+    originalIndex = selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
     
     #todo overwrite existing segmentation of the same image
     
     # Figure out which sequence of the selected browser has the proxy node inputImage and selectedSegmentation
     
-    segmentedImageSequenceNode = selectedSegmentationSequence.GetSequenceNode(inputImage)
+    segmentedImageSequenceNode = selectedSegmentationSequence.GetSequenceNode(selectedSegmentation)
     if segmentedImageSequenceNode is None:
       logging.error("Sequence not found for input image: {}".format(inputImage.GetName()))
       return
@@ -612,8 +612,8 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     numDataNodes = segmentedImageSequenceNode.GetNumberOfDataNodes()
     recordedOriginalIndex = None
     for i in range(numDataNodes):
-      imageNode = segmentedImageSequenceNode.GetNthDataNode(i)
-      savedIndex = imageNode.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
+      segmentationNode = segmentedImageSequenceNode.GetNthDataNode(i)
+      savedIndex = segmentationNode.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
       if originalIndex == savedIndex:
         recordedOriginalIndex = i
         break
@@ -630,15 +630,6 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     else:
       recordedIndexValue = segmentedImageSequenceNode.GetNthIndexValue(recordedOriginalIndex)
       segmentationSequenceNode.SetDataNodeAtValue(selectedSegmentation, recordedIndexValue)
-    
-    #Todo: What is this section doing below???
-    
-    node = selectedSegmentationSequence.GetMasterSequenceNode()
-    indexValue = node.GetNumberOfDataNodes()
-    sequenceNode  = node.GetNthDataNode(indexValue - 1)
-    sequenceNode.SetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX, originalIndex)
-    
-    # self.eraseCurrentSegmentation(selectedSegmentation)
 
 
   def eraseCurrentSegmentation(self, selectedSegmentation):
