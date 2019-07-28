@@ -1,6 +1,6 @@
 import numpy as np
 
-files = [r"j:\Temp\ultraosund_0.npy", r"j:\Temp\segmentation_0.npy", r"j:\Temp\prediction_0.npy"]
+files = [r"j:\Temp\ultrasound_0.npy", r"j:\Temp\segmentation_0.npy", r"j:\Temp\prediction_0.npy"]
 volumeNames = ["Ultrasound", "Segmentation", "Prediction"]
 labelmapFlags = [False, False, False]
 dataTypes = ["Double", "Double", "Float"]
