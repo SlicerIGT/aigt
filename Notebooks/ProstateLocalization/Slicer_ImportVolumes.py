@@ -1,51 +1,42 @@
 import numpy as np
 
+
+def import_numpy_array(fileName, volumeName, data_type):
+  print("Importing {} into {} of voxel type {}".format(fileName, volumeName, dataType))
+  numpyArray = np.load(fileName)
+  volumeNode = slicer.mrmlScene.GetFirstNode(volumeName, 'vtkMRMLScalarVolumeNode')
+  if volumeNode is None:
+    volumeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode')
+    volumeNode.SetName(volumeName)
+    volumeNode.CreateDefaultDisplayNodes()
+  
+  slicer.util.updateVolumeFromArray(volumeNode, numpyArray)
+  slicer.util.setSliceViewerLayers(background=volumeNode)
+
+
 files = [r"j:\Temp\ultrasound_0.npy", r"j:\Temp\segmentation_0.npy", r"j:\Temp\prediction_0.npy"]
 volumeNames = ["Ultrasound", "Segmentation", "Prediction"]
-labelmapFlags = [False, False, False]
 dataTypes = ["Double", "Double", "Float"]
+for fileName, volumeName, dataType in zip(files, volumeNames, dataTypes):
+  import_numpy_array(fileName, volumeName, dataType)
 
-nImages = len(files)
-numpyArray = [None] * nImages
-volume = [None] * nImages
-volumeDisplayNode = [None] * nImages
-importer = [None] * nImages
 
-print("{} images will be loaded".format(nImages))
+import_numpy_array(r"j:\Temp\ultrasound_0.npy", "Ultrasound", "Double")
+import_numpy_array(r"j:\Temp\segmentation_0.npy", "Segmentation", "Double")
+import_numpy_array(r"j:\Temp\prediction_0.npy", "Prediction", "Float")
 
-i = 0
-for fileName, volumeName, labelmap, dataType in zip(files, volumeNames, labelmapFlags, dataTypes):
-  print("")
-  print("Importing {} into {}, type {}".format(fileName, volumeName, dataType))
-  numpyArray[i] = np.load(fileName)
-  importer[i] = vtk.vtkImageImport()
-  importer[i].CopyImportVoidPointer(numpyArray[i], numpyArray[i].nbytes)
-  setDataType = 'importer[i].SetDataScalarTypeTo' + dataType + '()'
-  eval(setDataType)
-  importer[i].SetNumberOfScalarComponents(1)
-  importer[i].SetWholeExtent(0,numpyArray[i].shape[0]-1,0,numpyArray[i].shape[1]-1,0,numpyArray[i].shape[2]-1)
-  importer[i].SetDataExtentToWholeExtent()
-  importer[i].Update()
-  if labelmap:
-    volume[i] = slicer.vtkMRMLLabelMapVolumeNode()
-  else:
-    volume[i] = slicer.vtkMRMLScalarVolumeNode()
-  volume[i].SetName(volumeName)
-  volume[i].SetAndObserveImageData(importer[i].GetOutput())
-  slicer.mrmlScene.AddNode(volume[i])
-  volumeDisplayNode[i] = 0
-  if labelmap == False:
-    volumeDisplayNode[i] = slicer.vtkMRMLScalarVolumeDisplayNode()
-  else:
-    volumeDisplayNode[i] = slicer.vtkMRMLLabelMapVolumeDisplayNode()
-  
-  slicer.mrmlScene.AddNode(volumeDisplayNode[i])
-  if labelmap == False:
-    greyColorTable = slicer.util.getNode('Grey')
-    volumeDisplayNode[i].SetAndObserveColorNodeID(greyColorTable.GetID())
-  else:
-    genericColorTableNode = slicer.util.getNode('GenericColors')
-    volumeDisplayNode[i].SetAndObserveColorNodeID(genericColorTableNode.GetID())
-  
-  volume[i].SetAndObserveDisplayNodeID(volumeDisplayNode[i].GetID())
-  i = i + 1
+
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\bx_00.npy", "bx_00", "Double")
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\bx_01.npy", "bx_01", "Double")
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\bx_02.npy", "bx_02", "Double")
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\bx_03.npy", "bx_03", "Double")
+
+
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\sample_ultrasound_00.npy", "sample_ultrasound_00", "Double")
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\sample_ultrasound_01.npy", "sample_ultrasound_01", "Double")
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\sample_ultrasound_02.npy", "sample_ultrasound_02", "Double")
+
+
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\sample_segmentation_00.npy", "sample_segmentation_00", "Double")
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\sample_segmentation_01.npy", "sample_segmentation_01", "Double")
+import_numpy_array(r"j:\UsAnnotationExport\Notebooks\ProstateLocalization\sample_segmentation_02.npy", "sample_segmentation_02", "Double")
