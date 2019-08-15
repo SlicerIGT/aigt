@@ -1,0 +1,81 @@
+<PlusConfiguration version="2.0">
+  <DataCollection StartupDelaySec="1.0">
+    <DeviceSet 
+	Name="Hernia Phantom Webcam OptiTrack (Reference, Needle, Scissors)" 
+	Description="OptiTrack Duo + Webcam to track a reference marker, a pair of suturing needle drivers, and a pair of surgical scissors." />
+    <Device
+      Id="TrackerDevice"
+      Type="OptiTrack"
+      ToolReferenceFrame="Tracker"
+      Profile="OptitrackProfile1.motive"
+      AttachToRunningMotive="FALSE"
+      MotiveDataDescriptionsUpdateTimeSec="1.0"
+	  AcquisitionRate="120">
+      <DataSources>
+        <DataSource Type="Tool" Id="Reference" />
+        <DataSource Type="Tool" Id="Needle" />
+        <DataSource Type="Tool" Id="Scissors" />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="TrackerStream">
+          <DataSource Type="Tool" Id="Reference" />
+		  <DataSource Type="Tool" Id="Needle" />
+		  <DataSource Type="Tool" Id="Scissors" />
+        </OutputChannel>
+      </OutputChannels>
+    </Device>
+	
+    <Device 
+	  Id="WebcamDevice" 
+	  Type="MmfVideo" 
+	  FrameSize="1280 720" 
+	  VideoFormat="RGB24" 
+	  CaptureDeviceId="2" 
+	  AcquisitionRate="30" >
+            <DataSources>
+                <DataSource Type="Video" Id="Webcam" PortUsImageOrientation="UN" ImageType="RGB_COLOR" />
+            </DataSources>
+            <OutputChannels>
+                <OutputChannel Id="WebcamStream" VideoDataSourceId="Webcam" />
+            </OutputChannels>
+        </Device>
+		
+	<Device Id="TrackedVideoDevice" Type="VirtualMixer">
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+        <InputChannel Id="WebcamStream" />
+      </InputChannels>
+      <OutputChannels>
+        <OutputChannel Id="TrackedVideoStream" />
+      </OutputChannels>
+    </Device>
+  </DataCollection>
+  
+  <PlusOpenIGTLinkServer
+    MaxNumberOfIgtlMessagesToSend="1"
+    MaxTimeSpentWithProcessingMs="50"
+    ListeningPort="18944"
+    SendValidTransformsOnly="true"
+    OutputChannelId="TrackedVideoStream">
+    <DefaultClientInfo>
+      <MessageTypes>
+        <Message Type="TRANSFORM" />
+		<Message Type="VIDEO" />
+      </MessageTypes>
+      <TransformNames>
+		<Transform Name="NeedleToReference" />
+		<Transform Name="ScissorsToReference" />
+      </TransformNames>
+	  <VideoNames>
+         <Video Name="Webcam" EmbeddedTransformToFrame="Webcam" >
+				<Encoding
+					FourCC="VP90"
+					Lossless="False"
+					Speed="8"
+					DeadlineMode="realtime"
+					RateControl="CQ" />
+				</Video>
+            </VideoNames>
+    </DefaultClientInfo>
+  </PlusOpenIGTLinkServer>
+</PlusConfiguration>
