@@ -1,16 +1,20 @@
 import argparse
 import datetime
-import numpy as np
 import os
+
+import numpy as np
 
 start_timestamp = datetime.datetime.now()
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Disable TensorFlow warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Disable TensorFlow warnings for cleaner logging
 
 from keras import backend as K
 from keras.models import load_model
 
 from local_vars import root_folder
+
+
+# Parse command line arguments
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-m", "--models-folder", type=str, required=True)
@@ -75,6 +79,6 @@ for model_filename in models_file_list:
     prediction = model.predict(test_ultarsound_data)
     prediction_filename = "prediction_" + basename
     prediction_fullname = os.path.join(output_fullpath, prediction_filename)
-    np.save(prediction_fullname, prediction[:, :, :, 1])
+    np.save(prediction_fullname, prediction)
     print("Execution time: {}".format(datetime.datetime.now()-start_timestamp))
     K.clear_session()
