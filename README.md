@@ -14,6 +14,7 @@ This repository contains scripts for deep learning in guided medical interventio
 ```
 pip_install("tensorflow keras scikit-learn opencv-contrib-python")
 ```
+- You may also install `tensorflow-gpu`, if you computer supports that, but then copy CUDA files (dll files on Windows) to the Slicer bin folder. (Feel free to add instructions for Mac and Linux.)
 - To run notebooks, start the Anaconda command prompt, navigate to the Notebooks folder of your clone of this repository, and type the `jupyter notebook` command.
 
 # Acquire tracked ultrasound
