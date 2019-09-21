@@ -10,7 +10,10 @@ This repository contains scripts for deep learning in guided medical interventio
 ## To run Slicer notebooks
 - Install Slicer 4.11 or newer version (later than 2019-09-16 is recommended, for full functionality)
 - Install the Jupyter extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook.
-- Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the `pip_install()` function in the Python console of Slicer.
+- Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the Python console of Slicer to run this command (you may add additional python libraries that you use in your code):
+```
+pip_install("tensorflow keras scikit-learn opencv-contrib-python")
+```
 - To run notebooks, start the Anaconda command prompt, navigate to the Notebooks folder of your clone of this repository, and type the `jupyter notebook` command.
 
 # Acquire tracked ultrasound
