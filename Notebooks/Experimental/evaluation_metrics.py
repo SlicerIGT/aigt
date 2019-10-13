@@ -15,6 +15,7 @@ TRUE_POSITIVE_AREA_PERCENT = "true_positive_area_percent"
 def dilate_stack(segmentation_data, iterations):
     return np.array([scipy.ndimage.binary_dilation(y, iterations=iterations) for y in segmentation_data])
 
+
 def compute_evaluation_metrics(prediction, groundtruth, acceptable_margin_mm=1.0, mm_per_pixel=1.0):
     num_slices = groundtruth.shape[0]
 
@@ -38,3 +39,55 @@ def compute_evaluation_metrics(prediction, groundtruth, acceptable_margin_mm=1.0
     results[TRUE_POSITIVE_AREA_PERCENT] = tpp / tpa * 100
 
     return results
+
+
+def compute_roc(roc_thresholds, prediction_data, groundtruth_data, acceptable_margin_mm, mm_per_pixel):
+    false_positives = np.zeros(len(roc_thresholds))
+    true_positives = np.zeros(len(roc_thresholds))
+
+    for i in range(len(roc_thresholds)):
+        threshold = roc_thresholds[i]
+        prediction_thresholded = np.copy(prediction_data)
+        prediction_thresholded[prediction_thresholded >= threshold] = 1.0
+        prediction_thresholded[prediction_thresholded < threshold] = 0.0
+        metrics = compute_evaluation_metrics(
+            prediction_thresholded, groundtruth_data, acceptable_margin_mm=acceptable_margin_mm, mm_per_pixel=mm_per_pixel)
+        true_negative_area_perc = metrics[TRUE_NEGATIVE_AREA_PERCENT]
+        false_positives[i] = (100 - true_negative_area_perc) / 100.0
+        true_positives[i] = metrics[TRUE_POSITIVE_AREA_PERCENT] / 100.0
+    
+    return true_positives, false_positives
+
+
+def compute_auroc(true_positives, false_positives):
+    area = 0.0
+
+    fps = np.zeros(len(false_positives) * 2)
+    tps = np.zeros(len(false_positives) * 2)
+
+    for i in range(len(false_positives)):
+        fps[i*2] = false_positives[i]
+        tps[i*2] = true_positives[i]
+        if i == len(false_positives) - 1:
+            fps[i*2+1] = 1.0
+            tps[i*2+1] = true_positives[i]
+            area = area + (1.0 - false_positives[i]) * true_positives[i]
+        else:
+            fps[i*2+1] = false_positives[i+1]
+            tps[i*2+1] = true_positives[i]
+            area = area + (false_positives[i+1] - false_positives[i]) * true_positives[i]
+    
+    return area
+
+
+# Goodness is defined as distance from the diagonal of the ROC curve
+
+def compute_goodness(roc_thresholds, true_positives, false_positives):
+    goodnesses = np.zeros(len(roc_thresholds))
+    for i in range(len(roc_thresholds)):
+        crossprod = np.cross((1.0, 1.0), (false_positives[i], true_positives[i]))
+        goodnesses[i] = np.linalg.norm(crossprod)/np.linalg.norm([1.0, 1.0])
+
+    best_threshold_index = np.argmax(goodnesses)
+    return best_threshold_index
+
