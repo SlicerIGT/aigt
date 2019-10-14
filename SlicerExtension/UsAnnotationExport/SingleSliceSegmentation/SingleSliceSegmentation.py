@@ -645,7 +645,10 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       segmentId = selectedSegmentation.GetSegmentation().GetNthSegmentID(i)
 
       import vtkSegmentationCorePython as vtkSegmentationCore
-      labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
+      try:
+        labelMapRep = selectedSegmentation.GetBinaryLabelmapRepresentation(segmentId)
+      except:
+        labelMapRep = selectedSegmentation.GetBinaryLabelmapInternalRepresentation(segmentId)
       slicer.vtkOrientedImageDataResample.FillImage(labelMapRep, 0, labelMapRep.GetExtent())
       slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(
         labelMapRep, selectedSegmentation, segmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
