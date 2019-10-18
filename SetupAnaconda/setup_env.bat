@@ -10,20 +10,22 @@ set EnvironmentPath=%1
 call conda create -y -p %EnvironmentPath% tensorflow-gpu keras pandas opencv jupyter scikit-learn matplotlib
 call activate %EnvironmentPath%
 
+call pip install girder-client
+
 :: Install pyIGTLink from source
 
-call git clone -b pyIGTLink_client https://github.com/SlicerIGT/pyIGTLink.git %EnvironmentPath%\pyIGTLink
-call pip install -e %EnvironmentPath%\pyIGTLink
+:: call git clone -b pyIGTLink_client https://github.com/SlicerIGT/pyIGTLink.git %EnvironmentPath%\pyIGTLink
+:: call pip install -e %EnvironmentPath%\pyIGTLink
 
 :: Install keras-vis from source
 
-cd %EnvironmentPath%
+:: cd %EnvironmentPath%
 
-call git clone https://github.com/raghakot/keras-vis.git %EnvironmentPath%\keras-vis
-cd keras-vis
-call python setup.py install
+:: call git clone https://github.com/raghakot/keras-vis.git %EnvironmentPath%\keras-vis
+:: cd keras-vis
+:: call python setup.py install
 
-cd %CurrentPath%
+:: cd %CurrentPath%
 
 
 :: Exiting install script
