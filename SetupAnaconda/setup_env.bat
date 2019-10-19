@@ -7,10 +7,10 @@ set EnvironmentPath=%1
 
 :: Create the environment with modules and activate it
 
-call conda create -y -p %EnvironmentPath% tensorflow-gpu keras pandas opencv jupyter scikit-learn matplotlib
+call conda create -y -p %EnvironmentPath% pandas opencv jupyter scikit-learn matplotlib
 call activate %EnvironmentPath%
 
-call pip install girder-client
+call pip install tensorflow-gpu girder-client
 
 :: Install pyIGTLink from source
 
