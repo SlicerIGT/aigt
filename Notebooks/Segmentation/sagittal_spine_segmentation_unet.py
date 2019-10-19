@@ -1,15 +1,16 @@
 # U-Net Model Construction
 
+import unittest
+
 import numpy as np
 
-from tensorflow.keras.models import *
-from tensorflow.keras.layers import *
-from tensorflow.keras.optimizers import *
-from tensorflow.keras.callbacks import ModelCheckpoint, LearningRateScheduler
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.regularizers import l1, l2
+import keras
+from keras.models import *
+from keras.layers import *
+from keras.optimizers import *
+from keras.regularizers import l1, l2
 
-from tensorflow.keras import backend as K
+from keras import backend as K
 
 
 def sagittal_spine_unet(input_size, num_classes, filter_multiplier=10, regularization_rate=0.):
@@ -35,7 +36,7 @@ def sagittal_spine_unet(input_size, num_classes, filter_multiplier=10, regulariz
                         bias_regularizer=l1(regularization_rate))(output)
 
     for shape, filters in zip(up_conv_kernel_sizes, up_filter_numbers):
-        output = tensorflow.keras.layers.UpSampling2D()(output)
+        output = keras.layers.UpSampling2D()(output)
         skip_output = skips.pop()
         output = concatenate([output, skip_output], axis=3)
         if filters != num_classes:
@@ -84,3 +85,11 @@ def weighted_categorical_crossentropy(weights):
         return loss
 
     return loss
+
+
+class SagittalSpineUnetTest(unittest.TestCase):
+    def test_create_model(self):
+        model = sagittal_spine_unet(128, 2)
+
+if __name__ == '__main__':
+    unittest.main()

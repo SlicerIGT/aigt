@@ -1,6 +1,6 @@
 # Create Ultrasound Segmentation Batch Generator Class
-from tensorflow import keras
-import tensorflow.keras.utils
+
+import keras.utils
 import scipy.ndimage
 import numpy as np
 
@@ -48,7 +48,7 @@ def scale_image(image, factor):
         return image
 
 
-class UltrasoundSegmentationBatchGenerator(tensorflow.keras.utils.Sequence):
+class UltrasoundSegmentationBatchGenerator(keras.utils.Sequence):
 
     def __init__(self,
                  x_set,
@@ -56,7 +56,7 @@ class UltrasoundSegmentationBatchGenerator(tensorflow.keras.utils.Sequence):
                  batch_size,
                  image_dimensions,
                  shuffle=True,
-                 max_rotation_angle=10,
+                 max_rotation_angle = 10.0,
                  max_shift_factor=0.1,
                  min_zoom_factor=0.9,
                  max_zoom_factor=1.1,
@@ -67,6 +67,10 @@ class UltrasoundSegmentationBatchGenerator(tensorflow.keras.utils.Sequence):
         self.batch_size = batch_size
         self.image_dimensions = image_dimensions
         self.shuffle = shuffle
+        self.max_rotation_angle = max_rotation_angle
+        self.max_shift_factor = max_shift_factor
+        self.min_zoom_factor = min_zoom_factor
+        self.max_zoom_factor = max_zoom_factor
         self.n_channels = n_channels
         self.n_classes = n_classes
         self.number_of_images = self.x.shape[0]
@@ -103,7 +107,8 @@ class UltrasoundSegmentationBatchGenerator(tensorflow.keras.utils.Sequence):
         x_shift = np.empty((self.batch_size, *self.image_dimensions, self.n_channels))
         y_shift = np.empty((self.batch_size, *self.image_dimensions))
         for i in range(self.batch_size):
-            shift = np.random.randint(-self.max_shift_factor, self.max_shift_factor, (1, 2))[0]
+            shift = np.random.randint(-self.max_shift_factor * self.image_dimensions[0],
+                                      self.max_shift_factor * self.image_dimensions[1], (1, 2))[0]
             x_shift[i, :, :, :] = scipy.ndimage.interpolation.shift(x_rot[i, :, :, :], (shift[0], shift[1], 0),
                                                                     mode="constant", cval=0, order=0)
             y_shift[i, :, :] = scipy.ndimage.interpolation.shift(y_rot[i, :, :], (shift[0], shift[1]), mode="constant",
