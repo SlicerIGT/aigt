@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.ndimage
-
+from random import sample
 
 # String constants to avoid spelling errors
 
@@ -38,3 +38,33 @@ def compute_evaluation_metrics(prediction, groundtruth, acceptable_margin_mm=1.0
     results[TRUE_POSITIVE_AREA_PERCENT] = tpp / tpa * 100
 
     return results
+
+
+def compute_roc(roc_thresholds, prediction_data, groundtruth_data, acceptable_margin_mm, mm_per_pixel):
+    false_positives = np.zeros(len(roc_thresholds))
+    true_positives = np.zeros(len(roc_thresholds))
+    goodnesses = np.zeros(len(roc_thresholds))
+
+    for i in range(len(roc_thresholds)):
+        threshold = roc_thresholds[i]
+        prediction_thresholded = np.copy(prediction_data)
+        prediction_thresholded[prediction_thresholded >= threshold] = 1.0
+        prediction_thresholded[prediction_thresholded < threshold] = 0.0
+        metrics = compute_evaluation_metrics(
+            prediction_thresholded, groundtruth_data, acceptable_margin_mm=acceptable_margin_mm,
+            mm_per_pixel=mm_per_pixel)
+        true_negative_area_perc = metrics[TRUE_NEGATIVE_AREA_PERCENT]
+        false_positives[i] = (100 - true_negative_area_perc) / 100.0
+        true_positives[i] = metrics[TRUE_POSITIVE_AREA_PERCENT] / 100.0
+        crossprod = np.cross((1.0, 1.0), (false_positives[i], true_positives[i]))
+        goodnesses[i] = np.linalg.norm(crossprod) / np.linalg.norm([1.0, 1.0])
+
+    area = 0.0
+    for i in range(len(roc_thresholds)):
+        if i == len(roc_thresholds) - 1:
+            area = area + (1.0 - false_positives[i]) * true_positives[i]
+        else:
+            area = area + (false_positives[i + 1] - false_positives[i]) * true_positives[i]
+
+    best_threshold_index = np.argmax(goodnesses)
+    return true_positives, false_positives, best_threshold_index, area

@@ -107,12 +107,18 @@ class UltrasoundSegmentationBatchGenerator(keras.utils.Sequence):
         x_shift = np.empty((self.batch_size, *self.image_dimensions, self.n_channels))
         y_shift = np.empty((self.batch_size, *self.image_dimensions))
         for i in range(self.batch_size):
-            shift = np.random.randint(-self.max_shift_factor * self.image_dimensions[0],
-                                      self.max_shift_factor * self.image_dimensions[1], (1, 2))[0]
-            x_shift[i, :, :, :] = scipy.ndimage.interpolation.shift(x_rot[i, :, :, :], (shift[0], shift[1], 0),
-                                                                    mode="constant", cval=0, order=0)
-            y_shift[i, :, :] = scipy.ndimage.interpolation.shift(y_rot[i, :, :], (shift[0], shift[1]), mode="constant",
-                                                                 cval=0, order=0)
+            lower_bound = -int(self.max_shift_factor * self.image_dimensions[0])
+            upper_bound = int(self.max_shift_factor * self.image_dimensions[1])
+            if lower_bound < upper_bound:
+                shift = np.random.randint(lower_bound,  upper_bound, (2))
+                x_shift[i, :, :, :] = scipy.ndimage.interpolation.shift(x_rot[i, :, :, :], (shift[0], shift[1], 0),
+                                                                        mode="constant", cval=0, order=0)
+                y_shift[i, :, :] = scipy.ndimage.interpolation.shift(y_rot[i, :, :], (shift[0], shift[1]),
+                                                                     mode="constant",
+                                                                     cval=0, order=0)
+            else:
+                x_shift[i, :, :, :] = x_rot[i, :, :, :]
+                y_shift[i, :, :] = y_rot[i, :, :]
 
         x_zoom = np.empty((self.batch_size, *self.image_dimensions, self.n_channels))
         y_zoom = np.empty((self.batch_size, *self.image_dimensions))
