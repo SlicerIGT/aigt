@@ -1,24 +1,27 @@
 import numpy as np
 import scipy.ndimage
-from random import sample
+import warnings
 
 # String constants to avoid spelling errors
 
-FALSE_POSITIVE_PREDICTION_MM = "false_positive_prediction_mm2"
-TRUE_NEGATIVE_AREA_MM = "true_negative_area_mm2"
-TRUE_NEGATIVE_AREA_PERCENT = "true_negative_area_percent"
-TRUE_POSITIVE_PREDICTION_MM = "true_positive_prediction_mm2"
-TRUE_POSITIVE_AREA_MM = "true_positive_area_mm2"
-TRUE_POSITIVE_AREA_PERCENT = "true_positive_area_percent"
-RECALL = "recall"
-PRECISION = "precision"
-FSCORE = "f_score"
+TRUE_POSITIVE_RATE  = "true_positive_rate"
+RECALL              = "true_positive_rate"
+SENSITIVITY         = "true_positive_rate"
+FALSE_POSITIVE_RATE = "false_positive_rate"
+FALLOUT             = "false_positive_rate"
+SPECIFICITY         = "specificity"
+PRECISION           = "precision"
+DICE                = "dice"
+JACCARD             = "jaccard"
+ACCURACY            = "accuracy"
+FSCORE              = "f_score"
 
 
 def dilate_stack(segmentation_data, iterations):
     return np.array([scipy.ndimage.binary_dilation(y, iterations=iterations) for y in segmentation_data])
 
-def compute_evaluation_metrics(prediction, groundtruth, acceptable_margin_mm=1.0, mm_per_pixel=1.0):
+
+def compute_evaluation_metrics(prediction, groundtruth, acceptable_margin_mm=0.0, mm_per_pixel=1.0):
     """
     Computes evaluation metrics related to overlap
     :param prediction: np.array(x, y, z, c), c=0 for background, c=1 for foreground
@@ -27,50 +30,85 @@ def compute_evaluation_metrics(prediction, groundtruth, acceptable_margin_mm=1.0
     :param mm_per_pixel: Obtain this value from image geometry
     :return: A dict() of results. Names are available as constants.
     """
-    num_slices = groundtruth.shape[0]
+
+    # num_slices = float(groundtruth.shape[0])
 
     acceptable_margin_pixel = int(acceptable_margin_mm / mm_per_pixel)
-    acceptable_region = dilate_stack(groundtruth[:, :, :, 0], acceptable_margin_pixel)
-    true_pos_prediction = np.minimum(groundtruth[:, :, :, 0], prediction[:, :, :, 1])
-    not_acceptable_region = 1 - acceptable_region
-    false_pos_prediction = np.minimum(not_acceptable_region, prediction[:, :, :, 1])
-    false_neg_prediction = np.maximum( (groundtruth[:, :, :, 0] - prediction[:, :, :, 1]), 0.0 )
 
-    fpp = np.sum(false_pos_prediction[:, :, :])
-    tna = np.sum(not_acceptable_region[:, :, :])
-    tpp = np.sum(true_pos_prediction)
-    tpa = np.sum(groundtruth[:, :, :, 0])
-    fnp = np.sum(false_neg_prediction[:, :, :])
-    recall = tpp / (tpp + fnp)
-    precision = tpp / (tpp + fpp)
+    actual_pos_map  = dilate_stack(groundtruth[:, :, :, 0], acceptable_margin_pixel)
+    actual_neg_map  = 1.0 - actual_pos_map
 
-    '''
-    print("***")
-    print("fpp: {}".format(fpp))
-    print("tpp: {}".format(tpp))
-    print("fnp: {}".format(fnp))
-    print("rec: {}".format(recall))
-    print("pre: {}".format(precision))
-    '''
+    true_pos_map    = np.minimum(prediction[:, :, :, 1], actual_pos_map)
+    true_neg_map    = np.minimum(prediction[:, :, :, 0], actual_neg_map)
+    false_pos_map   = np.maximum(prediction[:, :, :, 1] - actual_pos_map, 0.0)
+    false_neg_map   = np.maximum(prediction[:, :, :, 0] - actual_neg_map, 0.0)
+
+    true_pos_total  = np.sum(true_pos_map, dtype="float64")
+    true_neg_total  = np.sum(true_neg_map, dtype="float64")
+    false_pos_total = np.sum(false_pos_map, dtype="float64")
+    false_neg_total = np.sum(false_neg_map, dtype="float64")
+
+    actual_pos_total = true_pos_total + false_neg_total
+    actual_neg_total = true_neg_total + false_pos_total
+    predict_pos_total = true_pos_total + false_pos_total
+
+    # If there is no actual positive, then the sensitivity is perfect
+
+    if actual_pos_total <= 0.0:
+        true_pos_rate = 1.0
+    else:
+        true_pos_rate = true_pos_total / actual_pos_total
+
+    # If there is no actual negative, then specificity is perfect (we detect all negatives), so this should be 0.0
+
+    if actual_neg_total <= 0.0:
+        false_pos_rate =  0.0
+    else:
+        false_pos_rate = false_pos_total / actual_neg_total
+
+    # If there is no positive prediction, then precision is perfect.
+
+    if predict_pos_total <= 0.0:
+        precision = 1.0
+    else:
+        precision = true_pos_total / predict_pos_total
+
+    specificity     = true_neg_total / (true_neg_total + false_pos_total)
+
+    # If there is no actual positive, and none is predicted, then dice should be perfect
+
+    if (predict_pos_total + actual_pos_total) <= 0.0:
+        dice = 1.0
+    else:
+        dice = 2 * true_pos_total / (predict_pos_total + actual_pos_total)
+
+    jaccard  = true_pos_total / (true_pos_total + false_pos_total + false_neg_total)
+    accuracy = (true_pos_total + true_neg_total) / (true_pos_total + false_pos_total + true_neg_total + false_neg_total)
+
+    # If actual positive is zero, but some positive was predicted, then fcore is bad
+
+    if (true_pos_rate + precision) <= 0.0:
+        fscore = 0.0
+    else:
+        fscore   = 2 * true_pos_rate * precision / (true_pos_rate + precision)
 
     results = dict()
-    results[FALSE_POSITIVE_PREDICTION_MM] = fpp * mm_per_pixel * mm_per_pixel / num_slices
-    results[TRUE_NEGATIVE_AREA_MM] = tna * mm_per_pixel * mm_per_pixel / num_slices
-    results[TRUE_NEGATIVE_AREA_PERCENT] = (tna - fpp) / tna * 100
-    results[TRUE_POSITIVE_PREDICTION_MM] = tpp * mm_per_pixel * mm_per_pixel / num_slices
-    results[TRUE_POSITIVE_AREA_MM] = tpa * mm_per_pixel * mm_per_pixel / num_slices
-    results[TRUE_POSITIVE_AREA_PERCENT] = tpp / tpa * 100
-    results[RECALL] = tpp / (tpp + fnp)
-    results[PRECISION] = tpp / (tpp + fpp)
-    results[FSCORE] = 2 * results[RECALL] * results[PRECISION] / (results[RECALL] + results[PRECISION])
+    results[TRUE_POSITIVE_RATE]  = true_pos_rate
+    results[FALSE_POSITIVE_RATE] = false_pos_rate
+    results[SPECIFICITY]         = specificity
+    results[PRECISION]           = precision
+    results[DICE]                = dice
+    results[JACCARD]             = jaccard
+    results[ACCURACY]            = accuracy
+    results[FSCORE]              = fscore
 
     return results
 
 
 def compute_roc(roc_thresholds, prediction_data, groundtruth_data, acceptable_margin_mm, mm_per_pixel):
-    false_positives = np.zeros(len(roc_thresholds))
-    true_positives = np.zeros(len(roc_thresholds))
-    goodnesses = np.zeros(len(roc_thresholds))
+    predictive_values    = np.zeros(len(roc_thresholds))  # Distance from ROC diagonal
+    false_positive_rates = np.zeros(len(roc_thresholds))
+    true_positive_rates  = np.zeros(len(roc_thresholds))
     metrics_dicts = dict()
 
     for i in range(len(roc_thresholds)):
@@ -81,19 +119,20 @@ def compute_roc(roc_thresholds, prediction_data, groundtruth_data, acceptable_ma
         metrics = compute_evaluation_metrics(
             prediction_thresholded, groundtruth_data, acceptable_margin_mm=acceptable_margin_mm,
             mm_per_pixel=mm_per_pixel)
-        true_negative_area_perc = metrics[TRUE_NEGATIVE_AREA_PERCENT]
-        false_positives[i] = (100 - true_negative_area_perc) / 100.0
-        true_positives[i] = metrics[TRUE_POSITIVE_AREA_PERCENT] / 100.0
-        crossprod = np.cross((1.0, 1.0), (false_positives[i], true_positives[i]))
-        goodnesses[i] = np.linalg.norm(crossprod) / np.linalg.norm([1.0, 1.0])
+
+        false_positive_rates[i] = metrics[FALSE_POSITIVE_RATE]
+        true_positive_rates[i]  = metrics[TRUE_POSITIVE_RATE]
+        crossprod = np.cross((1.0, 1.0), (false_positive_rates[i], true_positive_rates[i]))
+        predictive_values[i] = np.linalg.norm(crossprod) / np.linalg.norm([1.0, 1.0])
         metrics_dicts[i] = metrics
 
     area = 0.0
     for i in range(len(roc_thresholds)):
         if i == len(roc_thresholds) - 1:
-            area = area + (1.0 - false_positives[i]) * true_positives[i]
+            area = area + (1.0 - false_positive_rates[i]) * true_positive_rates[i]
         else:
-            area = area + (false_positives[i + 1] - false_positives[i]) * true_positives[i]
+            area = area + (false_positive_rates[i + 1] - false_positive_rates[i]) * true_positive_rates[i]
 
-    best_threshold_index = np.argmax(goodnesses)
-    return true_positives, false_positives, best_threshold_index, area, metrics_dicts
+    best_threshold_index = np.argmax(predictive_values)
+
+    return metrics_dicts, best_threshold_index, area
