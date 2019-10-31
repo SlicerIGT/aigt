@@ -40,12 +40,10 @@ def sagittal_spine_unet(input_size, num_classes, filter_multiplier=10, regulariz
         skip_output = skips.pop()
         output = concatenate([output, skip_output], axis=3)
         if filters != num_classes:
-            activation = "relu"
             output = Conv2D(filters, (shape, shape), activation="relu", padding="same",
                             bias_regularizer=l1(regularization_rate))(output)
             output = BatchNormalization(momentum=.9)(output)
         else:
-            activation = "softmax"
             output = Conv2D(filters, (shape, shape), activation="softmax", padding="same",
                             bias_regularizer=l1(regularization_rate))(output)
 
