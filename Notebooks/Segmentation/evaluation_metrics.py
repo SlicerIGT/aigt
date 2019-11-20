@@ -35,12 +35,13 @@ def compute_evaluation_metrics(prediction, groundtruth, acceptable_margin_mm=0.0
 
     acceptable_margin_pixel = int(acceptable_margin_mm / mm_per_pixel)
 
-    actual_pos_map  = dilate_stack(groundtruth[:, :, :, 0], acceptable_margin_pixel)
-    actual_neg_map  = 1.0 - actual_pos_map
+    actual_pos_map  = groundtruth[:, :, :, 0]
+    actual_neg_map = 1.0 - actual_pos_map
+    accept_pos_map = dilate_stack(groundtruth[:, :, :, 0], acceptable_margin_pixel)
 
     true_pos_map    = np.minimum(prediction[:, :, :, 1], actual_pos_map)
     true_neg_map    = np.minimum(prediction[:, :, :, 0], actual_neg_map)
-    false_pos_map   = np.maximum(prediction[:, :, :, 1] - actual_pos_map, 0.0)
+    false_pos_map   = np.maximum(prediction[:, :, :, 1] - accept_pos_map, 0.0)
     false_neg_map   = np.maximum(prediction[:, :, :, 0] - actual_neg_map, 0.0)
 
     true_pos_total  = np.sum(true_pos_map, dtype="float64")
@@ -73,7 +74,7 @@ def compute_evaluation_metrics(prediction, groundtruth, acceptable_margin_mm=0.0
     else:
         precision = true_pos_total / predict_pos_total
 
-    specificity     = true_neg_total / (true_neg_total + false_pos_total)
+    specificity = true_neg_total / (true_neg_total + false_pos_total)
 
     # If there is no actual positive, and none is predicted, then dice should be perfect
 
@@ -113,9 +114,10 @@ def compute_roc(roc_thresholds, prediction_data, groundtruth_data, acceptable_ma
 
     for i in range(len(roc_thresholds)):
         threshold = roc_thresholds[i]
-        prediction_thresholded = np.copy(prediction_data)
-        prediction_thresholded[prediction_thresholded >= threshold] = 1.0
-        prediction_thresholded[prediction_thresholded < threshold] = 0.0
+        prediction_thresholded = np.zeros(prediction_data.shape)
+        prediction_thresholded[:, :, :, 1][prediction_data[:, :, :, 1] >= threshold] = 1.0
+        prediction_thresholded[:, :, :, 0][prediction_data[:, :, :, 1] < threshold] = 1.0
+        # prediction_thresholded[prediction_thresholded < threshold] = 0.0
         metrics = compute_evaluation_metrics(
             prediction_thresholded, groundtruth_data, acceptable_margin_mm=acceptable_margin_mm,
             mm_per_pixel=mm_per_pixel)
