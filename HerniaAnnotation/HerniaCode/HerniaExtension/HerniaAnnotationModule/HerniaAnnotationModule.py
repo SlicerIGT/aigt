@@ -132,15 +132,25 @@ class HerniaAnnotationModuleWidget(ScriptedLoadableModuleWidget):
     toolFont = self.toolLabel.font
     toolFont.setPointSize(32)
     self.toolLabel.setFont(toolFont)
-    parametersFormLayout.addRow("Tool: ", self.toolLabel)
 
+    self.toolPromptLabel = qt.QLabel("Tool: ")
+    toolPromptFont = self.toolPromptLabel.font
+    toolPromptFont.setPointSize(32)
+    self.toolPromptLabel.setFont(toolPromptFont)
 
+    parametersFormLayout.addRow(self.toolPromptLabel, self.toolLabel)
 
     self.classLabel = qt.QLabel("0")
     classFont = self.classLabel.font
     classFont.setPointSize(32)
     self.classLabel.setFont(classFont)
-    parametersFormLayout.addRow("Tissue: ", self.classLabel)
+
+    self.tissuePromptLabel = qt.QLabel("Tissue: ")
+    tissuePromptFont = self.tissuePromptLabel.font
+    tissuePromptFont.setPointSize(32)
+    self.tissuePromptLabel.setFont(tissuePromptFont)
+
+    parametersFormLayout.addRow(self.tissuePromptLabel, self.classLabel)
     
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
@@ -153,7 +163,7 @@ class HerniaAnnotationModuleWidget(ScriptedLoadableModuleWidget):
     if self.detectionOn:
       newText = self.logic.getLastClass()
       self.classLabel.setText(newText)
-      newText2 = self.logic.getToolInUse()
+      newText2 = self.logic.getToolInUse().lower().replace('extob','External Obliques').replace('spchd', 'Spermatochord')
       self.toolLabel.setText(newText2)
       self.updateTimer.start()
     else:
@@ -242,7 +252,7 @@ class HerniaAnnotationModuleLogic(ScriptedLoadableModuleLogic):
     self.lastClass = ""
     self.toolInUse = ""
     self.model_input_size = None
-    self.classes = ['None', 'Extob', 'Fat', 'Sack', 'Skin', 'Spchd']
+    self.classes = ['None', 'Extob', 'Fat', 'Sack', 'Skin', 'Spchd'][1:]
     self.predictionThreshold = 0.0
     self.toolOnePositions = []
     self.toolTwoPositions = []
