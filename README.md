@@ -1,5 +1,6 @@
 # AIGT
-This repository contains scripts for deep learning in guided medical interventions. The complete workflow of data processing is implemented, from formatting and annotations to deployment of models in real time.
+This repository contains scripts for deep learning for guided medical interventions. For some projects, the complete workflow is implemented, from formatting and annotations to deployment of models in real time. Most projects use ultrasound imaging.
+The source code was originally written for TensorFlow 1.13 and Keras 2.2, but all active projects will gradually migrate to TensorFlow 2.0 (tf.keras). If no TensorFlow version is specified in a comments at the top of a file, then it is still using the older software version.
 
 # Getting started
 ## Install and set up Anaconda environment
@@ -15,6 +16,7 @@ This repository contains scripts for deep learning in guided medical interventio
 pip_install("tensorflow keras scikit-learn opencv-contrib-python")
 ```
 - You may also install `tensorflow-gpu`, if your computer supports that. In that case copy CUDA files (dll files on Windows) to the Slicer bin folder. (Feel free to add instructions for Mac and Linux.)
+- If you are using the latest version of Slicer, but running an older notebook, then you may need to specify the TensorFlow version to be installed.
 - To run notebooks, start the Anaconda command prompt, navigate to the Notebooks folder of your clone of this repository, and type the `jupyter notebook` command.
 
 # Acquire tracked ultrasound
