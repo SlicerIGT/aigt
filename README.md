@@ -10,8 +10,8 @@ The source code was originally written for TensorFlow 1.13 and Keras 2.2, but al
 - Some notebooks will require that you createa a new file in the Notebooks folder of your local clone, named **local_vars.py**, and define the **root_folder** variable in that file. The file can just contain this single line of code: `root_folder = r"c:\Data"`. Please do not commit/push your local_vars.py, as everybody sets it up with their own local paths!
 ## To run Slicer notebooks
 - Install Slicer 4.11 or newer version (later than 2019-09-16 is recommended, for full functionality)
-- Install the Jupyter extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook.
-- Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the Python console of Slicer to run this command (you may add additional python libraries that you use in your code):
+- Install the *SlicerJupyter* extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook (use the *Copy command to clipboard* button and paste it in the active Anaconda environment).
+- Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the Python console of Slicer to run this command (you may change the tensorflow version to 2.0 and skip keras , if you are already using tf.keras):
 ```
 pip_install("tensorflow==1.14.0 keras==2.2.4 scikit-learn opencv-contrib-python")
 ```
