@@ -13,7 +13,7 @@ The source code was originally written for TensorFlow 1.13 and Keras 2.2, but al
 - Install the Jupyter extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook.
 - Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the Python console of Slicer to run this command (you may add additional python libraries that you use in your code):
 ```
-pip_install("tensorflow keras scikit-learn opencv-contrib-python")
+pip_install("tensorflow==1.14.0 keras==2.2.4 scikit-learn opencv-contrib-python")
 ```
 - You may also install `tensorflow-gpu`, if your computer supports that. In that case copy CUDA files (dll files on Windows) to the Slicer bin folder. (Feel free to add instructions for Mac and Linux.)
 - If you are using the latest version of Slicer, but running an older notebook, then you may need to specify the TensorFlow version to be installed.
