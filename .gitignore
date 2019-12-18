@@ -1,5 +1,0 @@
-.gitignore
-data/
-girder_apikey_read.py
-.ipynb_checkpoints/
-__pycache__/
