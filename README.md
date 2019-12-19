@@ -10,7 +10,7 @@ The source code was originally written for TensorFlow 1.13 and Keras 2.2, but al
 - Run the *setup_env.bat* file to create environment in a folder, e.g. `setup_env.bat c:\dev\dlenv`
 This will install TensorFlow 2.0, as we are using tf.keras by default. The previous environment setup script is still available as `setup_env_tf1.bat`
 ## Additional local files you may need, but they are not in the code repository
-Please do not commit/push your local_vars.py, as everybody sets it up with their own local paths!
+Please do not commit/push these local files, as everybody sets them up with values that only apply to their environment.
 - **local_vars.py** - Some notebooks require a file in the Notebooks folder of your local repository clone, named **local_vars.py**. This file should define the *root_folder* variable. The file may just contain this single line of code: `root_folder = r"c:\Data"`. 
 - **girder_apikey_read.py** - Some notebooks require a file named **girder_apikey_read.py** with a single line of code that specifies your personal API key to the private data collection. If you work with non-public data stored on a Girder server, ask your supervisor for a Girder account and how to generate API keys for yourself.
 ## To run Slicer notebooks
