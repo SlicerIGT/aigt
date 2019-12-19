@@ -4,7 +4,7 @@ The source code was originally written for TensorFlow 1.13 and Keras 2.2, but al
 
 # Getting started
 ## Install and set up Anaconda environment
-- Install Anaconda (with Python 3.7)
+- Install [Anaconda (with Python 3.7)](https://www.anaconda.com/distribution/)
 - Run the *setup_env.bat* file (in SetupAnaconda folder) to create environment in a folder.
 - Clone this repository on your computer.
 - Some notebooks will require that you createa a new file in the Notebooks folder of your local clone, named **local_vars.py**, and define the **root_folder** variable in that file. The file can just contain this single line of code: `root_folder = r"c:\Data"`. Please do not commit/push your local_vars.py, as everybody sets it up with their own local paths!
