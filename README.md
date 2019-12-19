@@ -8,6 +8,7 @@ The source code was originally written for TensorFlow 1.13 and Keras 2.2, but al
 - Run the *setup_env.bat* file (in SetupAnaconda folder) to create environment in a folder.
 - Clone this repository on your computer.
 - Some notebooks will require that you createa a new file in the Notebooks folder of your local clone, named **local_vars.py**, and define the **root_folder** variable in that file. The file can just contain this single line of code: `root_folder = r"c:\Data"`. Please do not commit/push your local_vars.py, as everybody sets it up with their own local paths!
+- Similarly, some notebooks require a local file named **girder_apikey_read.py** with a single line of code that specifies your personal API key to the private data collection, e.g. `girder_apikey_read="UjNzqutrfBwuk4t39VlJnJs4t3EZ6i7"` If you work with such private data, ask your supervisor how to obtain a Girder account and API key.
 ## To run Slicer notebooks
 - Install Slicer 4.11 or newer version (later than 2019-09-16 is recommended, for full functionality)
 - Install the *SlicerJupyter* extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook (use the *Copy command to clipboard* button and paste it in the active Anaconda environment).
