@@ -5,10 +5,14 @@ The source code was originally written for TensorFlow 1.13 and Keras 2.2, but al
 # Getting started
 ## Install and set up Anaconda environment
 - Install [Anaconda (with Python 3.7)](https://www.anaconda.com/distribution/)
-- Run the *setup_env.bat* file (in SetupAnaconda folder) to create environment in a folder.
-- Clone this repository on your computer.
-- Some notebooks will require that you createa a new file in the Notebooks folder of your local clone, named **local_vars.py**, and define the **root_folder** variable in that file. The file can just contain this single line of code: `root_folder = r"c:\Data"`. Please do not commit/push your local_vars.py, as everybody sets it up with their own local paths!
-- Similarly, some notebooks require a local file named **girder_apikey_read.py** with a single line of code that specifies your personal API key to the private data collection, e.g. `girder_apikey_read="UjNzqutrfBwuk4t39VlJnJs4t3EZ6i7"` If you work with such private data, ask your supervisor how to obtain a Girder account and API key.
+- Clone this repository on your computer. Your local clone may be in a path like `c:\dev\aigt`
+- Start the *Anaconda Prompt* application and navigate to the environment setup folder `cd c:\dev\aigt\SetupAnaconda`
+- Run the *setup_env.bat* file to create environment in a folder, e.g. `setup_env.bat c:\dev\dlenv`
+This will install TensorFlow 2.0, as we are using tf.keras by default. The previous environment setup script is still available as `setup_env_tf1.bat`
+## Additional local files you may need, but they are not in the code repository
+Please do not commit/push your local_vars.py, as everybody sets it up with their own local paths!
+- **local_vars.py** - Some notebooks require a file in the Notebooks folder of your local repository clone, named **local_vars.py**. This file should define the *root_folder* variable. The file may just contain this single line of code: `root_folder = r"c:\Data"`. 
+- **girder_apikey_read.py** - Some notebooks require a file named **girder_apikey_read.py** with a single line of code that specifies your personal API key to the private data collection. If you work with non-public data stored on a Girder server, ask your supervisor for a Girder account and how to generate API keys for yourself.
 ## To run Slicer notebooks
 - Install Slicer 4.11 or newer version (later than 2019-09-16 is recommended, for full functionality)
 - Install the *SlicerJupyter* extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook (use the *Copy command to clipboard* button and paste it in the active Anaconda environment).
