@@ -5,20 +5,17 @@ if %1.==. goto No1
 set CurrentPath=%cd%
 set EnvironmentPath=%1
 
-
 :: Create the environment with modules and activate it
 
-call conda create -y -p %EnvironmentPath% tensorflow-gpu pandas opencv jupyter scikit-learn scikit-image matplotlib
+call conda create -y -p %EnvironmentPath% tensorflow-gpu keras pandas opencv jupyter scikit-learn matplotlib
 call activate %EnvironmentPath%
 
 call pip install girder-client
-
 
 :: Install pyIGTLink from source
 
 :: call git clone -b pyIGTLink_client https://github.com/SlicerIGT/pyIGTLink.git %EnvironmentPath%\pyIGTLink
 :: call pip install -e %EnvironmentPath%\pyIGTLink
-
 
 :: Install keras-vis from source
 
