@@ -8,6 +8,8 @@ import logging
 import numpy as np
 
 
+DEFAULT_INPUT_IMAGE_NAME = "Image_Image"
+
 #
 # SingleSliceSegmentation
 #
@@ -115,8 +117,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     factory = qSlicerSegmentationsEditorEffectsPythonQt.qSlicerSegmentEditorEffectFactory()
     self.effectFactorySingleton = factory.instance()
     self.effectFactorySingleton.connect('effectRegistered(QString)', self.editorEffectRegistered)
-    
-    
 
 
   def cleanup(self):
@@ -144,14 +144,15 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
 
   def onInputVolumeChanged(self, currentNode):
-    volumeNodes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
-    for volume in volumeNodes:
-      volume.SetAttribute(self.INPUT_IMAGE, "False")
+    # todo: delete after testing parameter node
+    # volumeNodes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
+    # for volume in volumeNodes:
+    #   volume.SetAttribute(self.INPUT_IMAGE, "False")
 
     if currentNode is None:
-      return
+      self.parameterSetNode.RemoveAttribute(self.INPUT_IMAGE)
     else:
-      currentNode.SetAttribute(self.INPUT_IMAGE, "True")
+      self.parameterSetNode.SetAttribute(self.INPUT_IMAGE, currentNode.GetName())
 
 
   def onSegmentationChanged(self, currentNode):
@@ -284,7 +285,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       # nothing changed
       return
     self.parameterSetNode = segmentEditorNode
-    self.editor.setMRMLSegmentEditorNode(self.parameterSetNode)
+    self.ui.editor.setMRMLSegmentEditorNode(self.parameterSetNode)
 
 
   def getCompositeNode(self, layoutName):
@@ -317,7 +318,13 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
   def enter(self):
     """Runs whenever the module is reopened"""
     logging.debug('Entered SingleSliceSegmentation module widget')
-    
+
+    # Prevent segmentation master volume to be created in the wrong position.
+    # Todo: Instead of this, the input image shoudl be kept transformed, and the segmentation also transformed
+
+    inputImageNode = slicer.util.getFirstNodeByName(DEFAULT_INPUT_IMAGE_NAME)
+    inputImageNode.SetAndObserveTransformNodeID(None)
+
     if self.ui.editor.turnOffLightboxes():
       slicer.util.warningDisplay('Segment Editor is not compatible with slice viewers in light box mode.'
                                  'Views are being reset.', windowTitle='Segment Editor')
@@ -355,21 +362,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.shortcutS.activated.disconnect()
     self.shortcutD.activated.disconnect()
     self.shortcutC.activated.disconnect()
-  
-
-  def selectParameterNode(self):
-    # Select parameter set node if one is found in the scene, and create one otherwise
-    segmentEditorSingletonTag = "SegmentEditor"
-    segmentEditorNode = slicer.mrmlScene.GetSingletonNode(segmentEditorSingletonTag, "vtkMRMLSegmentEditorNode")
-    if segmentEditorNode is None:
-      segmentEditorNode = slicer.vtkMRMLSegmentEditorNode()
-      segmentEditorNode.SetSingletonTag(segmentEditorSingletonTag)
-      segmentEditorNode = slicer.mrmlScene.AddNode(segmentEditorNode)
-    if self.parameterSetNode == segmentEditorNode:
-      # nothing changed
-      return
-    self.parameterSetNode = segmentEditorNode
-    self.ui.editor.setMRMLSegmentEditorNode(self.parameterSetNode)
 
 
   def exit(self):
@@ -424,16 +416,17 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
         self.ui.inputSegmentationSelector.setCurrentNode(segmentation)
         self.logic.eraseCurrentSegmentation(segmentation)
         self.ui.editor.setSegmentationNode(segmentation)
-    
-    volumeNodes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
-    for volume in volumeNodes:
-      if volume.GetAttribute(self.INPUT_IMAGE) == "True":
-        self.ui.inputVolumeSelector.setCurrentNode(volume)
+
+    inputImageAttribute = self.parameterSetNode.GetAttribute(self.INPUT_IMAGE)
+    if inputImageAttribute is not None:
+      inputImageNode = slicer.util.getFirstNodeByName(inputImageAttribute)
+      if inputImageNode is not None:
+        self.ui.inputVolumeSelector.setCurrentNode(inputImageNode)
         layoutManager = slicer.app.layoutManager()
         sliceLogic = layoutManager.sliceWidget('Red').sliceLogic()
         compositeNode = sliceLogic.GetSliceCompositeNode()
-        compositeNode.SetBackgroundVolumeID(volume.GetID())
-        self.ui.editor.setMasterVolumeNode(volume)
+        compositeNode.SetBackgroundVolumeID(inputImageNode.GetID())
+        self.ui.editor.setMasterVolumeNode(inputImageNode)
 
 
 #
