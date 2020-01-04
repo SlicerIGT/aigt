@@ -16,5 +16,5 @@ Contains the custom 3D Slicer module used to deploy real-time classification.
 Contains the Jupyter Notebooks used to export the data from 3D Slicer, and to train our deep learning model. 
 
 ### Results
-- This platform allowed automatic labelling of our dataset during collection with 98% accuracy. 
-- We trained a CNN to classify new frames with 98% testing accuracy on real-time data at 30fps. 
+- This platform allowed automatic labelling of our dataset during collection with 98.5% accuracy. 
+- We trained a CNN to classify new frames with 98.0% testing accuracy on real-time data at 30fps. 
