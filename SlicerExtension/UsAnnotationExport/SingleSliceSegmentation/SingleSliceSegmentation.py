@@ -323,7 +323,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # Todo: Instead of this, the input image shoudl be kept transformed, and the segmentation also transformed
 
     inputImageNode = slicer.util.getFirstNodeByName(DEFAULT_INPUT_IMAGE_NAME)
-    inputImageNode.SetAndObserveTransformNodeID(None)
+    if inputImageNode is not None:
+      inputImageNode.SetAndObserveTransformNodeID(None)
 
     if self.ui.editor.turnOffLightboxes():
       slicer.util.warningDisplay('Segment Editor is not compatible with slice viewers in light box mode.'
