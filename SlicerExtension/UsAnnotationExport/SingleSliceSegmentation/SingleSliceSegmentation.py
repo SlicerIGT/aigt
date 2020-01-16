@@ -54,7 +54,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
   INPUT_SKIP_NUMBER = ATTRIBUTE_PREFIX + 'InputSkipNumber'
   DEFAULT_INPUT_SKIP_NUMBER = 4
   INPUT_LAST_INDEX = ATTRIBUTE_PREFIX + 'InputLastIndex'
-  INPUT_IMAGE = ATTRIBUTE_PREFIX + 'InputImage'
+  INPUT_IMAGE_ID = ATTRIBUTE_PREFIX + 'InputImageId'
   SEGMENTATION = ATTRIBUTE_PREFIX + 'Segmentation'
   OUTPUT_BROWSER = ATTRIBUTE_PREFIX + 'OutputBrowser'
   ORIGINAL_IMAGE_INDEX = ATTRIBUTE_PREFIX + 'OriginalImageIndex'
@@ -150,9 +150,9 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     #   volume.SetAttribute(self.INPUT_IMAGE, "False")
 
     if currentNode is None:
-      self.parameterSetNode.RemoveAttribute(self.INPUT_IMAGE)
+      self.parameterSetNode.RemoveAttribute(self.INPUT_IMAGE_ID)
     else:
-      self.parameterSetNode.SetAttribute(self.INPUT_IMAGE, currentNode.GetName())
+      self.parameterSetNode.SetAttribute(self.INPUT_IMAGE_ID, currentNode.GetName())
 
 
   def onSegmentationChanged(self, currentNode):
@@ -418,9 +418,9 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
         self.logic.eraseCurrentSegmentation(segmentation)
         self.ui.editor.setSegmentationNode(segmentation)
 
-    inputImageAttribute = self.parameterSetNode.GetAttribute(self.INPUT_IMAGE)
+    inputImageAttribute = self.parameterSetNode.GetAttribute(self.INPUT_IMAGE_ID)
     if inputImageAttribute is not None:
-      inputImageNode = slicer.util.getFirstNodeByName(inputImageAttribute)
+      inputImageNode = slicer.mrmlScene.GetNodeByID(inputImageAttribute)
       if inputImageNode is not None:
         self.ui.inputVolumeSelector.setCurrentNode(inputImageNode)
         layoutManager = slicer.app.layoutManager()
