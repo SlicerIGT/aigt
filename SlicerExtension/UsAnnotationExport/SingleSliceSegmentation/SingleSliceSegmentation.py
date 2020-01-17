@@ -152,7 +152,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     if currentNode is None:
       self.parameterSetNode.RemoveAttribute(self.INPUT_IMAGE_ID)
     else:
-      self.parameterSetNode.SetAttribute(self.INPUT_IMAGE_ID, currentNode.GetName())
+      self.parameterSetNode.SetAttribute(self.INPUT_IMAGE_ID, currentNode.GetID())
 
 
   def onSegmentationChanged(self, currentNode):
@@ -342,7 +342,18 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.updateSelections()
     self.connectKeyboardShortcuts()
 
+    # Collapse input group if all is selected
+
+    if self.ui.inputSequenceBrowserSelector.currentNode() is not None and\
+      self.ui.inputVolumeSelector.currentNode() is not None and\
+      self.ui.inputSegmentationSelector.currentNode() is not None and\
+      self.ui.segmentationBrowserSelector.currentNode() is not None:
+      self.ui.inputCollapsibleButton.collapsed = True
+    else:
+      self.ui.inputCollapsibleButton.collapsed = False
+
     # If no segmentation node exists then create one so that the user does not have to create one manually
+
     if not self.ui.editor.segmentationNodeID():
       segmentationNode = slicer.mrmlScene.GetFirstNode(None, "vtkMRMLSegmentationNode")
       if not segmentationNode:
@@ -394,8 +405,9 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
 
   def updateSelections(self):
+
     browserNodes = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
-    self.ui.inputCollapsibleButton.collapsed = False
+
     for browser in browserNodes:
       if browser.GetAttribute(self.INPUT_BROWSER) == "True":
         self.ui.inputSequenceBrowserSelector.setCurrentNode(browser)
