@@ -1,0 +1,61 @@
+<PlusConfiguration version="2.3">
+
+  <DataCollection StartupDelaySec="1.0" >
+    <DeviceSet 
+      Name="PlusServer: Ascension + Telemed"
+      Description="Broadcasting tool tracking data through OpenIGTLink
+Ascension3DG sensors should be plugged in to the Ascension3DG DriveBay mounted on Ultrasonix US in the following order from to leftmost slot (Transducer 1) to the right: 1 Probe, 2 Reference, 3 Stylus." 
+    />
+    <Device
+      Id="TrackerDevice" 
+      Type="Ascension3DG" 
+      FilterAcWideNotch="1"
+      ToolReferenceFrame="Tracker" >
+      <DataSources>
+        <DataSource Type="Tool" Id="Probe" PortName="0"  />
+        <DataSource Type="Tool" Id="Reference" PortName="1"  />
+        <DataSource Type="Tool" Id="Stylus" PortName="2"  />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="TrackerStream" >
+          <DataSource Id="Probe"/>
+          <DataSource Id="Reference"/>
+          <DataSource Id="Stylus"/>
+        </OutputChannel>
+      </OutputChannels>
+    </Device>
+	<Device Id="VideoDevice" LocalTimeOffsetSec="0.0" Type="TelemedVideo" DepthMm="40">
+      <DataSources>
+        <DataSource Type="Video" Id="Video" PortUsImageOrientation="UF" />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="VideoStream" VideoDataSourceId="Video" />
+      </OutputChannels>
+    </Device>
+	
+	<Device Id="TrackedVideoDevice" Type="VirtualMixer">
+      <InputChannels>
+        <InputChannel Id="TrackerStream" />
+        <InputChannel Id="VideoStream" />
+      </InputChannels>
+      <OutputChannels>
+        <OutputChannel Id="TrackedVideoStream" />
+      </OutputChannels>
+    </Device>
+  </DataCollection>
+
+ <PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18944" SendValidTransformsOnly="true" OutputChannelId="TrackedVideoStream">
+    <DefaultClientInfo>
+      <MessageTypes>
+        <Message Type="IMAGE" />
+        <Message Type="TRANSFORM" />
+      </MessageTypes>
+      <TransformNames>
+        <Transform Name="StylusToProbe" />
+      </TransformNames>
+      <ImageNames>
+        <Image Name="Image" EmbeddedTransformToFrame="Image" />
+      </ImageNames>
+    </DefaultClientInfo>
+  </PlusOpenIGTLinkServer>
+</PlusConfiguration>
