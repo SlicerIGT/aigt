@@ -11,7 +11,7 @@ from tensorflow.keras.optimizers import *
 from tensorflow.keras.regularizers import l1, l2
 
 
-def sagittal_spine_unet(input_size, num_classes, filter_multiplier=10, regularization_rate=0.):
+def segmentation_unet(input_size, num_classes, filter_multiplier=10, regularization_rate=0.):
     input_ = Input((input_size, input_size, 1))
     skips = []
     output = input_
@@ -74,7 +74,7 @@ def weighted_categorical_crossentropy(weights):
 
 class SagittalSpineUnetTest(unittest.TestCase):
     def test_create_model(self):
-        model = sagittal_spine_unet(128, 2)
+        model = segmentation_unet(128, 2)
 
 if __name__ == '__main__':
     unittest.main()
