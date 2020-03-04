@@ -231,7 +231,8 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onInputNodeModified(self, caller, event):
     input_array = slicer.util.array(self.inputImageNode.GetID())
 
-    resized_input_array = scipy.ndimage.zoom(input_array[0, :, :], self.slicer_to_model_scaling)
+    resized_input_array = scipy.ndimage.zoom(input_array[0, :, :],
+                                             self.slicer_to_model_scaling, prefilter=False, order=1)
     resized_input_array = np.flip(resized_input_array, axis=0)
     resized_input_array = resized_input_array / resized_input_array.max()  # Scaling intensity to 0-1
     resized_input_array = np.expand_dims(resized_input_array, axis=0)
@@ -242,7 +243,8 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       y = np.log10(np.clip(y, 10 ** (-e), 1.0) * (10 ** e)) / e
     y[0, :, :, :] = np.flip(y[0, :, :, :], axis=0)
 
-    upscaled_output_array = scipy.ndimage.zoom(y[0, :, :, 1], self.model_to_slicer_scaling)
+    upscaled_output_array = scipy.ndimage.zoom(y[0, :, :, 1], self.model_to_slicer_scaling,
+                                               prefilter=False, order=1)
     upscaled_output_array = upscaled_output_array * 255
     upscaled_output_array = np.clip(upscaled_output_array, 0, 255)
 
