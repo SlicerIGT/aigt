@@ -21,6 +21,7 @@ include(${Slicer_USE_FILE})
 # Extension modules
 add_subdirectory(SingleSliceSegmentation)
 add_subdirectory(SingleSliceSegmentation)
+add_subdirectory(SegmentationUNet)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
