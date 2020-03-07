@@ -16,12 +16,11 @@ Please do not commit/push these local files, as everybody sets them up with valu
 ## To run Slicer notebooks
 - Install Slicer 4.11 or newer version (later than 2019-09-16 is recommended, for full functionality)
 - Install the *SlicerJupyter* extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook (use the *Copy command to clipboard* button and paste it in the active Anaconda environment).
+- If you have a GPU and would like Slicer's TensorFlow to use it, then install CUDA 10.1 and cuDNN 7.6.5. GPUs can make training of NN models much faster, but may not make a significant different in using trained models for prediction compared to CPUs.
 - Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the Python console of Slicer to run this command:
 ```
-pip_install("tensorflow scikit-learn opencv-contrib-python")
+pip_install("tensorflow opencv-contrib-python")
 ```
-- You may also install `tensorflow-gpu`, if your computer supports that.
-- If you are using the latest version of Slicer, but running an older notebook, then you may need to specify the TensorFlow version to be installed.
 - To run notebooks, start the Anaconda command prompt, navigate to the Notebooks folder of your clone of this repository, and type the `jupyter notebook` command.
 
 # Acquire tracked ultrasound
