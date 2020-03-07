@@ -1,6 +1,5 @@
 # AIGT
 This repository contains scripts for deep learning for guided medical interventions. For some projects, the complete workflow is implemented, from formatting and annotations to deployment of models in real time. Most projects use ultrasound imaging.
-The source code was originally written for TensorFlow 1.13 and Keras 2.2, but all active projects will gradually migrate to TensorFlow 2.0 (tf.keras). If no TensorFlow version is specified in a comments at the top of a file, then it is still using the older software version.
 
 # Getting started
 ## Install and set up Anaconda environment
@@ -8,7 +7,7 @@ The source code was originally written for TensorFlow 1.13 and Keras 2.2, but al
 - Clone this repository on your computer. Your local clone may be in a path like `c:\dev\aigt`
 - Start the *Anaconda Prompt* application and navigate to the environment setup folder `cd c:\dev\aigt\SetupAnaconda`
 - Run the *setup_env.bat* file to create environment in a folder, e.g. `setup_env.bat c:\dev\dlenv`
-This will install TensorFlow 2.0, as we are using tf.keras by default. The previous environment setup script is still available as `setup_env_tf1.bat`
+This will install TensorFlow 2.0 and other packages that are used by projects. The previous environment setup script (for TensorFlow v1 is still available as `setup_env_tf1.bat`
 ## Additional local files you may need, but they are not in the code repository
 Please do not commit/push these local files, as everybody sets them up with values that only apply to their environment.
 - **local_vars.py** - Some notebooks require a file in the Notebooks folder of your local repository clone, named **local_vars.py**. This file should define the *root_folder* variable. The file may just contain this single line of code: `root_folder = r"c:\Data"`. 
@@ -16,12 +15,12 @@ Please do not commit/push these local files, as everybody sets them up with valu
 ## To run Slicer notebooks
 - Install Slicer 4.11 or newer version (later than 2019-09-16 is recommended, for full functionality)
 - Install the *SlicerJupyter* extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook (use the *Copy command to clipboard* button and paste it in the active Anaconda environment).
-- If you have a GPU and would like Slicer's TensorFlow to use it, then install CUDA 10.1 and cuDNN 7.6.5. GPUs can make training of NN models much faster, but may not make a significant different in using trained models for prediction compared to CPUs.
+- If you have a GPU and would like Slicer's TensorFlow to use it, then install CUDA 10.1 and cuDNN 7.6.5. GPUs can make training of models much faster, but may not significantly speed up trained models for prediction compared to CPUs.
 - Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the Python console of Slicer to run this command:
 ```
 pip_install("tensorflow opencv-contrib-python")
 ```
-- To run notebooks, start the Anaconda command prompt, navigate to the Notebooks folder of your clone of this repository, and type the `jupyter notebook` command.
+- To run notebooks, start the Anaconda command prompt, navigate to the aigt folder, and type the `jupyter notebook` command.
 
 # Acquire tracked ultrasound
 - Use the Sequences extension in 3D Slicer to record tracked ultrasound sequences.
