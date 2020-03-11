@@ -16,6 +16,7 @@ Please do not commit/push these local files, as everybody sets them up with valu
 - Install Slicer 4.11 or newer version (later than 2019-09-16 is recommended, for full functionality)
 - Install the *SlicerJupyter* extension for Slicer, and follow the extension user guide to add Slicer as a kernel in Jupyter Notebook (use the *Copy command to clipboard* button and paste it in the active Anaconda environment).
 - If you have a GPU and would like Slicer's TensorFlow to use it, then install CUDA 10.1 and cuDNN 7.6.5. GPUs can make training of models much faster, but may not significantly speed up trained models for prediction compared to CPUs.
+- Some users have reported that they needed to install Visual Studio (2015 or later) to be able to use TensorFlow.
 - Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the Python console of Slicer to run this command:
 ```
 pip_install("tensorflow opencv-contrib-python")
