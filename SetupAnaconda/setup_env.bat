@@ -8,7 +8,7 @@ set EnvironmentPath=%1
 
 :: Create the environment with modules and activate it
 
-call conda create -y -p %EnvironmentPath% tensorflow-gpu pandas opencv jupyter scikit-learn scikit-image matplotlib
+call conda create -y -p %EnvironmentPath% python=3.7 tensorflow pandas opencv jupyter scikit-learn scikit-image matplotlib
 call activate %EnvironmentPath%
 
 call pip install girder-client
