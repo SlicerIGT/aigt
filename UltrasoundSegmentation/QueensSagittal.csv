@@ -1,4 +1,4 @@
-patient_id,ultrasound_id,ultrasound_filename,segmentation_id,segmentation_filename
+subject_id,ultrasound_id,ultrasound_filename,segmentation_id,segmentation_filename
 785,5da9e5c0d9e6a3be02d012b4,q000_ultrasound.npy,5da9e5c8d9e6a3be02d012cc,q000_segmentation.npy
 736,5da9e5c7d9e6a3be02d012c6,q001_ultrasound.npy,5da9e5ccd9e6a3be02d012de,q001_segmentation.npy
 651,5da9e5c2d9e6a3be02d012b7,q002_ultrasound.npy,5da9e5c9d9e6a3be02d012cf,q002_segmentation.npy
