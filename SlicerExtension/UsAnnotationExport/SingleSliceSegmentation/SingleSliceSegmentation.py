@@ -338,7 +338,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.editor.updateWidgetFromMRML()
     
     # Update UI
-    slicer.modules.sequencebrowser.setToolBarVisible(True)
+    slicer.modules.sequences.setToolBarVisible(True)
     self.updateSelections()
     self.connectKeyboardShortcuts()
 
@@ -411,7 +411,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     for browser in browserNodes:
       if browser.GetAttribute(self.INPUT_BROWSER) == "True":
         self.ui.inputSequenceBrowserSelector.setCurrentNode(browser)
-        slicer.modules.sequencebrowser.setToolBarActiveBrowserNode(browser)
+        slicer.modules.sequences.setToolBarActiveBrowserNode(browser)
         self.ui.inputCollapsibleButton.collapsed = True
         selectedItem = browser.GetAttribute(self.INPUT_LAST_INDEX)
         if selectedItem is not None:
