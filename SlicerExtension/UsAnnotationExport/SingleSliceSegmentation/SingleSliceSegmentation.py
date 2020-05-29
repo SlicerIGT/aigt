@@ -35,6 +35,7 @@ This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc
 and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
 """ # replace with organization, grant and thanks.
 
+
     def setup(self):
       # Register subject hierarchy plugin
       import SubjectHierarchyPlugins
@@ -81,6 +82,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.shortcutC.setKey(qt.QKeySequence('c'))
 
 
+
+
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
 
@@ -117,6 +120,38 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     factory = qSlicerSegmentationsEditorEffectsPythonQt.qSlicerSegmentEditorEffectFactory()
     self.effectFactorySingleton = factory.instance()
     self.effectFactorySingleton.connect('effectRegistered(QString)', self.editorEffectRegistered)
+
+    # Add custom layout to layout selection menu
+    customLayout = """
+    <layout type="horizontal" split="true">
+      <item>
+       <view class="vtkMRMLSliceNode" singletontag="Red">
+        <property name="orientation" action="default">Axial</property>
+        <property name="viewlabel" action="default">R</property>
+        <property name="viewcolor" action="default">#F34A33</property>
+       </view>
+      </item>
+      <item>
+       <view class="vtkMRMLViewNode" singletontag="1">
+         <property name="viewlabel" action="default">1</property>
+       </view>
+      </item>
+    </layout>
+    """
+
+    customLayoutId = 501
+
+    layoutManager = slicer.app.layoutManager()
+    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
+
+    viewToolBar = slicer.util.mainWindow().findChild('QToolBar', 'ViewToolBar')
+    layoutMenu = viewToolBar.widgetForAction(viewToolBar.actions()[0]).menu()
+    layoutSwitchActionParent = layoutMenu
+    layoutSwitchAction = layoutSwitchActionParent.addAction("red + 3D side by side")  # add inside layout list
+    layoutSwitchAction.setData(customLayoutId)
+    # layoutSwitchAction.setIcon(qt.QIcon(':Icons/Go.png'))
+    layoutSwitchAction.setToolTip('3D and slice view')
+    layoutSwitchAction.connect('triggered()', lambda layoutId=customLayoutId: slicer.app.layoutManager().setLayout(layoutId))
 
 
   def cleanup(self):
