@@ -112,6 +112,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.clearSegmentationButton.connect('clicked(bool)', self.onClearButton)
     self.ui.skipImageButton.connect('clicked(bool)', self.onSkipButton)
     self.ui.exportButton.connect('clicked(bool)', self.onExportButton)
+    self.ui.layoutSelectButton.connect('clicked(bool)', self.onLayoutSelectButton)
 
     self.ui.editor.setMRMLScene(slicer.mrmlScene)
     
@@ -300,9 +301,17 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
                                  baseName)
 
 
+  def onLayoutSelectButton(self):
+    layoutManager = slicer.app.layoutManager()
+    currentLayout = layoutManager.layout
+
+    if currentLayout == 501:
+      layoutManager.setLayout(6) # switch to red slice only layout
+    else:
+      layoutManager.setLayout(501) # switch to custom layout with 3d viewer
+
 
   # Segment Editor Functionalities
-
 
   def editorEffectRegistered(self):
     self.editor.updateEffectList()
