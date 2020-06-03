@@ -225,7 +225,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Switch Layout</string>
+        <string>2D/3D</string>
        </property>
       </widget>
      </item>

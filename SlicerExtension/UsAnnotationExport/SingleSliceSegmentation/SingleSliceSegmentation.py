@@ -158,7 +158,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
   def cleanup(self):
     self.effectFactorySingleton.disconnect('effectRegistered(QString)', self.editorEffectRegistered)
 
-
   def onInputBrowserChanged(self, currentNode):
     browserNodes = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
     for browser in browserNodes:
@@ -406,6 +405,12 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       if not self.ui.editor.masterVolumeNodeID():
         masterVolumeNodeID = self.getDefaultMasterVolumeNodeID()
         self.ui.editor.setMasterVolumeNodeID(masterVolumeNodeID)
+
+    layoutManager = slicer.app.layoutManager()
+    layoutManager.setLayout(6)
+
+    redController = slicer.app.layoutManager().sliceWidget('Red').sliceController()
+    redController.fitSliceToBackground()
   
   
   def connectKeyboardShortcuts(self):
