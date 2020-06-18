@@ -154,6 +154,43 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     layoutSwitchAction.setToolTip('3D and slice view')
     layoutSwitchAction.connect('triggered()', lambda layoutId=customLayoutId: slicer.app.layoutManager().setLayout(layoutId))
 
+    customLayout = """
+    <layout type="horizontal" split="true">
+      <item>
+       <view class="vtkMRMLSliceNode" singletontag="Red">
+        <property name="orientation" action="default">Axial</property>
+        <property name="viewlabel" action="default">R</property>
+        <property name="viewcolor" action="default">#F34A33</property>
+       </view>
+      </item>
+      <item>
+        <layout type=\"horizontal\">
+          <item>
+            <view class="vtkMRMLViewNode" singletontag="1">
+              <property name="viewlabel" action="default">1</property>
+            </view>
+          </item>
+          <item>
+            <view class="vtkMRMLViewNode" singletontag="2" type="secondary">
+              <property name="viewlabel" action="default">2</property>
+            </view>
+          </item>
+        </layout>
+      </item>
+    </layout>
+    """
+
+    customLayoutId = 502
+
+    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
+
+    layoutSwitchActionParent = layoutMenu
+    layoutSwitchAction = layoutSwitchActionParent.addAction("red + stacked dual 3D")  # add inside layout list
+    layoutSwitchAction.setData(customLayoutId)
+    # layoutSwitchAction.setIcon(qt.QIcon(':Icons/Go.png'))
+    layoutSwitchAction.setToolTip('Dual 3D and slice view')
+    layoutSwitchAction.connect('triggered()',
+                               lambda layoutId=customLayoutId: slicer.app.layoutManager().setLayout(layoutId))
 
   def cleanup(self):
     self.effectFactorySingleton.disconnect('effectRegistered(QString)', self.editorEffectRegistered)
@@ -305,6 +342,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     currentLayout = layoutManager.layout
 
     if currentLayout == 501:
+      layoutManager.setLayout(502) # switch to dual 3d + red slice layout
+    elif currentLayout == 502:
       layoutManager.setLayout(6) # switch to red slice only layout
     else:
       layoutManager.setLayout(501) # switch to custom layout with 3d viewer

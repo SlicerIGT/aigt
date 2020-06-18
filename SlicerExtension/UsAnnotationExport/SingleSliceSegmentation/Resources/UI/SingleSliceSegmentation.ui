@@ -225,7 +225,7 @@
         </font>
        </property>
        <property name="text">
-        <string>2D/3D</string>
+        <string>Cycle Layout</string>
        </property>
       </widget>
      </item>
