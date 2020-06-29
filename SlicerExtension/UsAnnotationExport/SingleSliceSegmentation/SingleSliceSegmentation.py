@@ -344,16 +344,20 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # place skeleton model in first 3d view
     skeleton_volume = slicer.util.getFirstNodeByName("SkeletonModel")
     viewNode = layoutManager.threeDWidget(0).mrmlViewNode()
-    displayNode = skeleton_volume.GetDisplayNode()
-    displayNode.SetViewNodeIDs([viewNode.GetID()])
+
+    if skeleton_volume is not None:
+      displayNode = skeleton_volume.GetDisplayNode()
+      displayNode.SetViewNodeIDs([viewNode.GetID()])
 
     # place reconstructed volume in second 3d view
     browser = slicer.util.getFirstNodeByName('LandmarkingScan')
-    spine_volume = slicer.util.getFirstNodeByName(browser.GetName() + 'ReconstructionResults')
-    viewNode = layoutManager.threeDWidget(1).mrmlViewNode()
-    displayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(spine_volume)
-    displayNode.SetViewNodeIDs([viewNode.GetID()])
-    spine_volume.SetDisplayVisibility(1)
+    if browser is not None:
+      spine_volume = slicer.util.getFirstNodeByName(browser.GetName() + 'ReconstructionResults')
+      viewNode = layoutManager.threeDWidget(1).mrmlViewNode()
+      if spine_volume is not None:
+        displayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(spine_volume)
+        displayNode.SetViewNodeIDs([viewNode.GetID()])
+        spine_volume.SetDisplayVisibility(1)
 
     if currentLayout == 501:
       layoutManager.setLayout(502) # switch to dual 3d + red slice layout
