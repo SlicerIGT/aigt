@@ -353,7 +353,15 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     browser = slicer.util.getFirstNodeByName('LandmarkingScan')
     if browser is not None:
       spine_volume = slicer.util.getFirstNodeByName(browser.GetName() + 'ReconstructionResults')
-      viewNode = layoutManager.threeDWidget(1).mrmlViewNode()
+      if layoutManager.threeDWidget(1) is not None:
+        viewNode = layoutManager.threeDWidget(1).mrmlViewNode()
+      else:
+        newView = slicer.vtkMRMLViewNode()
+        newView = slicer.mrmlScene.AddNode(newView)
+        newWidget = slicer.qMRMLThreeDWidget()
+        newWidget.setMRMLScene(slicer.mrmlScene)
+        newWidget.setMRMLViewNode(newView)
+
       if spine_volume is not None:
         displayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(spine_volume)
         displayNode.SetViewNodeIDs([viewNode.GetID()])
