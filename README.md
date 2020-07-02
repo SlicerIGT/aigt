@@ -19,7 +19,7 @@ Please do not commit/push these local files, as everybody sets them up with valu
 - Some users have reported that they needed to install Visual Studio (2015 or later) to be able to use TensorFlow.
 - Install additional packages in the Slicer python environment, to be able to run all Slicer notebooks. Use the Python console of Slicer to run this command:
 ```
-pip_install("tensorflow opencv-contrib-python girder_client pandas")
+pip_install("tensorflow opencv-contrib-python girder_client pandas nbformat nbconvert")
 ```
 - To run notebooks, start the Anaconda command prompt, navigate to the aigt folder, and type the `jupyter notebook` command.
 
