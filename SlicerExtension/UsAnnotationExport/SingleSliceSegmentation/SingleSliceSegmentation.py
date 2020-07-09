@@ -350,7 +350,21 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       displayNode.SetViewNodeIDs([viewNode.GetID()])
 
     # place reconstructed volume in second 3d view
-    browser = slicer.util.getFirstNodeByName('LandmarkingScan')
+
+    # hacky but necessary way to ensure that we grab the correct browser node
+    i = 1
+    found = False
+    browser = slicer.util.getFirstNodeByClassByName('vtkMRMLSequenceBrowserNode', 'LandmarkingScan')
+    while not found and i < 6:
+      if browser == None:
+        browser = slicer.util.getFirstNodeByClassByName('vtkMRMLSequenceBrowserNode', 'LandmarkingScan_{}'.format(str(i)))
+        if browser != None:
+          found = True
+      else:
+        found = True
+
+      i += 1
+
     if browser is not None:
       spine_volume = slicer.util.getFirstNodeByName(browser.GetName() + 'ReconstructionResults')
       if layoutManager.threeDWidget(1) is not None:
@@ -366,6 +380,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
         displayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(spine_volume)
         displayNode.SetViewNodeIDs([viewNode.GetID()])
         spine_volume.SetDisplayVisibility(1)
+
 
     if currentLayout == 501:
       layoutManager.setLayout(502) # switch to dual 3d + red slice layout
