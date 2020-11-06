@@ -92,6 +92,7 @@ def generate_weight_maps(image, label):
     weight_map = tf.expand_dims(tf.reshape(min_dists, [tf.shape(label)[0], tf.shape(label)[1]]), axis=-1)
     weight_map = tf.where(tf.math.is_nan(weight_map), tf.ones_like(weight_map), weight_map)
     weight_map = tf.where(tf.math.is_inf(weight_map), tf.ones_like(weight_map), weight_map)
+    weight_map = tf.where(tf.not_equal(weight_map, tf.constant(0.0)), weight_map + tf.constant(50.0), weight_map)
     weight_map /= tf.reduce_max(weight_map)
     weight_map = tf.concat([weight_map, tf.expand_dims(label[:, :, 1], axis=-1)], axis=-1)
     label = tf.concat([label, weight_map], axis=-1)

@@ -8,8 +8,6 @@ from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
 from tensorflow.keras.regularizers import l1, l2
 
-
-
 def old_unet(input_size, num_classes, num_channels=1, filter_multiplier=10, regularization_rate=0.):
     input_ = Input((input_size, input_size, num_channels))
     skips = []
@@ -96,10 +94,7 @@ def weighted_categorical_crossentropy_with_maps(class_weights):
         # clip to prevent NaN's and Inf's
         y_pred = tf.keras.backend.clip(y_pred, tf.keras.backend.epsilon(), 1 - tf.keras.backend.epsilon())
         # calc
-        loss = y_true * tf.keras.backend.log(y_pred)
-        loss *= weight_map
-        loss *= class_weights
-        #loss = tf.reduce_sum(loss, axis=-1)
+        loss = y_true * tf.keras.backend.log(y_pred) * weight_map * class_weights
         loss = -tf.keras.backend.sum(loss, -1)
 
         return loss
