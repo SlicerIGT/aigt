@@ -677,7 +677,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     if shape[0] == 1:
       shape = [shape[1],shape[2],shape[0]]
     output_array = output_array.reshape(shape)
-    output_array = cv2.flip(output_array,1)
+    #output_array = cv2.flip(output_array,1)
     slicer.mrmlScene.RemoveNode(labelMapNode)
     return (output_array,labelFileName)
 
