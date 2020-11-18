@@ -14,7 +14,6 @@ import evaluation_metrics
 
 from models import (
     new_unet,
-    old_unet,
     weighted_categorical_crossentropy,
     weighted_categorical_crossentropy_with_maps,
 )
@@ -28,27 +27,36 @@ def train(
     sagittal_only=False, 
     num_frames=1, 
     with_maps=False, 
-    model_new=True,
     learning_rate=0.002,
     lr_decay=False,
+    dropout=0.0,
+    use_attention=True,
+    num_layers=5,
+    filters=16,
+    use_batch_norm=True,
+    load_from_save=False,
 ):
 
     run_str = ''
-    run_str += 'NewUNet_' if model_new else 'TBMEUNet_'
+    run_str += 'NewUNet_'
     run_str += 'WMaps_' if with_maps else ''
     run_str += 'SagittalOnly_' if sagittal_only else 'AllImages_'
-    run_str += 'SingleFrame' if num_frames == 1 else str(num_frames) + 'Frames'
+    run_str += 'SingleFrame' if num_frames == 1 else str(num_frames) + 'Frames_'
+    run_str += 'Dropout' + str(dropout) + '_' if dropout else ''
+    run_str += 'WAttention_' if use_attention else ''
+    run_str += 'WBatchNorm_' if use_batch_norm else ''
+    run_str += str(filters) + '-InitialFilters_' 
+    run_str += str(num_layers) + '-Layers' 
+
 
     local_data_folder = "/home/zbaum/Baum/aigt/data"
 
     data_arrays_folder = "DataArrays"
     results_save_folder = "SavedResults"
     models_save_folder = "SavedModels"
-    val_data_folder = "PredictionsValidation"
     data_arrays_fullpath = os.path.join(local_data_folder, data_arrays_folder)
     results_save_fullpath = os.path.join(local_data_folder, results_save_folder)
     models_save_fullpath = os.path.join(local_data_folder, models_save_folder)
-    val_data_fullpath = os.path.join(local_data_folder, val_data_folder)
     if not os.path.exists(data_arrays_fullpath):
         os.makedirs(data_arrays_fullpath)
         print("Created folder: {}".format(data_arrays_fullpath))
@@ -61,17 +69,11 @@ def train(
         os.makedirs(models_save_fullpath)
         print("Created folder: {}".format(models_save_fullpath))
 
-    if not os.path.exists(val_data_fullpath):
-        os.makedirs(val_data_fullpath)
-        print("Created folder: {}".format(val_data_fullpath))
-
     # Learning parameters
 
     ultrasound_size = 128
     num_classes = 2
     min_learning_rate = 0.00001
-    regularization_rate = 0.0001
-    filter_multiplier = 14
     class_weights = np.array([0.1, 0.9])
     learning_rate_decay = (learning_rate - min_learning_rate) / num_epochs if lr_decay else 0
 
@@ -129,7 +131,7 @@ def train(
     Example 3: leave-one-out cross validation with 3 patients, then training on all available data (no validation):
     validation_schedule_patient = np.array([[0],[1],[2],[-1]])
     """
-    # validation_schedule_patient = np.array([[-1]])
+    #validation_schedule_patient = np.array([[-1]])
     validation_schedule_patient = np.array([[0]])
 
     # Define what data to download
@@ -252,13 +254,18 @@ def train(
 
     print("Name for saved files: {}".format(run_str))
     print("\nTraining parameters")
-    print("Number of epochs:    {}".format(num_epochs))
+    print("Max epochs:          {}".format(num_epochs))
     print("LR:                  {}".format(learning_rate))
     print("LR decay:            {}".format(learning_rate_decay))
     print("Batch size:          {}".format(batch_size))
-    print("Regularization rate: {}".format(regularization_rate))
+    print("Frames used:         {}".format(num_frames))
+    print("Dropout:             {}".format(dropout))
+    print("Attention:           {}".format(use_attention))
+    print("BatchNorm:           {}".format(use_batch_norm))
+    print("Filters (Start):     {}".format(filters))
+    print("Layers:              {}".format(num_layers))
+
     print("")
-    print("Saving validation predictions in: {}".format(val_data_fullpath))
     print("Saving models in:                 {}".format(models_save_fullpath))
 
     # ROC data will be saved in these containers
@@ -345,28 +352,19 @@ def train(
         )
 
         # Create and train model
-        if not model_new:
-            model = old_unet(
-                ultrasound_size, 
-                num_classes, 
-                num_frames,
-                filter_multiplier, 
-                regularization_rate
-            )
-        else:
-            model = new_unet(
-                ultrasound_size,
-                num_classes=num_classes,
-                num_channels=num_frames,
-                use_batch_norm=True,
-                upsample_mode="deconv",  # 'deconv' or 'simple'
-                dropout=0.0,
-                dropout_type="spatial",
-                use_attention=True,
-                filters=16,
-                num_layers=5,
-                output_activation="softmax",
-            )
+        model = new_unet(
+            ultrasound_size,
+            num_classes=num_classes,
+            num_channels=num_frames,
+            use_batch_norm=use_batch_norm,
+            upsample_mode="deconv",  # 'deconv' or 'simple'
+            dropout=dropout,
+            dropout_type="spatial",
+            use_attention=use_attention,
+            filters=filters,
+            num_layers=num_layers,
+            output_activation="softmax",
+        )
 
         model.compile(
             optimizer=tf.keras.optimizers.Adam(
@@ -425,71 +423,73 @@ def train(
         plt.savefig("us_seg.png")
         '''
 
-        training_time_start = datetime.datetime.now()
-
-        if n_val > 0:
-            training_log = model.fit(
-                dataset,
-                validation_data=val_dataset,
-                epochs=num_epochs,
-                verbose=2,
-            )
-
-        else:
-            training_log = model.fit(
-                training_generator,
-                epochs=num_epochs,
-                verbose=2,
-            )
-
-        training_time_stop = datetime.datetime.now()
-
-        # Print training log
-
-        print("  Training time: {}".format(training_time_stop - training_time_start))
-
-        # Plot training loss and metrics
-
-        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 4))
-
-        axes[0].plot(training_log.history["loss"], "bo--")
-        if n_val > 0:
-            axes[0].plot(training_log.history["val_loss"], "ro-")
-        axes[0].set(xlabel="Epochs (n)", ylabel="Loss")
-        if n_val > 0:
-            axes[0].legend(["Training loss", "Validation loss"])
-
-        axes[1].plot(training_log.history["accuracy"], "bo--")
-        if n_val > 0:
-            axes[1].plot(training_log.history["val_accuracy"], "ro-")
-        axes[1].set(xlabel="Epochs (n)", ylabel="Accuracy")
-        if n_val > 0:
-            axes[1].legend(["Training accuracy", "Validation accuracy"])
-
-        fig.tight_layout()
-        plt.savefig(run_str + "_val-round_" + str(val_round_index) + ".png")
-
-        # Archive trained model with unique filename based on notebook name and timestamp
-
         model_file_name = run_str + "_model-" + str(val_round_index) + ".h5"
+        model_best_file_name = run_str + "_model-" + str(val_round_index) + "_best.h5"
         model_fullname = os.path.join(models_save_fullpath, model_file_name)
-        model.save(model_fullname)
+        model_best_fullname = os.path.join(models_save_fullpath, model_best_file_name)
+
+        if not load_from_save:
+            training_time_start = datetime.datetime.now()
+
+            if n_val > 0:
+                training_log = model.fit(
+                    dataset,
+                    validation_data=val_dataset,
+                    epochs=num_epochs,
+                    verbose=2,
+                    callbacks=[tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=100),
+                               tf.keras.callbacks.ModelCheckpoint(model_best_fullname, save_best_only=True)],
+                )
+
+            else:
+                training_log = model.fit(
+                    dataset,
+                    epochs=num_epochs,
+                    verbose=2,
+                    callbacks=[tf.keras.callbacks.ModelCheckpoint(model_best_fullname, save_best_only=True)],
+                )
+
+            training_time_stop = datetime.datetime.now()
+
+            # Print training log
+
+            print("  Training time: {}".format(training_time_stop - training_time_start))
+
+            # Plot training loss and metrics
+
+            fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 4))
+
+            axes[0].set_yscale('log')
+            axes[0].plot(training_log.history["loss"], "bo--")
+            if n_val > 0:
+                axes[0].plot(training_log.history["val_loss"], "ro-")
+            axes[0].set(xlabel="Epochs (n)", ylabel="Loss")
+            if n_val > 0:
+                axes[0].legend(["Training loss", "Validation loss"])
+
+            axes[1].set_yscale('log')
+            axes[1].plot(training_log.history["accuracy"], "bo--")
+            if n_val > 0:
+                axes[1].plot(training_log.history["val_accuracy"], "ro-")
+            axes[1].set(xlabel="Epochs (n)", ylabel="Accuracy")
+            if n_val > 0:
+                axes[1].legend(["Training accuracy", "Validation accuracy"])
+
+            fig.tight_layout()
+            plt.savefig(run_str + "_val-round_" + str(val_round_index) + ".png")
+
+        # Archive trained model with unique filename based on params
+        
+        if load_from_save:
+            model.load_weights(model_fullname)
+        else:
+            model.save(model_fullname)
 
         # Predict on validation data
 
         if n_val > 0:
             y_pred_val = model.predict(val_ultrasound_data)
-
-            # Saving predictions for further evaluation
-
-            val_prediction_filename = (
-                run_str + "_prediction_" + str(val_round_index) + ".npy"
-            )
-            val_prediction_fullname = os.path.join(
-                val_data_fullpath, val_prediction_filename
-            )
-            np.save(val_prediction_fullname, y_pred_val)
-
+            
             # Validation results
             vali_metrics_dicts, vali_best_threshold_index, vali_area = evaluation_metrics.compute_roc(
                 roc_thresholds, y_pred_val, val_segmentation_data, acceptable_margin_mm, mm_per_pixel)
@@ -515,7 +515,7 @@ def train(
         threshold = 0.5
 
         # Uncomment for comparing the same images
-        # sample_indices = [105, 195, 391, 133, 142]
+        sample_indices = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
         fig = plt.figure(figsize=(18, num_show * 5))
         for i in range(num_show):
@@ -554,10 +554,11 @@ def train(
 
         # Printing total time of this validation round
 
-        print(
-            "\nTotal round time:  {}".format(datetime.datetime.now() - training_time_start)
-        )
-        print("")
+        if not load_from_save:
+            print(
+                "\nTotal round time:  {}".format(datetime.datetime.now() - training_time_start)
+            )
+            print("")
 
     time_sequence_stop = datetime.datetime.now()
 
@@ -606,4 +607,3 @@ def train(
 
     print("Results saved to: {}".format(csv_fullname))
 
-train(batch_size=128, num_epochs=500, sagittal_only=True, num_frames=1, with_maps=True, model_new=True, learning_rate=0.002, lr_decay=False)

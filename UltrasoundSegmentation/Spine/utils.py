@@ -2,6 +2,8 @@ import girder_client
 import numpy as np
 import os
 import pandas as pd
+import tensorflow as tf
+import matplotlib.pyplot as plt
 
 
 def create_standard_project_folders(local_data_folder):
@@ -116,3 +118,35 @@ def load_girder_data(csv_fullname, data_arrays_fullpath, girder_url, girder_key=
         segmentation_arrays_by_subjects.append(subject_segmentation_array)
 
     return ultrasound_arrays_by_subjects, segmentation_arrays_by_subjects
+
+class PlotLosses(tf.keras.callbacks.Callback):
+    def __init__(self, fname_tag):
+        self.fname_tag = fname_tag
+
+    def on_train_begin(self, logs={}):
+        self.i = 0
+        self.x = []
+        
+        self.losses = []
+        self.val_losses = []
+        
+        self.fig = plt.figure()
+        
+        self.logs = []
+
+    def on_epoch_end(self, epoch, logs={}):
+
+        self.logs.append(logs)
+        self.x.append(self.i)
+        self.losses.append(logs.get('loss'))
+        self.val_losses.append(logs.get('val_loss'))
+        self.i += 1
+        f, ax1 = plt.subplots(1, 1, sharex=True)
+                
+        ax1.plot(self.x, self.losses, label="loss")
+        ax1.plot(self.x, self.val_losses, label="v loss")
+        ax1.set_yscale('log')
+        ax1.legend()        
+        plt.show()
+        plt.savefig(self.fname_tag + '-live_metrics.png', dpi=1000)
+        plt.close()
