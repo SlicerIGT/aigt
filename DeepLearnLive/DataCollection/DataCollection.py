@@ -5,13 +5,8 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
 import subprocess
+import pandas
 import cv2
-
-try:
-  import pandas
-except:
-  slicer.util.pip_install('pandas')
-  import pandas
 
 #
 # DataCollection
@@ -445,8 +440,6 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.autoLabelPath = self.autoLabelFilePathSelector.directory
     return
 
-
-
   def onSelect(self):
     self.startStopCollectingImagesButton.enabled =  self.videoIDComboBox.currentText!= "Select video ID" and self.videoIDComboBox.currentText!= "Create new video ID" and self.selectRecordingNodeComboBox.currentText != "Select Image Node"
 
@@ -546,6 +539,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.imageLabels = imageLabels
     self.labelFilePath = labelFilePath
     self.labellingMethod = labellingMethod
+    self.lastRecordedTime = 0.0
     if self.labellingMethod == "From Segmentation":
       self.segmentationNodeName = labelName
     self.fromSequence = fromSequence
@@ -610,10 +604,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       seekSlider = seekSlider[0]
       timeLabel = seekWidget.findChildren("QLabel")
       timeLabel = timeLabel[1]
-      if seekSlider.value >= seekSlider.maximum:
-        self.continueRecording = False
-      else:
+      recordingTime = float(timeLabel.text)
+      if seekSlider.value < seekSlider.maximum and recordingTime > self.lastRecordedTime:
         self.continueRecording = True
+      else:
+        self.continueRecording = False
     # Get the vtkImageData as an np.array.
     if (not self.fromSequence) or self.continueRecording:
       allFiles = os.listdir(self.videoIDFilePath)
@@ -627,6 +622,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       if self.labellingMethod == "Unlabelled":
         if self.fromSequence:
           recordingTime = timeLabel.text
+          self.lastRecordedTime = float(recordingTime)
           self.imageLabels = self.imageLabels.append({'FileName': fileName,'Time Recorded':recordingTime}, ignore_index=True)
         else:
           self.imageLabels = self.imageLabels.append({'FileName':fileName},ignore_index=True)
@@ -638,6 +634,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           cv2.imwrite(os.path.join(self.videoIDFilePath,self.labelName),labelImData)
         if self.fromSequence:
           recordingTime = timeLabel.text
+          self.lastRecordedTime = float(recordingTime)
           self.imageLabels = self.imageLabels.append({'FileName': fileName, 'Time Recorded':recordingTime, self.labelType: self.labelName},
                                                      ignore_index=True)
         else:
