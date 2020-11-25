@@ -456,7 +456,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.labelType = self.classificationLabelTypeLineEdit.text
     elif self.labellingMethod == "From Segmentation":
       self.labelName = self.inputSegmentation
-      self.labelType = self.segmentationLabelTypeLineEdit.text
+      self.labelType = self.inputSegmentation
     else:
       self.labelName = None
       self.labelType = None
@@ -532,11 +532,16 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.recordingVolumeNode = slicer.util.getNode(recordingNode)
     self.fileType = fileType
     self.collectingImages = imageCollectionStarted
+    self.continueRecording = not(self.collectingImages)
     self.videoID = videoID
     self.videoIDFilePath = videoIDFilePath
     self.labelName = labelName
     self.labelType = labelType
     self.imageLabels = imageLabels
+    if not self.labelType in self.imageLabels.columns:
+      self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
+    '''if "Time Recorded" in self.imageLabels.columns:
+      self.imageLabels = self.imageLabels.astype({'Time Recorded':'float64'})'''
     self.labelFilePath = labelFilePath
     self.labellingMethod = labellingMethod
     self.lastRecordedTime = 0.0
@@ -596,7 +601,6 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       if not os.path.isfile(cv2Path):
         cv2Path = cv2File
       cv2 = imp.load_dynamic('cv2', cv2File)
-    self.continueRecording = True
     if self.fromSequence:
       seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
       seekWidget = seekWidget[0]
@@ -605,7 +609,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       timeLabel = seekWidget.findChildren("QLabel")
       timeLabel = timeLabel[1]
       recordingTime = float(timeLabel.text)
-      if seekSlider.value < seekSlider.maximum and recordingTime > self.lastRecordedTime:
+      if seekSlider.value < seekSlider.maximum and recordingTime >= self.lastRecordedTime:
         self.continueRecording = True
       else:
         self.continueRecording = False
@@ -618,7 +622,14 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       imData = self.getVtkImageDataAsOpenCVMat(self.recordingVolumeNode.GetName())
 
       fileName = self.videoID + "_" + str(self.numImagesInFile).zfill(5) + self.fileType
-      cv2.imwrite(os.path.join(self.videoIDFilePath,fileName),imData)
+      if self.fromSequence:
+        dataframeEntry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - recordingTime) <= 0.1)]
+        if dataframeEntry.empty:
+          addingtoexisting = False
+          cv2.imwrite(os.path.join(self.videoIDFilePath,fileName),imData)
+        else:
+          addingtoexisting = True
+          entry = dataframeEntry.index[-1]
       if self.labellingMethod == "Unlabelled":
         if self.fromSequence:
           recordingTime = timeLabel.text
@@ -635,8 +646,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
         if self.fromSequence:
           recordingTime = timeLabel.text
           self.lastRecordedTime = float(recordingTime)
-          self.imageLabels = self.imageLabels.append({'FileName': fileName, 'Time Recorded':recordingTime, self.labelType: self.labelName},
+          if not addingtoexisting:
+            self.imageLabels = self.imageLabels.append({'FileName': fileName, 'Time Recorded':self.lastRecordedTime, self.labelType: self.labelName},
                                                      ignore_index=True)
+          else:
+            self.imageLabels[self.labelType].iloc[entry] = self.labelName
         else:
           self.imageLabels = self.imageLabels.append({'FileName': fileName, self.labelType: self.labelName},
                                                      ignore_index=True)
