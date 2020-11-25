@@ -623,7 +623,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
       fileName = self.videoID + "_" + str(self.numImagesInFile).zfill(5) + self.fileType
       if self.fromSequence:
-        dataframeEntry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - recordingTime) <= 0.1)]
+        dataframeEntry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - recordingTime) <= 0.2)]
         if dataframeEntry.empty:
           addingtoexisting = False
           cv2.imwrite(os.path.join(self.videoIDFilePath,fileName),imData)
