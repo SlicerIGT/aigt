@@ -441,7 +441,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.segmentationFrame.visible = True
 
   def onAutoLabelFileChanged(self):
-    self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.directory,self.autoLabelFileNameLineEdit)
+    self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.directory,self.autoLabelFileNameLineEdit.text)
     return
 
   def onSelect(self):
@@ -458,13 +458,16 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     if self.labellingMethod == "Single Label":
       self.labelName = self.classificationLabelNameLineEdit.text
       self.labelType = self.classificationLabelTypeLineEdit.text
+    elif self.labellingMethod == "Auto from file":
+      self.labelName = None
+      self.labelType = None
     elif self.labellingMethod == "From Segmentation":
       self.labelName = self.inputSegmentation
       self.labelType = self.inputSegmentation
     else:
       self.labelName = None
       self.labelType = None
-    self.logic.startImageCollection(self.recordingNode, self.fileType, self.collectingImages, self.currentVideoID,self.currentVideoIDFilePath, self.imageLabels,self.csvFilePath,self.labellingMethod,self.collectingFromSequence,self.labelName,self.labelType)
+    self.logic.startImageCollection(self.recordingNode, self.fileType, self.collectingImages, self.currentVideoID,self.currentVideoIDFilePath, self.imageLabels,self.csvFilePath,self.labellingMethod,self.collectingFromSequence,self.labelName,self.labelType,self.autoLabelPath)
 
   def onLabellingMethodSelected(self):
     if self.problemType == "Classification":
@@ -516,7 +519,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 #
 
 class DataCollectionLogic(ScriptedLoadableModuleLogic):
-  def startImageCollection(self,recordingNode,fileType, imageCollectionStarted,videoID, videoIDFilePath, imageLabels, labelFilePath, labellingMethod = "Unlabelled", fromSequence = False,labelName = None,labelType = None):
+  def startImageCollection(self,recordingNode,fileType, imageCollectionStarted,videoID, videoIDFilePath, imageLabels, labelFilePath, labellingMethod = "Unlabelled", fromSequence = False,labelName = None,labelType = None,autolabelFilePath = None):
     try:
       # the module is in the python path
       import cv2
@@ -545,7 +548,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.labelName = labelName
     self.labelType = labelType
     self.imageLabels = imageLabels
-    if not self.labelType in self.imageLabels.columns:
+    self.autoLabelFilePath = autolabelFilePath
+    if (not self.labelType in self.imageLabels.columns) and self.labelType != None:
       self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
     '''if "Time Recorded" in self.imageLabels.columns:
       self.imageLabels = self.imageLabels.astype({'Time Recorded':'float64'})'''
@@ -556,7 +560,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       self.segmentationNodeName = labelName
     self.fromSequence = fromSequence
     if self.labellingMethod == 'Auto from file':
-      self.autoLabels = pandas.read_csv(self.labelFilePath.replace("Labels","Auto_Labels"))
+      self.autoLabels = pandas.read_csv(self.autoLabelFilePath)
+      self.labelType = self.autoLabels.columns[0]
+
     if self.collectingImages == False:
       if self.recordingVolumeNode.GetClassName() == "vtkMRMLStreamingVolumeNode":
         self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameDataModifiedEvent,self.onStartCollectingImages)
@@ -646,6 +652,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           self.imageLabels = self.imageLabels.append({'FileName':fileName},ignore_index=True)
       else:
         if self.labellingMethod == 'Auto from file':
+          self.labelType = self.autoLabels.columns[0]
           self.labelName = self.getClassificationLabelFromFile()
         elif self.labellingMethod == 'From Segmentation':
           (labelImData, self.labelName) = self.getSegmentationLabel(fileName)
@@ -674,7 +681,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     timeStamp = seekWidget.findChildren("QLabel")
     timeStamp = float(timeStamp[1].text)
     task = self.autoLabels.loc[(self.autoLabels["Start"]<=timeStamp) & (self.autoLabels["End"]>timeStamp)]
-    labelName = task.iloc[0]["Label"]
+    labelName = task.iloc[0][self.labelType]
     return labelName
 
   def getSegmentationLabel(self,fileName):
