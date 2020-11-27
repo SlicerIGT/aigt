@@ -418,7 +418,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         self.imageLabels = pandas.read_csv(self.csvFilePath,index_col = 0)
         #self.imageLabels.drop("Unnamed: 0",axis=1)
       except FileNotFoundError:
-        self.imageLabels = pandas.DataFrame(columns = ["FileName"])
+        self.imageLabels = pandas.DataFrame(columns = ["FileName","Time Recorded"])
 
   def onProblemTypeSelected(self):
     self.problemType = self.problemTypeComboBox.currentText
@@ -549,7 +549,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.labelType = labelType
     self.imageLabels = imageLabels
     self.autoLabelFilePath = autolabelFilePath
-    if (not self.labelType in self.imageLabels.columns) and self.labelType != None:
+    if (not self.labelType in self.imageLabels.columns) and self.labelType != None and not self.imageLabels.empty:
       self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
     '''if "Time Recorded" in self.imageLabels.columns:
       self.imageLabels = self.imageLabels.astype({'Time Recorded':'float64'})'''
@@ -565,7 +565,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
     if self.collectingImages == False:
       if self.recordingVolumeNode.GetClassName() == "vtkMRMLStreamingVolumeNode":
-        self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameDataModifiedEvent,self.onStartCollectingImages)
+        self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameModifiedEvent,self.onStartCollectingImages)
       elif self.recordingVolumeNode.GetClassName() == "vtkMRMLVectorVolumeNode":
         self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLVectorVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
       elif self.recordingVolumeNode.GetClassName() == "vtkMRMLScalarVolumeNode":
