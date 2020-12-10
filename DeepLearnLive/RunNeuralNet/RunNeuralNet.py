@@ -7,6 +7,7 @@ import logging
 import subprocess
 import pandas
 import cv2
+from pathlib import Path
 #
 # RunNeuralNet
 #
@@ -131,19 +132,60 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     outgoinghbox.addWidget(self.plusServerOutgoingPortLineEdit)
     parametersFormLayout.addRow(outgoinghbox)
 
+    condaSettingsCollapsibleButton = ctk.ctkCollapsibleButton()
+    condaSettingsCollapsibleButton.text = "Conda settings"
+    parametersFormLayout.addRow(condaSettingsCollapsibleButton)
+    condaSettingsLayout = qt.QFormLayout(condaSettingsCollapsibleButton)
+
+    self.condaDirectoryPathSelector = ctk.ctkDirectoryButton()
+    self.condaDirectoryPath = self.getCondaPath()
+    self.condaDirectoryPathSelector.directory = self.condaDirectoryPath
+    condaSettingsLayout.addRow(self.condaDirectoryPathSelector)
+
+    self.environmentNameLineEdit = qt.QLineEdit("EnvironmentName")
+    self.environmentName = "kerasGPUEnv"
+    condaSettingsLayout.addRow(self.environmentNameLineEdit)
+
+
     self.runNeuralNetworkButton = qt.QPushButton("Start Network")
     self.runNeuralNetworkButton.enabled = False
     self.networkRunning = False
     parametersFormLayout.addRow(self.runNeuralNetworkButton)
 
+    self.modelDirectoryFilePathSelector.connect('directorySelected()',self.onNetworkDirectorySelected)
+    self.condaDirectoryPathSelector.connect('directorySelected()',self.onCondaDirectorySelected)
+    self.environmentNameLineEdit.connect('textChanged(QString)',self.onCondaEnvironmentNameChanged)
     self.networkTypeSelector.connect('currentIndexChanged(int)',self.onNetworkTypeSelected)
     self.outputTypeSelector.connect('currentIndexChanged(int)',self.onOutputTypeSelected)
     self.inputNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.outputNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.runNeuralNetworkButton.connect('clicked(bool)',self.onStartNetworkClicked)
 
+  def getCondaPath(self):
+    condaPath = str(Path.home())
+    homePath = str(Path.home())
+    if "Anaconda3" in os.listdir(homePath):
+        condaPath = os.path.join(homePath,"Anaconda3")
+    return condaPath
+
+
   def cleanup(self):
     pass
+
+  def onNetworkDirectorySelected(self):
+    currentItems = self.networkTypeSelector.items
+    for i in currentItems:
+      if i != "Select network type":
+        self.networkTypeSelector.removeItem(i)
+    networks = os.listdir(os.path.join(self.moduleDir, os.pardir, 'Networks'))
+    networks = [x for x in networks if not '.' in x]
+    self.networkTypeSelector.addItems(networks)
+
+  def onCondaDirectorySelected(self):
+    self.condaDirectoryPath = self.condaDirectoryPathSelector.directory
+
+  def onCondaEnvironmentNameChanged(self):
+    self.environmentName = self.environmentNameLineEdit.text
 
   def onNetworkTypeSelected(self):
     self.networkType = self.networkTypeSelector.currentText
@@ -167,6 +209,8 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.runNeuralNetworkButton.enabled = self.inputNodeSelector.currentNode() and self.outputNodeSelector.currentNode() and self.outputType!= "Select network output type"
 
   def onStartNetworkClicked(self):
+    self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
+    self.logic.setCondaEnvironmentName(self.environmentName)
     self.logic.setInputNode(self.inputNodeSelector.currentNode())
     self.logic.setOutputNode(self.outputNodeSelector.currentNode())
     outgoingHostName = self.plusServerOutgoingHostNameLineEdit.text
@@ -194,6 +238,8 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
 
 class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
   def __init__(self,
+               condaPath = None,
+               condaEnvName = "kerasGPUEnv",
                networkType = None,
                networkName = None,
                networkPath = None,
@@ -205,6 +251,8 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
                incomingHostName = 'localhost',
                incomingPort = None):
     ScriptedLoadableModuleLogic.__init__(self)
+    self.condaPath = condaPath
+    self.condaEnvName = condaEnvName
     self.networkType = networkType
     self.networkName = networkName
     self.networkPath = networkPath
@@ -221,7 +269,9 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.registerIncomingAndOutgoingNodes()
     self.incomingConnectorNode.Start()
     self.outgoingConnectorNode.Start()
-    cmd = [str(self.moduleDir) + "\Scripts\StartNeuralNet.lnk",
+    cmd = [str(self.moduleDir + "\Scripts\StartNeuralNet.lnk"),
+           str(self.condaPath),
+           str(self.condaEnvName),
            str(self.moduleDir + "\Scripts"),
            str(self.networkType),
            str(self.networkPath),
@@ -232,12 +282,20 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
            str(self.incomingHostName),
            str(self.incomingPort),
            str(self.outputNode.GetName())]
+    print(cmd)
     self.p = subprocess.Popen(cmd, shell=True)
     logging.info("Starting neural network")
 
   def stopNeuralNetwork(self):
     self.incomingConnectorNode.Stop()
     self.outgoingConnectorNode.Stop()
+    logging.info("Stopping neural network")
+
+  def setPathToCondaExecutable(self,condaPath):
+    self.condaPath = condaPath
+
+  def setCondaEnvironmentName(self,name):
+    self.condaEnvName = name
 
   def setNetworkType(self,networkType):
     self.networkType = networkType
