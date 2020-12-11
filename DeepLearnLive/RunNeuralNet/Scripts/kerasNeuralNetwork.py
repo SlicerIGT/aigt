@@ -12,7 +12,8 @@ import tensorflow.keras
 from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras import layers
 from tensorflow.keras.models import model_from_json
-from pyIGTLink import pyIGTLink
+#from pyIGTLink import pyIGTLink
+import pyigtl
 
 FLAGS = None
 
@@ -36,13 +37,13 @@ def main():
 
     if FLAGS.outgoing_host == "localhost":
         print("Server starting...")
-        server = pyIGTLink.PyIGTLinkServer(port=FLAGS.outgoing_port, localServer=True)
+        server = pyigtl.OpenIGTLinkServer(port=FLAGS.outgoing_port)
         server.start()
         print("Server running...")
 
 
     print("Client starting...")
-    client = pyIGTLink.PyIGTLinkClient(host=FLAGS.incoming_host, port=FLAGS.incoming_port)
+    client = pyigtl.OpenIGTLinkClient(host=FLAGS.incoming_host, port=FLAGS.incoming_port)
     client.start()
     print("Client running...")
     lastMessageTime = time.time()
@@ -53,20 +54,20 @@ def main():
             messages = client.get_latest_messages()
             if len(messages) > 0:
                 for message in messages:
-                    if message._type == "IMAGE":
+                    if message._message_type == "IMAGE":
                         frameCount +=1
                         ImageReceived = True
                         lastMessageTime = time.time()
-                        image = message._image
+                        image = message.image
                         image = image[0]
                         print(time.time())
                         (networkOutput) = model.predict(image)
                         print(time.time())
                         if FLAGS.output_type == 'STRING':
-                            labelMessage = pyIGTLink.StringMessage(networkOutput, device_name=FLAGS.device_name)
+                            labelMessage = pyigtl.StringMessage(networkOutput, device_name=FLAGS.device_name)
                             server.send_message(labelMessage)
                         elif FLAGS.output_type == 'IMAGE':
-                            labelMessage = pyIGTLink.ImageMessage(networkOutput, device_name=FLAGS.device_name)
+                            labelMessage = pyigtl.ImageMessage(networkOutput, device_name=FLAGS.device_name)
                             server.send_message(labelMessage)
                         elif FLAGS.output_type == 'TRANSFORM':
                             pass
