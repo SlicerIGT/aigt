@@ -132,10 +132,16 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     outgoinghbox.addWidget(self.plusServerOutgoingPortLineEdit)
     parametersFormLayout.addRow(outgoinghbox)
 
+    self.runNeuralNetworkButton = qt.QPushButton("Start Network")
+    self.runNeuralNetworkButton.enabled = False
+    self.networkRunning = False
+    parametersFormLayout.addRow(self.runNeuralNetworkButton)
+
     condaSettingsCollapsibleButton = ctk.ctkCollapsibleButton()
     condaSettingsCollapsibleButton.text = "Conda settings"
     parametersFormLayout.addRow(condaSettingsCollapsibleButton)
     condaSettingsLayout = qt.QFormLayout(condaSettingsCollapsibleButton)
+    condaSettingsCollapsibleButton.collapsed = True
 
     self.condaDirectoryPathSelector = ctk.ctkDirectoryButton()
     self.condaDirectoryPath = self.getCondaPath()
@@ -146,11 +152,20 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.environmentName = "kerasGPUEnv"
     condaSettingsLayout.addRow(self.environmentNameLineEdit)
 
+    createNewModelCollapsibleButton = ctk.ctkCollapsibleButton()
+    createNewModelCollapsibleButton.text = "Create New Model"
+    parametersFormLayout.addRow(createNewModelCollapsibleButton)
+    newModelSettingsLayout = qt.QFormLayout(createNewModelCollapsibleButton)
+    createNewModelCollapsibleButton.collapsed = True
 
-    self.runNeuralNetworkButton = qt.QPushButton("Start Network")
-    self.runNeuralNetworkButton.enabled = False
-    self.networkRunning = False
-    parametersFormLayout.addRow(self.runNeuralNetworkButton)
+    self.newModelNameLineEdit = qt.QLineEdit()
+    self.newModelNameLineEdit.setText("Model Name")
+    newModelSettingsLayout.addRow(self.newModelNameLineEdit)
+
+    self.createNewModelButton = qt.QPushButton("Create")
+    self.createNewModelButton.enabled = False
+    newModelSettingsLayout.addRow(self.createNewModelButton)
+
 
     self.modelDirectoryFilePathSelector.connect('directorySelected()',self.onNetworkDirectorySelected)
     self.condaDirectoryPathSelector.connect('directorySelected()',self.onCondaDirectorySelected)
@@ -160,6 +175,8 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.inputNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.outputNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.runNeuralNetworkButton.connect('clicked(bool)',self.onStartNetworkClicked)
+    self.newModelNameLineEdit.connect('textChanged(QString)',self.onNewModelNameChanged)
+    self.createNewModelButton.connect('clicked(bool)',self.onCreateModelClicked)
 
   def getCondaPath(self):
     condaPath = str(Path.home())
@@ -232,6 +249,13 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
       self.logic.stopNeuralNetwork()
       self.networkRunning = False
 
+  def onNewModelNameChanged(self):
+    self.newModelName = self.newModelNameLineEdit.text
+    self.newModelName = self.newModelName.replace(" ","")
+    self.createNewModelButton.enabled = True
+
+  def onCreateModelClicked(self):
+    self.logic.createNewModel(self.newModelName)
 #
 # RunNeuralNetLogic
 #
@@ -282,7 +306,6 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
            str(self.incomingHostName),
            str(self.incomingPort),
            str(self.outputNode.GetName())]
-    print(cmd)
     self.p = subprocess.Popen(cmd, shell=True)
     logging.info("Starting neural network")
 
@@ -367,6 +390,20 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.setupIGTLinkConnectors(self.incomingHostName,self.incomingPort,self.outgoingPort)
     self.incomingConnectorNode.RegisterIncomingMRMLNode(self.outputNode)
     self.outgoingConnectorNode.RegisterOutgoingMRMLNode(self.inputNode)
+
+  def createNewModel(self,newModelName):
+    templateModelFilePath = os.path.join(self.moduleDir,"Scripts","TemplateNetworkFile.txt")
+    newModelPath = os.path.join(self.moduleDir,os.pardir,"Networks",newModelName)
+    templateFile = open(templateModelFilePath,'r')
+    templateFileText = templateFile.read()
+    templateFile.close()
+    os.mkdir(newModelPath)
+    newFileText = templateFileText.replace('MODELNAME',newModelName)
+    newModelFile = open(os.path.join(newModelPath,newModelName+'.py'),'w')
+    newModelFile.write(newFileText)
+    newModelFile.close()
+
+
 
 #
 # RunNeuralNetTest
