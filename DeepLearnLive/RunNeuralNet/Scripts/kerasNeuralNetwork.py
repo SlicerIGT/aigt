@@ -35,11 +35,13 @@ def main():
     model = NeuralNetwork()
     model.loadModel(modelFolder,model_name)
 
+    print("Server starting...")
     if FLAGS.outgoing_host == "localhost":
-        print("Server starting...")
-        server = pyigtl.OpenIGTLinkServer(port=FLAGS.outgoing_port)
-        server.start()
-        print("Server running...")
+        server = pyigtl.OpenIGTLinkServer(port=FLAGS.outgoing_port,local_server=True)
+    else:
+        server = pyigtl.OpenIGTLinkServer(port=FLAGS.outgoing_port, local_server=False)
+    server.start()
+    print("Server running on " + str(server.host) + " : " + str(server.port) + "...")
 
 
     print("Client starting...")
@@ -51,31 +53,41 @@ def main():
     frameCount = 0
     try:
         while (not ImageReceived) or (ImageReceived and time.time() - lastMessageTime < FLAGS.timeout):
-            messages = client.get_latest_messages()
-            if len(messages) > 0:
-                for message in messages:
-                    if message._message_type == "IMAGE":
-                        frameCount +=1
-                        ImageReceived = True
-                        lastMessageTime = time.time()
-                        image = message.image
-                        image = image[0]
-                        print(time.time())
-                        (networkOutput) = model.predict(image)
-                        print(time.time())
-                        if FLAGS.output_type == 'STRING':
-                            labelMessage = pyigtl.StringMessage(networkOutput, device_name=FLAGS.device_name)
-                            server.send_message(labelMessage)
-                        elif FLAGS.output_type == 'IMAGE':
-                            labelMessage = pyigtl.ImageMessage(networkOutput, device_name=FLAGS.device_name)
-                            server.send_message(labelMessage)
-                        elif FLAGS.output_type == 'TRANSFORM':
-                            pass
+            if server.is_connected() and client.is_connected():
+                messages = client.get_latest_messages()
+                if len(messages) > 0:
+                    for message in messages:
+                        if message._message_type == "IMAGE":
+                            frameCount +=1
+                            ImageReceived = True
+                            lastMessageTime = time.time()
+                            image = message.image
+                            image = image[0]
+                            print(time.time())
+                            (networkOutput) = model.predict(image)
+                            print(time.time())
+                            if FLAGS.output_type == 'STRING':
+                                labelMessage = pyigtl.StringMessage(networkOutput, device_name=FLAGS.device_name)
+                                server.send_message(labelMessage)
+                            elif FLAGS.output_type == 'IMAGE':
+                                labelMessage = pyigtl.ImageMessage(networkOutput, device_name=FLAGS.device_name)
+                                server.send_message(labelMessage)
+                            elif FLAGS.output_type == 'TRANSFORM':
+                                pass
 
-                        print(frameCount)
+                            print(frameCount)
+                        if message._message_type == "STRING":
+                            print("Received stop message")
+                            text = message.string
+                            if text == "STOP":
+                                client.stop()
+                                server.stop()
+                else:
+                    pass
             time.sleep(0.25)
     except KeyboardInterrupt:
         pass
+
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()

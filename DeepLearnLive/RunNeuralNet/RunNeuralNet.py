@@ -8,6 +8,7 @@ import subprocess
 import pandas
 import cv2
 from pathlib import Path
+import time
 #
 # RunNeuralNet
 #
@@ -19,7 +20,7 @@ class RunNeuralNet(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "RunNeuralNet"  # TODO: make this more human readable by adding spaces
+    self.parent.title = "Run Neural Net"  # TODO: make this more human readable by adding spaces
     self.parent.categories = ["Deep Learn Live"]  # TODO: set categories (folders where the module shows up in the module selector)
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
     self.parent.contributors = ["Rebecca Hisey (Queen's University)"]  # TODO: replace with "Firstname Lastname (Organization)"
@@ -63,15 +64,20 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
 
     self.networkTypeSelector = qt.QComboBox()
     self.networkTypeSelector.addItems(["Select network type"])
-    networks = os.listdir(os.path.join(self.moduleDir,os.pardir,'Networks'))
+    networks = os.listdir(self.modelDirectoryFilePath)
     networks = [x for x in networks if not '.' in x]
     self.networkTypeSelector.addItems(networks)
-    self.networkType = "Select network output type"
+    self.networkType = "Select network type"
     parametersFormLayout.addRow(self.networkTypeSelector)
 
-    self.modelNameLineEdit = qt.QLineEdit()
-    self.modelNameLineEdit.text = 'Model Name'
-    parametersFormLayout.addRow(self.modelNameLineEdit)
+    self.modelSelector = qt.QComboBox()
+    self.modelSelector.addItems(["Select model"])
+    self.modelName = "Select model"
+    parametersFormLayout.addRow(self.modelSelector)
+
+    #self.modelNameLineEdit = qt.QLineEdit()
+    #self.modelNameLineEdit.text = 'Model Name'
+    #parametersFormLayout.addRow(self.modelNameLineEdit)
 
     self.outputTypeSelector = qt.QComboBox()
     self.outputTypeSelector.addItems(["Select network output type","IMAGE","TRANSFORM","STRING"])
@@ -167,10 +173,11 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     newModelSettingsLayout.addRow(self.createNewModelButton)
 
 
-    self.modelDirectoryFilePathSelector.connect('directorySelected()',self.onNetworkDirectorySelected)
-    self.condaDirectoryPathSelector.connect('directorySelected()',self.onCondaDirectorySelected)
+    self.modelDirectoryFilePathSelector.connect('directorySelected(QString)',self.onNetworkDirectorySelected)
+    self.condaDirectoryPathSelector.connect('directorySelected(QString)',self.onCondaDirectorySelected)
     self.environmentNameLineEdit.connect('textChanged(QString)',self.onCondaEnvironmentNameChanged)
     self.networkTypeSelector.connect('currentIndexChanged(int)',self.onNetworkTypeSelected)
+    self.modelSelector.connect('currentIndexChanged(int)',self.onModelSelected)
     self.outputTypeSelector.connect('currentIndexChanged(int)',self.onOutputTypeSelected)
     self.inputNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.outputNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
@@ -190,13 +197,17 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     pass
 
   def onNetworkDirectorySelected(self):
-    currentItems = self.networkTypeSelector.items
-    for i in currentItems:
-      if i != "Select network type":
-        self.networkTypeSelector.removeItem(i)
-    networks = os.listdir(os.path.join(self.moduleDir, os.pardir, 'Networks'))
-    networks = [x for x in networks if not '.' in x]
+    self.modelDirectoryFilePath = self.modelDirectoryFilePathSelector.directory
+    currentItems = self.networkTypeSelector.count
+    for i in range(currentItems,-1,-1):
+      self.networkTypeSelector.removeItem(i)
+    networks = os.listdir(self.modelDirectoryFilePath)
+    networks = [x for x in networks if not '.' in x and x[0] != '_']
+    networks = ["Select network type"] + networks
     self.networkTypeSelector.addItems(networks)
+
+  def onModelSelected(self):
+    self.modelName = self.modelSelector.currentText
 
   def onCondaDirectorySelected(self):
     self.condaDirectoryPath = self.condaDirectoryPathSelector.directory
@@ -206,6 +217,15 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
 
   def onNetworkTypeSelected(self):
     self.networkType = self.networkTypeSelector.currentText
+    currentItems = self.modelSelector.count
+    for i in range(currentItems, -1, -1):
+      self.modelSelector.removeItem(i)
+    self.modelSelector.addItem("Select model")
+    if self.networkType != "Select network type":
+      networks = os.listdir(os.path.join(self.modelDirectoryFilePath, self.networkType))
+      networks = [x for x in networks if not '.' in x and "pycache" not in x]
+      self.modelSelector.addItems(networks)
+
 
   def onOutputTypeSelected(self):
     self.outputType = self.outputTypeSelector.currentText
@@ -236,8 +256,8 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     incomingPort = self.plusServerIncomingPortLineEdit.text
     self.logic.setHostNameAndPort(incomingHostName, int(incomingPort), 'incoming')
     self.logic.setHostNameAndPort(outgoingHostName, int(outgoingPort), 'outgoing')
-    self.logic.setNetworkName(self.modelNameLineEdit.text)
-    self.logic.setNetworkPath(os.path.join(self.modelDirectoryFilePathSelector.directory,self.networkType))
+    self.logic.setNetworkName(self.modelName)
+    self.logic.setNetworkPath(os.path.join(self.modelDirectoryFilePathSelector.directory,self.networkType,self.modelName))
     self.logic.setNetworkType(self.networkType)
     self.logic.setOutputType(self.outputType)
     if not self.networkRunning:
@@ -307,11 +327,14 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
            str(self.incomingPort),
            str(self.outputNode.GetName())]
     self.p = subprocess.Popen(cmd, shell=True)
-    logging.info("Starting neural network")
+    logging.info("Starting neural network...")
+    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2:
+      time.sleep(0.25)
+    logging.info("Connected to neural network")
 
   def stopNeuralNetwork(self):
-    self.incomingConnectorNode.Stop()
-    self.outgoingConnectorNode.Stop()
+    self.outgoingConnectorNode.UnregisterOutgoingMRMLNode(self.inputNode)
+    self.incomingConnectorNode.UnregisterIncomingMRMLNode(self.outputNode)
     logging.info("Stopping neural network")
 
   def setPathToCondaExecutable(self,condaPath):
@@ -371,6 +394,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
   def setupIGTLinkConnectors(self,incomingHostname,incomingPort,outgoingPort):
     try:
       self.outgoingConnectorNode = slicer.util.getNode('OutgoingPlusConnector')
+      self.outgoingConnectorNode.SetTypeServer(int(outgoingPort))
     except slicer.util.MRMLNodeNotFoundException:
       self.outgoingConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
       self.outgoingConnectorNode.SetName('OutgoingPlusConnector')
@@ -379,6 +403,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       logging.debug('Outgoing Connector Created')
     try:
       self.incomingConnectorNode = slicer.util.getNode('IncomingPlusConnector')
+      self.incomingConnectorNode.SetTypeClient(incomingHostname,int(incomingPort))
     except slicer.util.MRMLNodeNotFoundException:
       self.incomingConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
       self.incomingConnectorNode.SetName('IncomingPlusConnector')
