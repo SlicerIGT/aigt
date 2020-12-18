@@ -49,3 +49,13 @@ class MODELNAME():
         label = labels[labelIndex]
         networkOutput = str(label) + str(toolClassification)
         return networkOutput
+		
+	def createModel(imageSize,num_classes):
+		#Replace the following lines with your model definition
+		# in this example we create a MobileNetV2 model and initialize the model with weights from training on ImageNet
+		model = tensorflow.keras.models.Sequential()
+		model.add(MobileNetV2(weights='imagenet',include_top=False,input_shape=imageSize))
+		model.add(layers.GlobalAveragePooling2D())
+		model.add(layers.Dense(512,activation='relu'))
+		model.add(layers.Dense(num_classes,activation='softmax'))
+		return model
