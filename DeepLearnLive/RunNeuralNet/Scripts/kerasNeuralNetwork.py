@@ -20,7 +20,7 @@ FLAGS = None
 def main():
     try:
         networkModuleName = FLAGS.network_module_name
-        sys.path.append("C:/Users/hisey/Documents/DeepLearnLive/Networks/CNN_LSTM/")
+        sys.path.append(os.path.join(FLAGS.model_directory,os.pardir))
         importStatement = "from " + networkModuleName + " import " + networkModuleName + " as NeuralNetwork"
         exec(importStatement,globals())
         print('got here')
