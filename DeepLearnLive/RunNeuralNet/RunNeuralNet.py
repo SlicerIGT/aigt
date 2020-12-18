@@ -331,9 +331,13 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
              str(self.outputNode.GetName())]
       self.p = subprocess.Popen(cmd, shell=True)
       logging.info("Starting neural network...")
-    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2:
+    startTime = time.time()
+    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<30:
       time.sleep(0.25)
-    logging.info("Connected to neural network")
+    if self.incomingConnectorNode.GetState() !=2:
+      logging.info("Failed to connect to neural network")
+    else:
+      logging.info("Connected to neural network")
 
   def getIPAddress(self):
       hostname = socket.gethostbyname(socket.gethostname())
