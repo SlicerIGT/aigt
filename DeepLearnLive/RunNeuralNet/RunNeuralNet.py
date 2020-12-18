@@ -9,6 +9,7 @@ import pandas
 import cv2
 from pathlib import Path
 import time
+import socket
 #
 # RunNeuralNet
 #
@@ -313,24 +314,30 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.registerIncomingAndOutgoingNodes()
     self.incomingConnectorNode.Start()
     self.outgoingConnectorNode.Start()
-    cmd = [str(self.moduleDir + "\Scripts\StartNeuralNet.lnk"),
-           str(self.condaPath),
-           str(self.condaEnvName),
-           str(self.moduleDir + "\Scripts"),
-           str(self.networkType),
-           str(self.networkPath),
-           str(self.networkName),
-           str(self.outputType),
-           str(self.outgoingHostName),
-           str(self.outgoingPort),
-           str(self.incomingHostName),
-           str(self.incomingPort),
-           str(self.outputNode.GetName())]
-    self.p = subprocess.Popen(cmd, shell=True)
-    logging.info("Starting neural network...")
+    this_Host = self.getIPAddress()
+    if self.incomingHostName == "localhost" or self.incomingHostName == "127.0.0.1" or self.incomingHostName == this_Host:
+      cmd = [str(self.moduleDir + "\Scripts\StartNeuralNet.lnk"),
+             str(self.condaPath),
+             str(self.condaEnvName),
+             str(self.moduleDir + "\Scripts"),
+             str(self.networkType),
+             str(self.networkPath),
+             str(self.networkName),
+             str(self.outputType),
+             str(self.outgoingHostName),
+             str(self.outgoingPort),
+             str(self.incomingHostName),
+             str(self.incomingPort),
+             str(self.outputNode.GetName())]
+      self.p = subprocess.Popen(cmd, shell=True)
+      logging.info("Starting neural network...")
     while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2:
       time.sleep(0.25)
     logging.info("Connected to neural network")
+
+  def getIPAddress(self):
+      hostname = socket.gethostbyname(socket.gethostname())
+      return hostname
 
   def stopNeuralNetwork(self):
     self.outgoingConnectorNode.UnregisterOutgoingMRMLNode(self.inputNode)
