@@ -75,17 +75,18 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow(self.selectRecordingNodeComboBox)
 
 
-    self.datasetSelector = qt.QComboBox()
-    self.datasetSelector.addItems(["Select Dataset"])
-    datasetDirectoryContents = os.listdir(os.path.join(self.moduleDir,os.pardir,"Datasets"))
-    datasetNames = [dir for dir in datasetDirectoryContents if dir.find(".") == -1]
-    self.datasetSelector.addItems(["Create New Dataset"])
-    self.datasetSelector.addItems(datasetNames)
+    self.datasetSelector = ctk.ctkDirectoryButton()
+    self.datasetSelector.directory = os.path.join(self.moduleDir,os.pardir,"Datasets")
     parametersFormLayout.addRow(self.datasetSelector)
 
     self.videoIDComboBox = qt.QComboBox()
     self.videoIDComboBox.addItems(["Select video ID","Create new video ID"])
+    self.onDatasetSelected()
     parametersFormLayout.addRow(self.videoIDComboBox)
+
+    self.imageSubtypeComboBox = qt.QComboBox()
+    self.imageSubtypeComboBox.addItems(["Select image subtype (optional)","Create new image subtype"])
+    parametersFormLayout.addRow(self.imageSubtypeComboBox)
 
     self.fileTypeComboBox = qt.QComboBox()
     self.fileTypeComboBox.addItems([".jpg",".png",".bmp",".tiff"])
@@ -127,9 +128,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.fileTypeComboBox.connect('currentIndexChanged(int)',self.onFileTypeSelected)
     self.inputSegmentationSelector.connect('currentIndexChanged(int)', self.onSegmentationInputSelected)
     self.selectRecordingNodeComboBox.connect("currentIndexChanged(int)",self.onRecordingNodeSelected)
-    self.datasetSelector.connect('currentIndexChanged(int)',self.onDatasetSelected)
+    self.datasetSelector.connect('directorySelected(QString)',self.onDatasetSelected)
     self.startStopCollectingImagesButton.connect('clicked(bool)', self.onStartStopCollectingImagesButton)
     self.videoIDComboBox.connect('currentIndexChanged(int)',self.onVideoIDSelected)
+    self.imageSubtypeComboBox.connect('currentIndexChanged(int)',self.onImageSubtypeSelected)
     self.collectFromSequenceCheckBox.connect('stateChanged(int)',self.onCollectFromSequenceChecked)
     self.problemTypeComboBox.connect('currentIndexChanged(int)',self.onProblemTypeSelected)
 
@@ -344,20 +346,61 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.createNewVideoIDLayout.addLayout(self.createNewVideoIDButtonLayout)
     self.createNewVideoIDFrame.setLayout(self.createNewVideoIDLayout)
 
+  def openCreateNewImageSubtypeWindow(self):
+    self.createNewImageSubtypeWidget = qt.QDialog()
+    self.createNewImageSubtypeWidget.setModal(True)
+    self.createNewImageSubtypeFrame = qt.QFrame(self.createNewImageSubtypeWidget)
+    self.createNewImageSubtypeFrame.setFrameStyle(0x0006)
+    self.createNewImageSubtypeWidget.setWindowTitle('Create New Image Subtype')
+    self.createNewImageSubtypePopupGeometry = qt.QRect()
+    mainWindow = slicer.util.mainWindow()
+    if mainWindow:
+      mainWindowGeometry = mainWindow.geometry
+      self.windowWidth = mainWindow.width * 0.35
+      self.windowHeight = mainWindow.height * 0.35
+      self.createNewImageSubtypePopupGeometry.setWidth(self.windowWidth)
+      self.createNewImageSubtypePopupGeometry.setHeight(self.windowHeight)
+      self.popupPositioned = False
+      self.createNewImageSubtypeWidget.setGeometry(self.createNewImageSubtypePopupGeometry)
+      self.createNewImageSubtypeFrame.setGeometry(self.createNewImageSubtypePopupGeometry)
+      self.createNewImageSubtypeWidget.move(mainWindow.width / 2.0 - self.windowWidth,
+                                     mainWindow.height / 2 - self.windowHeight)
+    self.createNewImageSubtypeLayout = qt.QVBoxLayout()
+    self.createNewImageSubtypeLayout.setContentsMargins(12, 4, 4, 4)
+    self.createNewImageSubtypeLayout.setSpacing(4)
+
+    self.createNewImageSubtypeButtonLayout = qt.QFormLayout()
+    self.createNewImageSubtypeButtonLayout.setContentsMargins(12, 4, 4, 4)
+    self.createNewImageSubtypeButtonLayout.setSpacing(4)
+
+    self.ImageSubtypeNameLineEdit = qt.QLineEdit("Image Subtype Name")
+    self.createNewImageSubtypeButtonLayout.addRow(self.ImageSubtypeNameLineEdit)
+
+    self.createNewImageSubtypeButton = qt.QPushButton("Add Image Subtype")
+    self.createNewImageSubtypeButtonLayout.addRow(self.createNewImageSubtypeButton)
+
+    self.errorLabel = qt.QLabel("")
+    self.createNewImageSubtypeButtonLayout.addRow(self.errorLabel)
+
+    self.createNewImageSubtypeButton.connect('clicked(bool)', self.onNewImageSubtypeAdded)
+
+    self.createNewImageSubtypeLayout.addLayout(self.createNewImageSubtypeButtonLayout)
+    self.createNewImageSubtypeFrame.setLayout(self.createNewImageSubtypeLayout)
+
   def onRecordingNodeSelected(self):
     if self.selectRecordingNodeComboBox.currentText != "Select Image Node":
       self.recordingNode = self.selectRecordingNodeComboBox.currentText
 
   def onDatasetSelected(self):
-    if self.datasetSelector.currentText == "Create New Dataset":
+    if self.datasetSelector.directory == "Create New Dataset":
       try:
         self.createNewDatasetWidget.show()
       except AttributeError:
         self.openCreateNewDatasetWindow()
         self.createNewDatasetWidget.show()
-    elif self.datasetSelector.currentText != "Select Dataset":
-      self.currentDatasetName = self.datasetSelector.currentText
-      self.videoPath = os.path.join(self.moduleDir,os.pardir,"Datasets",self.datasetSelector.currentText)
+    elif self.datasetSelector.directory != "Select Dataset":
+      self.currentDatasetName = os.path.basename(self.datasetSelector.directory)
+      self.videoPath = self.datasetSelector.directory
       self.addVideoIDsToComboBox()
     else:
       for i in range(2, self.videoIDComboBox.count + 1):
@@ -370,6 +413,15 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     videoIDList = os.listdir(self.videoPath)
     self.videoIDList = [dir for dir in videoIDList if dir.rfind(".") == -1] #get only directories
     self.videoIDComboBox.addItems(self.videoIDList)
+
+  def addImageSubtypesToComboBox(self):
+    for i in range(2,self.imageSubtypeComboBox.count + 1):
+      self.imageSubtypeComboBox.removeItem(i)
+    if self.videoIDComboBox.currentText != "Select video ID":
+      subtypePath = os.path.join(self.videoPath,self.videoIDComboBox.currentText)
+      imageSubtypeList = os.listdir(subtypePath)
+      self.imageSubtypeList = [dir for dir in imageSubtypeList if dir.rfind(".") == -1] #get only directories
+      self.imageSubtypeComboBox.addItems(self.imageSubtypeList)
 
   def onNewDatasetAdded(self):
     self.currentDatasetName = self.datasetNameLineEdit.text
@@ -390,7 +442,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
   def onNewVideoIDAdded(self):
     self.currentVideoID = self.videoIDLineEdit.text
     try:
-      videoIDPath = os.path.join(self.videoPath,self.currentVideoID)
+      videoIDPath = os.path.join(self.datasetSelector.directory,self.currentVideoID)
       os.mkdir(videoIDPath)
       self.videoIDComboBox.addItems([self.currentVideoID])
       videoIDIndex = self.videoIDComboBox.findText(self.currentVideoID)
@@ -402,6 +454,35 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.videoIDLineEdit.setText("Video ID")
       self.videoIDErrorLabel.setText("A video with ID " + self.currentVideoID + " already exists")
 
+  def onNewImageSubtypeAdded(self):
+    self.currentImageSubtypeName = self.ImageSubtypeNameLineEdit.text
+    try:
+      imageSubtypePath = os.path.join(self.datasetSelector.directory,self.currentVideoID,self.currentImageSubtypeName)
+      os.mkdir(imageSubtypePath)
+      self.imageSubtypeComboBox.addItems([self.currentImageSubtypeName])
+      imageSubtypeIndex = self.imageSubtypeComboBox.findText(self.currentImageSubtypeName)
+      self.imageSubtypeComboBox.currentIndex = imageSubtypeIndex
+      self.createNewImageSubtypeWidget.hide()
+      self.ImageSubtypeNameLineEdit.setText("Image subtype Name")
+      self.errorLabel.setText("")
+    except WindowsError:
+      self.ImageSubtypeNameLineEdit.setText("Image subtype Name")
+      self.errorLabel.setText("An image subtype with the name " + self.currentImageSubtypeName + " already exists")
+
+  def onImageSubtypeSelected(self):
+    self.currentImageSubtypeName = self.imageSubtypeComboBox.currentText
+    if self.currentImageSubtypeName == "Create new image subtype":
+      try:
+        self.createNewImageSubtypeWidget.show()
+      except AttributeError:
+        self.openCreateNewImageSubtypeWindow()
+        self.createNewImageSubtypeWidget.show()
+    elif self.currentImageSubtypeName != "Select image subtype (optional)":
+      self.logic.setImageSubtype(self.currentImageSubtypeName)
+      self.csvFilePath = os.path.join(self.currentVideoIDFilePath, self.currentImageSubtypeName, self.currentVideoID + "_" + self.currentImageSubtypeName + "_Labels.csv")
+    else:
+      self.logic.setImageSubtype("")
+
   def onVideoIDSelected(self):
     if self.videoIDComboBox.currentText == "Create new video ID":
       try:
@@ -411,20 +492,19 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         self.createNewVideoIDWidget.show()
     elif self.videoIDComboBox.currentText != "Select video ID":
       self.currentVideoID = self.videoIDComboBox.currentText
-      self.currentVideoIDFilePath = os.path.join(self.videoPath,self.currentVideoID)
+      self.currentVideoIDFilePath = os.path.join(self.datasetSelector.directory,self.currentVideoID)
       self.startStopCollectingImagesButton.enabled = True
       self.csvFilePath = os.path.join(self.currentVideoIDFilePath, self.currentVideoID + "_Labels.csv")
-      try:
-        self.imageLabels = pandas.read_csv(self.csvFilePath,index_col = 0)
-        #self.imageLabels.drop("Unnamed: 0",axis=1)
-      except FileNotFoundError:
-        self.imageLabels = pandas.DataFrame(columns = ["FileName","Time Recorded"])
+      self.addImageSubtypesToComboBox()
+
 
   def onProblemTypeSelected(self):
     self.problemType = self.problemTypeComboBox.currentText
     if self.problemType == "Classification":
       if self.collectFromSequenceCheckBox.checked:
-        self.classificationLabellingMethodComboBox.addItems(["Auto from file"])
+        autoFromFilePresent = self.classificationLabellingMethodComboBox.findText("Auto from file")
+        if autoFromFilePresent == -1:
+          self.classificationLabellingMethodComboBox.addItems(["Auto from file"])
         self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.directory, self.autoLabelFileNameLineEdit.text)
       else:
         self.classificationLabellingMethodComboBox.removeItem(self.classificationLabellingMethodComboBox.findText("Auto from file"))
@@ -449,6 +529,11 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
 
   def onStartStopCollectingImagesButton(self):
+    try:
+      self.imageLabels = pandas.read_csv(self.csvFilePath, index_col=0)
+      # self.imageLabels.drop("Unnamed: 0",axis=1)
+    except FileNotFoundError:
+      self.imageLabels = pandas.DataFrame(columns=["FileName", "Time Recorded"])
     if self.startStopCollectingImagesButton.text == "Start Image Collection":
       self.collectingImages = False
       self.startStopCollectingImagesButton.setText("Stop Image Collection")
@@ -577,8 +662,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     else:
       self.recordingVolumeNode.RemoveObserver(self.recordingVolumeNodeObserver)
       self.recordingVolumeNodeObserver = None
-      self.numImagesInFile = len(os.listdir(self.videoIDFilePath))
-      logging.info("Saved " + str(self.numImagesInFile) + " to directory : " + str(self.videoIDFilePath))
+      self.numImagesInFile = len(os.listdir(os.path.dirname(self.labelFilePath)))
+      logging.info("Saved " + str(self.numImagesInFile) + " to directory : " + str(os.path.dirname(self.labelFilePath)))
 
     if self.fromSequence:
       try:
@@ -628,21 +713,26 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
         self.continueRecording = False
     # Get the vtkImageData as an np.array.
     if (not self.fromSequence) or self.continueRecording:
-      allFiles = os.listdir(self.videoIDFilePath)
+      allFiles = os.listdir(os.path.dirname(self.labelFilePath))
       imgFiles = [x for x in allFiles if not "segmentation" in x and not ".csv" in x]
       self.numImagesInFile = len(imgFiles)
       logging.info(self.numImagesInFile)
       imData = self.getVtkImageDataAsOpenCVMat(self.recordingVolumeNode.GetName())
-
-      fileName = self.videoID + "_" + str(self.numImagesInFile).zfill(5) + self.fileType
+      fileName = self.videoID + "_" + self.imageSubtype + "_" + str(self.numImagesInFile).zfill(5) + self.fileType
       if self.fromSequence:
-        dataframeEntry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - recordingTime) <= 0.2)]
-        if dataframeEntry.empty:
-          addingtoexisting = False
-          cv2.imwrite(os.path.join(self.videoIDFilePath,fileName),imData)
+        if not self.imageLabels.empty:
+          dataframeEntry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - recordingTime) <= 0.2)]
+          if not dataframeEntry.empty:
+            addingtoexisting = True
+            entry = dataframeEntry.index[-1]
+          else:
+            addingtoexisting = False
+            imagePath = os.path.dirname(self.labelFilePath)
+            cv2.imwrite(os.path.join(imagePath, fileName), imData)
         else:
-          addingtoexisting = True
-          entry = dataframeEntry.index[-1]
+          addingtoexisting = False
+          imagePath = os.path.dirname(self.labelFilePath)
+          cv2.imwrite(os.path.join(imagePath, fileName), imData)
       if self.labellingMethod == "Unlabelled":
         if self.fromSequence:
           recordingTime = timeLabel.text
@@ -656,7 +746,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           self.labelName = self.getClassificationLabelFromFile()
         elif self.labellingMethod == 'From Segmentation':
           (labelImData, self.labelName) = self.getSegmentationLabel(fileName)
-          cv2.imwrite(os.path.join(self.videoIDFilePath,self.labelName),labelImData)
+          imagePath = os.path.dirname(self.labelFilePath)
+          cv2.imwrite(os.path.join(imagePath,self.labelName),labelImData)
         if self.fromSequence:
           recordingTime = timeLabel.text
           self.lastRecordedTime = float(recordingTime)
@@ -674,6 +765,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       playWidgetButtons = playWidget[0].findChildren('QPushButton')
       playWidgetButtons[2].click()
       self.finishedVideo = True
+
+  def setImageSubtype(self,subtypeName):
+    self.imageSubtype = subtypeName
 
   def getClassificationLabelFromFile(self):
     seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
