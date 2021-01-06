@@ -87,6 +87,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.imageSubtypeComboBox = qt.QComboBox()
     self.imageSubtypeComboBox.addItems(["Select image subtype (optional)","Create new image subtype"])
     parametersFormLayout.addRow(self.imageSubtypeComboBox)
+    self.logic.setImageSubtype("")
 
     self.fileTypeComboBox = qt.QComboBox()
     self.fileTypeComboBox.addItems([".jpg",".png",".bmp",".tiff"])
@@ -125,6 +126,8 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.infoLabel = qt.QLabel("")
     parametersFormLayout.addRow(self.infoLabel)
     # connections
+    self.nodeAddedToSceneObserver = slicer.mrmlScene.AddObserver(slicer.mrmlScene.NodeAddedEvent,self.addNodesToRecordingCombobox)
+    self.nodeRemovedFromSceneObserver = slicer.mrmlScene.AddObserver(slicer.mrmlScene.NodeRemovedEvent, self.removeNodesFromRecordingCombobox)
     self.fileTypeComboBox.connect('currentIndexChanged(int)',self.onFileTypeSelected)
     self.inputSegmentationSelector.connect('currentIndexChanged(int)', self.onSegmentationInputSelected)
     self.selectRecordingNodeComboBox.connect("currentIndexChanged(int)",self.onRecordingNodeSelected)
@@ -168,6 +171,26 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.webcamConnectorNode.Start()
     self.setupWebcamResliceDriver()
 
+  def addNodesToRecordingCombobox(self,caller,eventID):
+    self.recordingNodes = slicer.util.getNodesByClass("vtkMRMLVolumeNode")
+    recordingNodeNames = []
+    for recordingNode in self.recordingNodes:
+      nodeName = recordingNode.GetName()
+      if self.selectRecordingNodeComboBox.findText(nodeName) == -1:
+        recordingNodeNames.append(nodeName)
+    self.selectRecordingNodeComboBox.addItems(recordingNodeNames)
+
+  def removeNodesFromRecordingCombobox(self,caller,eventID):
+    self.recordingNodes = slicer.util.getNodesByClass("vtkMRMLVolumeNode")
+    recordingNodeNames = []
+    for recordingNode in self.recordingNodes:
+      nodeName = recordingNode.GetName()
+      if self.selectRecordingNodeComboBox.findText(nodeName) == -1:
+        recordingNodeNames.append(nodeName)
+    for i in range(1,self.selectRecordingNodeComboBox.count):
+      if not self.selectRecordingNodeComboBox.itemText(i) in recordingNodeNames:
+        self.selectRecordingNodeComboBox.removeItem(i)
+
   def classificationLayout(self):
     classificationFormLayout = qt.QFormLayout(self.classificationFrame)
     self.classificationLabellingMethodComboBox = qt.QComboBox()
@@ -183,19 +206,20 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     classificationFormLayout.addWidget(self.classificationLabelNameLineEdit)
     self.classificationLabelNameLineEdit.visible = False
 
-    self.autoLabelFilePathSelector = ctk.ctkDirectoryButton()
+    self.autoLabelFilePathSelector = ctk.ctkPathLineEdit()
+    self.autoLabelFilePathSelector.showBrowseButton = True
     self.autoLabelPath = os.path.join(self.moduleDir,os.pardir,"Datasets")
-    self.autoLabelFilePathSelector.directory = self.autoLabelPath
+    self.autoLabelFilePathSelector.setCurrentPath(self.autoLabelPath)
     classificationFormLayout.addWidget(self.autoLabelFilePathSelector)
     self.autoLabelFilePathSelector.visible = False
 
-    self.autoLabelFileNameLineEdit = qt.QLineEdit("Auto_Labels.csv")
+    '''self.autoLabelFileNameLineEdit = qt.QLineEdit("Auto_Labels.csv")
     classificationFormLayout.addWidget(self.autoLabelFileNameLineEdit)
-    self.autoLabelFileNameLineEdit.visible=False
+    self.autoLabelFileNameLineEdit.visible=False'''
 
     self.classificationLabellingMethodComboBox.connect('currentIndexChanged(int)', self.onLabellingMethodSelected)
     self.autoLabelFilePathSelector.connect('currentPathChanged(QString)',self.onAutoLabelFileChanged)
-    self.autoLabelFileNameLineEdit.connect('textChanged(QString)', self.onAutoLabelFileChanged)
+    #self.autoLabelFileNameLineEdit.connect('textChanged(QString)', self.onAutoLabelFileChanged)
 
   def detectionLayout(self):
     self.detectionFrame = qt.QFrame()
@@ -505,7 +529,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         autoFromFilePresent = self.classificationLabellingMethodComboBox.findText("Auto from file")
         if autoFromFilePresent == -1:
           self.classificationLabellingMethodComboBox.addItems(["Auto from file"])
-        self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.directory, self.autoLabelFileNameLineEdit.text)
+        self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.currentPath)
       else:
         self.classificationLabellingMethodComboBox.removeItem(self.classificationLabellingMethodComboBox.findText("Auto from file"))
       self.classificationFrame.visible = True
@@ -521,7 +545,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.segmentationFrame.visible = True
 
   def onAutoLabelFileChanged(self):
-    self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.directory,self.autoLabelFileNameLineEdit.text)
+    self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.currentPath)
     return
 
   def onSelect(self):
@@ -561,17 +585,17 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         self.classificationLabelNameLineEdit.visible = True
         self.classificationLabelTypeLineEdit.visible = True
         self.autoLabelFilePathSelector.visible = False
-        self.autoLabelFileNameLineEdit.visible = False
+        #self.autoLabelFileNameLineEdit.visible = False
       elif self.labellingMethod == "Auto from file":
         self.classificationLabelNameLineEdit.visible = False
         self.classificationLabelTypeLineEdit.visible = False
         self.autoLabelFilePathSelector.visible = True
-        self.autoLabelFileNameLineEdit.visible = True
+        #self.autoLabelFileNameLineEdit.visible = True
       else:
         self.classificationLabelNameLineEdit.visible = False
         self.classificationLabelTypeLineEdit.visible = False
         self.autoLabelFilePathSelector.visible = False
-        self.autoLabelFileNameLineEdit.visible = False
+        #self.autoLabelFileNameLineEdit.visible = False
     elif self.problemType == "Segmentation":
       self.labellingMethod = self.segmentationLabellingMethodComboBox.currentText
       if self.labellingMethod == "Unlabelled":
