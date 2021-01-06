@@ -23,7 +23,6 @@ def main():
         sys.path.append(os.path.join(FLAGS.model_directory,os.pardir))
         importStatement = "from " + networkModuleName + " import " + networkModuleName + " as NeuralNetwork"
         exec(importStatement,globals())
-        print('got here')
     except ModuleNotFoundError:
         logging.info("Could not find model folder " + str(FLAGS.model_name))
         errorMessage = "Could not find model folder " + str(FLAGS.model_name)

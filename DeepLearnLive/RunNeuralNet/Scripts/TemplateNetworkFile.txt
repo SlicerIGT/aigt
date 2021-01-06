@@ -32,8 +32,8 @@ class MODELNAME():
         modelFolder = modelFolder.replace("'","")
         with open(os.path.join(modelFolder, structureFileName), "r") as modelStructureFile:
             JSONModel = modelStructureFile.read()
-        model = model_from_json(JSONModel)
-        model.load_weights(os.path.join(modelFolder, weightsFileName))
+        self.cnnModel = model_from_json(JSONModel)
+        self.cnnModel.load_weights(os.path.join(modelFolder, weightsFileName))
         return model
 
     def predict(self,image):
