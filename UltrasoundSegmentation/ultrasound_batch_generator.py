@@ -131,4 +131,5 @@ class UltrasoundSegmentationBatchGenerator(tf.keras.utils.Sequence):
         y_out = np.clip(y_zoom, 0.0, 1.0)
 
         y_onehot = tf.keras.utils.to_categorical(y_out, self.n_classes)
+
         return x_out, y_onehot

@@ -12,7 +12,7 @@ from tensorflow.keras.regularizers import l1, l2
 
 
 def segmentation_unet(input_size, num_classes, filter_multiplier=10, regularization_rate=0.):
-    input_ = Input((input_size, input_size, 1))
+    input_ = Input((input_size, input_size,1))
     skips = []
     output = input_
 
