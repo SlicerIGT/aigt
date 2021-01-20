@@ -4,9 +4,27 @@ import logging
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-import girder_client
-import pandas
-from sklearn.model_selection import train_test_split,KFold
+#import girder_client
+#import pandas
+#from sklearn.model_selection import train_test_split,KFold
+
+try:
+  import pandas
+except ModuleNotFoundError:
+  slicer.util.pip_install("pandas")
+  import pandas
+
+try:
+  import girder_client
+except ModuleNotFoundError:
+  slicer.util.pip_install("girder_client")
+  import girder_client
+
+try:
+  from sklearn.model_selection import train_test_split, KFold
+except ModuleNotFoundError:
+  slicer.util.pip_install("scikit-learn")
+  from sklearn.model_selection import train_test_split, KFold
 
 #
 # TrainNeuralNet
@@ -516,6 +534,8 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         csvFileID = file["_id"]
       self.girderClient.downloadItem(csvFileID,tempFilePath)
       localcsvFilePath = os.path.join(tempFilePath,labelFileName)
+    else:
+      localcsvFilePath = os.path.join(self.datasetDirectorySelector.directory,self.selectedVideoIDNames[0],labelFileName)
     labelFile = pandas.read_csv(localcsvFilePath)
     headings = labelFile.columns
     self.imageLabels = []

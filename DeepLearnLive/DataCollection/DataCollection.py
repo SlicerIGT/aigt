@@ -5,8 +5,14 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
 import subprocess
-import pandas
+
 import cv2
+
+try:
+  import pandas
+except ModuleNotFoundError:
+  slicer.util.pip_install("pandas")
+  import pandas
 
 #
 # DataCollection
