@@ -664,10 +664,6 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.labelType = labelType
     self.imageLabels = imageLabels
     self.autoLabelFilePath = autolabelFilePath
-    if (not self.labelType in self.imageLabels.columns) and self.labelType != None and not self.imageLabels.empty:
-      self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
-    '''if "Time Recorded" in self.imageLabels.columns:
-      self.imageLabels = self.imageLabels.astype({'Time Recorded':'float64'})'''
     self.labelFilePath = labelFilePath
     self.labellingMethod = labellingMethod
     self.lastRecordedTime = 0.0
@@ -677,6 +673,15 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     if self.labellingMethod == 'Auto from file':
       self.autoLabels = pandas.read_csv(self.autoLabelFilePath)
       self.labelType = self.autoLabels.columns[0]
+    if (not self.labelType in self.imageLabels.columns) and self.labelType != None and not self.imageLabels.empty:
+      if self.labellingMethod == "Auto from file":
+        self.imageLabels = self.labelExistingEntries(self.imageLabels,self.autoLabels)
+      elif not "Time Recorded" in self.imageLabels.columns:
+        self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
+      else:
+        logging.info("Cannot relabel images recorded from live sequence")
+    '''if "Time Recorded" in self.imageLabels.columns:
+      self.imageLabels = self.imageLabels.astype({'Time Recorded':'float64'})'''
 
     if self.collectingImages == False:
       if self.recordingVolumeNode.GetClassName() == "vtkMRMLStreamingVolumeNode":
@@ -795,6 +800,14 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       playWidgetButtons = playWidget[0].findChildren('QPushButton')
       playWidgetButtons[2].click()
       self.finishedVideo = True
+
+  def labelExistingEntries(self,imageLabels,autolabels):
+    imageLabels[self.labelType] = ['None' for i in range(len(imageLabels.index))]
+    for i in range(0,len(autolabels.index)):
+      entriesToLabel = imageLabels.loc[(imageLabels["Time Recorded"] >= autolabels["Start"][i]) & (imageLabels["Time Recorded"] < autolabels["End"][i])]
+      for j in entriesToLabel.index:
+        imageLabels[self.labelType][j] = autolabels[self.labelType][i]
+    return imageLabels
 
   def setImageSubtype(self,subtypeName):
     self.imageSubtype = subtypeName
