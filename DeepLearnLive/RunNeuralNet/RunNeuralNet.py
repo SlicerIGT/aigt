@@ -332,7 +332,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       self.p = subprocess.Popen(cmd, shell=True)
       logging.info("Starting neural network...")
     startTime = time.time()
-    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<30:
+    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<45:
       time.sleep(0.25)
     if self.incomingConnectorNode.GetState() !=2:
       logging.info("Failed to connect to neural network")
@@ -427,9 +427,12 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.incomingConnectorNode.RegisterIncomingMRMLNode(self.outputNode)
     self.outgoingConnectorNode.RegisterOutgoingMRMLNode(self.inputNode)
 
-  def createNewModel(self,newModelName):
+  def createNewModel(self,newModelName,newModelLocation = None):
     templateModelFilePath = os.path.join(self.moduleDir,"Scripts","TemplateNetworkFile.txt")
-    newModelPath = os.path.join(self.moduleDir,os.pardir,"Networks",newModelName)
+    if newModelLocation == None:
+      newModelPath = os.path.join(self.moduleDir,os.pardir,"Networks",newModelName)
+    else:
+      newModelPath = os.path.join(newModelLocation,newModelName)
     templateFile = open(templateModelFilePath,'r')
     templateFileText = templateFile.read()
     templateFile.close()

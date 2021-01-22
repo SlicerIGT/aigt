@@ -23,34 +23,36 @@ class MODELNAME():
         #Replace the following lines with all attributes needed to run the network
         # must include a variable to store all models that are used
         self.cnnModel = None
-    
-    
+        self.labels = None
+
     def loadModel(self,modelFolder,modelName):
         #Replace the following lines with whatever needs to be done to load the model or models
-        structureFileName = modelName + '.json'
-        weightsFileName = modelName + '.h5'
+        structureFileName = 'mobileNetv2.json'
+        weightsFileName = 'mobileNetv2.h5'
         modelFolder = modelFolder.replace("'","")
         with open(os.path.join(modelFolder, structureFileName), "r") as modelStructureFile:
             JSONModel = modelStructureFile.read()
         self.cnnModel = model_from_json(JSONModel)
         self.cnnModel.load_weights(os.path.join(modelFolder, weightsFileName))
-        return model
+        with open(os.path.join(modelFolder,"labels.txt"),'r') as f:
+            self.labels = f.read()
+        self.labels = self.labels.replace("\n","")
+        self.labels = self.labels.split(sep=",")
 
     def predict(self,image):
         #Replace the following lines with whatever needs to be done to use the model to predict on new data
-        # in this case the image needed to be recoloured and resized and our prediction returns the tool name and the 
+        # in this case the image needed to be recoloured and resized and our prediction returns the tool name and the
         # softmax output
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        labels = ['anesthetic', 'dilator', 'catheter', 'guidewire', 'guidewire_casing', 'nothing', 'scalpel', 'syringe']
         resized = cv2.resize(image, (224, 224))
         resized = numpy.expand_dims(resized, axis=0)
         toolClassification = self.cnnModel.predict(numpy.array(resized))
         labelIndex = numpy.argmax(toolClassification)
-        label = labels[labelIndex]
+        label = self.labels[labelIndex]
         networkOutput = str(label) + str(toolClassification)
         return networkOutput
-        
-    def createModel(imageSize,num_classes):
+
+    def createModel(self,imageSize,num_classes):
         #Replace the following lines with your model definition
         # in this example we create a MobileNetV2 model and initialize the model with weights from training on ImageNet
         model = tensorflow.keras.models.Sequential()
@@ -59,3 +61,11 @@ class MODELNAME():
         model.add(layers.Dense(512,activation='relu'))
         model.add(layers.Dense(num_classes,activation='softmax'))
         return model
+
+    def saveModel(self,trainedModel,saveLocation):
+        JSONmodel = trainedModel.to_json()
+        structureFileName = 'mobileNetv2.json'
+        weightsFileName = 'mobileNetv2.h5'
+        with open(os.path.join(saveLocation,structureFileName),"w") as modelStructureFile:
+            modelStructureFile.write(JSONmodel)
+        trainedModel.save_weights(os.path.join(saveLocation,weightsFileName))
