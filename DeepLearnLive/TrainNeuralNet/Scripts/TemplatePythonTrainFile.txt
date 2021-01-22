@@ -15,11 +15,11 @@ import sklearn
 import sklearn.metrics
 import cv2
 from matplotlib import pyplot as plt
-import Tester
+import MODELNAME
 
 FLAGS = None
 
-class Train_Tester:
+class Train_MODELNAME:
 
     #Loads the data from the specified CSV file
     # fold: The fold number given in the CSV file (should be an int)
@@ -66,7 +66,7 @@ class Train_Tester:
             LabelNames = self.dataCSVFile.columns[5:]
             for labelName in LabelNames:
                 imageLabels[labelName] = []
-            for i in range(0,len(entries.index)):
+            for i in entries.index:
                 filePath = entries["Folder"][i]
                 fileName = entries["FileName"][i]
                 image = cv2.imread(os.path.join(filePath,fileName))
@@ -145,7 +145,7 @@ class Train_Tester:
         self.metrics = FLAGS.metrics.split(",")
         self.numFolds = self.dataCSVFile["Fold"].max() + 1
         self.gClient = None
-        network = Tester.Tester()
+        network = MODELNAME.MODELNAME()
         for fold in range(0,self.numFolds):
             foldDir = self.saveLocation+"_Fold_"+str(fold)
             os.mkdir(foldDir)
@@ -226,5 +226,5 @@ if __name__ == '__main__':
       help='Metrics used to evaluate model.'
   )
 FLAGS, unparsed = parser.parse_known_args()
-tm = Train_Tester()
+tm = Train_MODELNAME()
 tm.train()
