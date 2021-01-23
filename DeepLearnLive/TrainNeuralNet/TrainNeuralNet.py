@@ -25,6 +25,12 @@ except ModuleNotFoundError:
   slicer.util.pip_install("scikit-learn")
   from sklearn.model_selection import train_test_split, KFold
 
+try:
+  import tensorflow
+except ModuleNotFoundError:
+  slicer.util.pip_install("tensorflow-gpu==2.1.0")
+  import tensorflow
+
 #
 # TrainNeuralNet
 #
@@ -93,6 +99,8 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.datasetDirectoryPath = os.path.join(self.moduleDir,os.pardir,"Datasets")
     self.datasetDirectorySelector.directory = self.datasetDirectoryPath
     layout.addRow(self.datasetDirectorySelector)
+    if not os.path.isdir(self.datasetDirectoryPath):
+      os.mkdir(self.datasetDirectoryPath)
 
     self.girderClientLineEdit = qt.QLineEdit()
     self.girderClientLineEdit.setText("https://pocus.cs.queensu.ca/api/v1")
@@ -721,16 +729,6 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.logic.createTrainingScript(self.moduleDir)
 
   def setupTrainNetworkLayout(self,layout):
-    self.condaDirectoryPathSelector = ctk.ctkDirectoryButton()
-    self.condaDirectoryPath = self.getCondaPath()
-    self.condaDirectoryPathSelector.directory = self.condaDirectoryPath
-    layout.addRow("Conda executable location: ",self.condaDirectoryPathSelector)
-    self.logic.setCondaDirectory(self.condaDirectoryPath)
-
-    self.environmentNameLineEdit = qt.QLineEdit("EnvironmentName")
-    self.environmentName = "kerasGPUEnv"
-    layout.addRow("Conda enviroment name: ",self.environmentNameLineEdit)
-    self.logic.setCondaEnvironmentName(self.environmentName)
 
     self.dataCSVSelector = ctk.ctkPathLineEdit()
     self.dataCSVSelector.showBrowseButton = True
@@ -756,8 +754,6 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.trainNameSelected = False
     self.dataCSVSelected  = False
 
-    self.condaDirectoryPathSelector.connect('directorySelected(QString)',self.condaPathChanged)
-    self.environmentNameLineEdit.connect('textChanged(QString)',self.onEnvironmentNameChanged)
     self.dataCSVSelector.connect('currentPathChanged(QString)',self.ondataCSVSelected)
     self.trainingScriptSelector.connect('currentPathChanged(QString)',self.onTrainingScriptSelected)
     self.trainingRunNameLineEdit.connect('textChanged(QString)',self.onTrainingRunNameChanged)
@@ -826,13 +822,11 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       self.openWarningWidget(self.trainingRunName)
       self.warningWidget.show()
     else:
-      cmd = [str(self.moduleDir + "\Scripts\TrainNeuralNet.lnk"),
-             str(self.condaPath),
-             str(self.condaEnvName),
-             str(self.dataCSV),
-             str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName)),
-             str(self.trainingScriptPath)]
-      self.p = subprocess.Popen(cmd, shell=True)
+      os.system('cmd.exe /C "python '+
+                str(self.trainingScriptPath)+
+                ' --save_location='+str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName))
+                +' --data_csv_file='+str(self.dataCSV)+'"')
+      logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)))
 
   def openWarningWidget(self,trainingRunName):
     self.warningWidget = qt.QDialog()
@@ -858,13 +852,11 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       for file in os.listdir(os.path.join(baseDir,dir)):
         os.remove(os.path.join(baseDir,dir,file))
       os.removedirs(os.path.join(baseDir,dir))
-    cmd = [str(self.moduleDir + "\Scripts\TrainNeuralNet.lnk"),
-           str(self.condaPath),
-           str(self.condaEnvName),
-           str(self.dataCSV),
-           str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)),
-           str(self.trainingScriptPath)]
-    self.p = subprocess.Popen(cmd, shell=True)
+    os.system('cmd.exe /C "python ' +
+              str(self.trainingScriptPath) +
+              ' --save_location=' + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName))
+              + ' --data_csv_file=' + str(self.dataCSV) + '"')
+    logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName)))
 
   def cancelOverwrite(self):
     self.warningWidget.hide()

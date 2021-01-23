@@ -10,6 +10,12 @@ import cv2
 from pathlib import Path
 import time
 import socket
+
+try:
+  import pyigtl
+except ModuleNotFoundError:
+  slicer.util.pip_install("pyigtl")
+  import pyigtl
 #
 # RunNeuralNet
 #
@@ -129,7 +135,7 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.outgoinghostnameLabel = qt.QLabel()
     self.outgoinghostnameLabel.setText("Outgoing Hostname: ")
     self.plusServerOutgoingPortLineEdit = qt.QLineEdit()
-    self.plusServerOutgoingPortLineEdit.setText("18945")
+    self.plusServerOutgoingPortLineEdit.setText("18946")
     self.outgoingportLabel = qt.QLabel()
     self.outgoingportLabel.setText("Port: ")
     outgoinghbox = qt.QHBoxLayout()
@@ -144,7 +150,7 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.networkRunning = False
     parametersFormLayout.addRow(self.runNeuralNetworkButton)
 
-    condaSettingsCollapsibleButton = ctk.ctkCollapsibleButton()
+    '''condaSettingsCollapsibleButton = ctk.ctkCollapsibleButton()
     condaSettingsCollapsibleButton.text = "Conda settings"
     parametersFormLayout.addRow(condaSettingsCollapsibleButton)
     condaSettingsLayout = qt.QFormLayout(condaSettingsCollapsibleButton)
@@ -157,7 +163,7 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
 
     self.environmentNameLineEdit = qt.QLineEdit("EnvironmentName")
     self.environmentName = "kerasGPUEnv"
-    condaSettingsLayout.addRow(self.environmentNameLineEdit)
+    condaSettingsLayout.addRow(self.environmentNameLineEdit)'''
 
     createNewModelCollapsibleButton = ctk.ctkCollapsibleButton()
     createNewModelCollapsibleButton.text = "Create New Model"
@@ -175,8 +181,8 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
 
 
     self.modelDirectoryFilePathSelector.connect('directorySelected(QString)',self.onNetworkDirectorySelected)
-    self.condaDirectoryPathSelector.connect('directorySelected(QString)',self.onCondaDirectorySelected)
-    self.environmentNameLineEdit.connect('textChanged(QString)',self.onCondaEnvironmentNameChanged)
+    #self.condaDirectoryPathSelector.connect('directorySelected(QString)',self.onCondaDirectorySelected)
+    #self.environmentNameLineEdit.connect('textChanged(QString)',self.onCondaEnvironmentNameChanged)
     self.networkTypeSelector.connect('currentIndexChanged(int)',self.onNetworkTypeSelected)
     self.modelSelector.connect('currentIndexChanged(int)',self.onModelSelected)
     self.outputTypeSelector.connect('currentIndexChanged(int)',self.onOutputTypeSelected)
@@ -247,8 +253,8 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.runNeuralNetworkButton.enabled = self.inputNodeSelector.currentNode() and self.outputNodeSelector.currentNode() and self.outputType!= "Select network output type"
 
   def onStartNetworkClicked(self):
-    self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
-    self.logic.setCondaEnvironmentName(self.environmentName)
+    #self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
+    #self.logic.setCondaEnvironmentName(self.environmentName)
     self.logic.setInputNode(self.inputNodeSelector.currentNode())
     self.logic.setOutputNode(self.outputNodeSelector.currentNode())
     outgoingHostName = self.plusServerOutgoingHostNameLineEdit.text
@@ -316,7 +322,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.outgoingConnectorNode.Start()
     this_Host = self.getIPAddress()
     if self.incomingHostName == "localhost" or self.incomingHostName == "127.0.0.1" or self.incomingHostName == this_Host:
-      cmd = [str(self.moduleDir + "\Scripts\StartNeuralNet.lnk"),
+      '''cmd = [str(self.moduleDir + "\Scripts\StartNeuralNet.lnk"),
              str(self.condaPath),
              str(self.condaEnvName),
              str(self.moduleDir + "\Scripts"),
@@ -329,7 +335,23 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
              str(self.incomingHostName),
              str(self.incomingPort),
              str(self.outputNode.GetName())]
-      self.p = subprocess.Popen(cmd, shell=True)
+      self.p = subprocess.Popen(cmd, shell=True)'''
+      cmd = ['cmd.exe','/C','python',
+             str(os.path.join(self.moduleDir,"Scripts","kerasNeuralNetwork.py")),
+            '--network_module_name='+str(self.networkType),
+            '--model_name='+str(self.networkName),
+            '--model_directory='+str(self.networkPath),
+            '--output_type='+str(self.outputType),
+            '--incoming_host='+str(self.outgoingHostName),
+            '--incoming_port='+str(self.outgoingPort),
+            '--outgoing_host='+str(self.incomingHostName),
+            '--outgoing_port='+str(self.incomingPort),
+            '--device_name='+str(self.outputNode.GetName())]
+      strCMD = ''
+      for i in range(0,len(cmd)):
+        strCMD = strCMD +' '+ cmd[i]
+      #os.system(strCMD)
+      subprocess.Popen(cmd)
       logging.info("Starting neural network...")
     startTime = time.time()
     while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<45:
