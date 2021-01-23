@@ -125,6 +125,7 @@ class Train_MODELNAME:
             f.writelines(LinesToWrite)
 
     def saveTrainingPlot(self,saveLocation,history,metric):
+        fig = plt.figure()
         plt.plot([x for x in range(self.numEpochs)], history[metric], 'bo', label='Training '+metric)
         plt.plot([x for x in range(self.numEpochs)], history["val_" + metric], 'b', label='Validation '+metric)
         plt.title('Training and Validation ' + metric)
