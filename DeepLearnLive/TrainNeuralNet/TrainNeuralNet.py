@@ -26,9 +26,15 @@ except ModuleNotFoundError:
   from sklearn.model_selection import train_test_split, KFold
 
 try:
+  import matplotlib
+except ModuleNotFoundError:
+  slicer.util.pip_install("matplotlib")
+  import matplotlib
+
+try:
   import tensorflow
 except ModuleNotFoundError:
-  slicer.util.pip_install("tensorflow-gpu==2.1.0")
+  slicer.util.pip_install("tensorflow-gpu")
   import tensorflow
 
 #
