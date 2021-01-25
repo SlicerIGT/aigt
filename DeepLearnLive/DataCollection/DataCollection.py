@@ -422,19 +422,12 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.recordingNode = self.selectRecordingNodeComboBox.currentText
 
   def onDatasetSelected(self):
-    if self.datasetSelector.directory == "Create New Dataset":
-      try:
-        self.createNewDatasetWidget.show()
-      except AttributeError:
-        self.openCreateNewDatasetWindow()
-        self.createNewDatasetWidget.show()
-    elif self.datasetSelector.directory != "Select Dataset":
+      for i in range(self.videoIDComboBox.count,2,-1):
+        self.videoIDComboBox.removeItem(i)
       self.currentDatasetName = os.path.basename(self.datasetSelector.directory)
       self.videoPath = self.datasetSelector.directory
       self.addVideoIDsToComboBox()
-    else:
-      for i in range(2, self.videoIDComboBox.count + 1):
-        self.videoIDComboBox.removeItem(i)
+
 
 
   def addVideoIDsToComboBox(self):
@@ -783,6 +776,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           (labelImData, self.labelName) = self.getSegmentationLabel(fileName)
           imagePath = os.path.dirname(self.labelFilePath)
           cv2.imwrite(os.path.join(imagePath,self.labelName),labelImData)
+        else:
+          imagePath = os.path.dirname(self.labelFilePath)
+          cv2.imwrite(os.path.join(imagePath, fileName), imData)
         if self.fromSequence:
           recordingTime = timeLabel.text
           self.lastRecordedTime = float(recordingTime)
