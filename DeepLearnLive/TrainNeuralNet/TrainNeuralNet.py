@@ -25,6 +25,7 @@ except ModuleNotFoundError:
   slicer.util.pip_install("scikit-learn")
   from sklearn.model_selection import train_test_split, KFold
 
+
 try:
   import matplotlib
 except ModuleNotFoundError:
@@ -33,9 +34,17 @@ except ModuleNotFoundError:
 
 try:
   import tensorflow
+  if tensorflow.__version__ != "2.1.0":
+    try:
+      slicer.util.pip_uninstall('tensorflow-gpu')
+    except subprocess.CalledProcessError:
+      slicer.util.pip_install("tensorflow-gpu==2.1.0")
 except ModuleNotFoundError:
-  slicer.util.pip_install("tensorflow")
-  import tensorflow
+  slicer.util.pip_uninstall('tensorflow-gpu')
+  slicer.util.pip_install("tensorflow-gpu==2.1.0")
+  #import tensorflow
+  pass
+
 
 #
 # TrainNeuralNet
@@ -828,7 +837,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       self.openWarningWidget(self.trainingRunName)
       self.warningWidget.show()
     else:
-      os.system('cmd.exe /C "python '+
+      os.system('cmd.exe /K "python '+
                 str(self.trainingScriptPath)+
                 ' --save_location='+str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName))
                 +' --data_csv_file='+str(self.dataCSV)+'"')
