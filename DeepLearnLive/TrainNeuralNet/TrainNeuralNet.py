@@ -34,7 +34,7 @@ except ModuleNotFoundError:
 try:
   import tensorflow
 except ModuleNotFoundError:
-  slicer.util.pip_install("tensorflow-gpu")
+  slicer.util.pip_install("tensorflow")
   import tensorflow
 
 #
