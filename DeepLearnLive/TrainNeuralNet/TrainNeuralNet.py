@@ -40,10 +40,16 @@ try:
     except subprocess.CalledProcessError:
       slicer.util.pip_install("tensorflow-gpu==2.1.0")
 except ModuleNotFoundError:
-  slicer.util.pip_uninstall('tensorflow-gpu')
-  slicer.util.pip_install("tensorflow-gpu==2.1.0")
+  try:
+    slicer.util.pip_uninstall('tensorflow-gpu')
+    slicer.util.pip_install("tensorflow-gpu==2.1.0")
+  except subprocess.CalledProcessError:
+    try:
+      slicer.util.pip_install("tensorflow-gpu==2.1.0")
+    except subprocess.CalledProcessError:
+      import tensorflow
   #import tensorflow
-  pass
+  #pass
 
 
 #
@@ -837,7 +843,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       self.openWarningWidget(self.trainingRunName)
       self.warningWidget.show()
     else:
-      os.system('cmd.exe /K "python '+
+      os.system('cmd.exe /C "python '+
                 str(self.trainingScriptPath)+
                 ' --save_location='+str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName))
                 +' --data_csv_file='+str(self.dataCSV)+'"')

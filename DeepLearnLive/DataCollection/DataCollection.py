@@ -6,13 +6,18 @@ from slicer.ScriptedLoadableModule import *
 import logging
 import subprocess
 
-import cv2
+
 
 try:
   import pandas
 except ModuleNotFoundError:
   slicer.util.pip_install("pandas")
   import pandas
+
+try:
+  import cv2
+except ModuleNotFoundError:
+  pass
 
 #
 # DataCollection
