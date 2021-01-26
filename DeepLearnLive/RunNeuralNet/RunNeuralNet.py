@@ -5,8 +5,6 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
 import subprocess
-import pandas
-import cv2
 from pathlib import Path
 import time
 import socket
@@ -16,6 +14,17 @@ try:
 except ModuleNotFoundError:
   slicer.util.pip_install("pyigtl")
   import pyigtl
+
+try:
+  import pandas
+except ModuleNotFoundError:
+  slicer.util.pip_install('pandas')
+  import pandas
+
+try:
+  import cv2
+except ModuleNotFoundError:
+  pass
 #
 # RunNeuralNet
 #
