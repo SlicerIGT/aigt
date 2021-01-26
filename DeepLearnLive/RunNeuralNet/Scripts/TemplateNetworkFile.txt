@@ -36,8 +36,7 @@ class MODELNAME():
         self.cnnModel.load_weights(os.path.join(modelFolder, weightsFileName))
         with open(os.path.join(modelFolder,"labels.txt"),'r') as f:
             self.labels = f.read()
-        self.labels = self.labels.replace("\n","")
-        self.labels = self.labels.split(sep=",")
+        self.labels = self.labels.split(sep="\n")
 
     def predict(self,image):
         #Replace the following lines with whatever needs to be done to use the model to predict on new data

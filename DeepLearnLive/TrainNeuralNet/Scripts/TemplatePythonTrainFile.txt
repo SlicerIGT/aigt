@@ -80,7 +80,7 @@ class Train_MODELNAME:
     def convertTextToNumericLabels(self,textLabels,labelValues):
         numericLabels =[]
         for i in range(len(textLabels)):
-            label = numpy.zeros(len(labelValues)+1)
+            label = numpy.zeros(len(labelValues))
             labelIndex = numpy.where(labelValues == textLabels[i])
             label[labelIndex] = 1
             numericLabels.append(label)
@@ -150,7 +150,7 @@ class Train_MODELNAME:
         for fold in range(0,self.numFolds):
             foldDir = self.saveLocation+"_Fold_"+str(fold)
             os.mkdir(foldDir)
-            labelName = "Task" #This should be the label that will be used to train the network
+            labelName = self.dataCSVFile.columns[-1] #This should be the label that will be used to train the network
 
             trainImages,trainLabels = self.loadData(fold,"Train")
             valImages,valLabels = self.loadData(fold,"Validation")
@@ -163,7 +163,7 @@ class Train_MODELNAME:
             numericValLabels = self.convertTextToNumericLabels(valLabels[labelName], labelValues)
             numericTestLabels = self.convertTextToNumericLabels(testLabels[labelName], labelValues)
 
-            model = network.createModel((224,224,3),num_classes=len(labelValues) + 1)
+            model = network.createModel((224,224,3),num_classes=len(labelValues))
             model.compile(optimizer = self.optimizer, loss = self.loss_Function, metrics = self.metrics)
             history = model.fit(x=trainImages,
                                 y=numericTrainLabels,
