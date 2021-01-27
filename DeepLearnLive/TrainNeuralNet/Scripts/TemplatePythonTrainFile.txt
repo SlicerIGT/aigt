@@ -45,7 +45,8 @@ class Train_MODELNAME:
             # tempFileDir is a folder in which to temporarily store the files downloaded from Girder
             # by default the temporary folder is created in the current working directory, but this can
             # be modified as necessary
-            tempFileDir = os.path.join(os.getcwd(),"temp")
+            username = os.environ['username']
+            tempFileDir = os.path.join('C:/Users/',username,'Documents/temp')
             if not os.path.isdir(tempFileDir):
                 os.mkdir(tempFileDir)
             for i in entries.index:

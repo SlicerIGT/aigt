@@ -48,6 +48,7 @@ except ModuleNotFoundError:
       slicer.util.pip_install("tensorflow-gpu==2.1.0")
     except subprocess.CalledProcessError:
       import tensorflow
+
   #import tensorflow
   #pass
 
@@ -451,7 +452,7 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
           self.selectedVideoIDNames.append(folder["name"])
           self.selectedVideoIDgirderIDs.append(folder["_id"])
       else:
-        self.videoIDNames = os.listdir(self.datasetDirectorySelector.directory)
+        self.videoIDNames = [x for x in os.listdir(self.datasetDirectorySelector.directory) if not '.' in x]
         self.selectedVideoIDNames = self.videoIDNames
       self.addImageLabelsToComboBox()
     elif self.videoIDSelector.currentText == "Manually select video IDs":
@@ -750,6 +751,16 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.logic.createTrainingScript(self.moduleDir)
 
   def setupTrainNetworkLayout(self,layout):
+    self.condaDirectoryPathSelector = ctk.ctkDirectoryButton()
+    self.condaDirectoryPath = self.getCondaPath()
+    self.condaDirectoryPathSelector.directory = self.condaDirectoryPath
+    layout.addRow("Conda executable location: ", self.condaDirectoryPathSelector)
+    self.logic.setCondaDirectory(self.condaDirectoryPath)
+
+    self.environmentNameLineEdit = qt.QLineEdit("EnvironmentName")
+    self.environmentName = "kerasGPUEnv"
+    layout.addRow("Conda enviroment name: ", self.environmentNameLineEdit)
+    self.logic.setCondaEnvironmentName(self.environmentName)
 
     self.dataCSVSelector = ctk.ctkPathLineEdit()
     self.dataCSVSelector.showBrowseButton = True
@@ -775,6 +786,8 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.trainNameSelected = False
     self.dataCSVSelected  = False
 
+    self.condaDirectoryPathSelector.connect('directorySelected(QString)', self.condaPathChanged)
+    self.environmentNameLineEdit.connect('textChanged(QString)', self.onEnvironmentNameChanged)
     self.dataCSVSelector.connect('currentPathChanged(QString)',self.ondataCSVSelected)
     self.trainingScriptSelector.connect('currentPathChanged(QString)',self.onTrainingScriptSelected)
     self.trainingRunNameLineEdit.connect('textChanged(QString)',self.onTrainingRunNameChanged)
@@ -843,10 +856,24 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       self.openWarningWidget(self.trainingRunName)
       self.warningWidget.show()
     else:
-      os.system('cmd.exe /C "python '+
+      '''os.system('cmd.exe /K "python '+
                 str(self.trainingScriptPath)+
                 ' --save_location='+str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName))
-                +' --data_csv_file='+str(self.dataCSV)+'"')
+                +' --data_csv_file='+str(self.dataCSV)+'"')'''
+      username = os.environ['username']
+      userdomain = os.environ['userdomain']
+      cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
+             str(self.moduleDir),
+             str(self.condaPath),
+             str(self.condaEnvName),
+             str(self.dataCSV),
+             str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)),
+             str(self.trainingScriptPath)]
+      strCMD = cmd[0]
+      for i in range(1,len(cmd)):
+        strCMD = strCMD + ' ' + cmd[i]
+      cmd = ['runas', '/noprofile', '/user:' + userdomain + '\\' + username, strCMD]
+      subprocess.Popen(cmd)
       logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)))
 
   def openWarningWidget(self,trainingRunName):
@@ -873,10 +900,24 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       for file in os.listdir(os.path.join(baseDir,dir)):
         os.remove(os.path.join(baseDir,dir,file))
       os.removedirs(os.path.join(baseDir,dir))
-    os.system('cmd.exe /C "python ' +
+    username = os.environ['username']
+    userdomain = os.environ['userdomain']
+    cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
+           str(self.moduleDir),
+           str(self.condaPath),
+           str(self.condaEnvName),
+           str(self.dataCSV),
+           str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)),
+           str(self.trainingScriptPath)]
+    strCMD = cmd[0]
+    for i in range(1, len(cmd)):
+      strCMD = strCMD + ' ' + cmd[i]
+    cmd = ['runas', '/noprofile', '/user:' + userdomain + '\\' + username, strCMD]
+    subprocess.Popen(cmd)
+    '''os.system('cmd.exe /C "python ' +
               str(self.trainingScriptPath) +
               ' --save_location=' + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName))
-              + ' --data_csv_file=' + str(self.dataCSV) + '"')
+              + ' --data_csv_file=' + str(self.dataCSV) + '"')'''
     logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName)))
 
   def cancelOverwrite(self):
