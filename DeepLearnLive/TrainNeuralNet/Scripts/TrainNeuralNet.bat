@@ -8,4 +8,4 @@ set TrainingScript=%5
 
 call %CondaPath%\Scripts\activate %EnvName%
 call python %TrainingScript% --save_location=%SaveLocation% --data_csv_file=%DataCSV% 
-call %CondaPath%\Scripts\deactivate
+call %CondaPath%\condabin\conda.bat deactivate
