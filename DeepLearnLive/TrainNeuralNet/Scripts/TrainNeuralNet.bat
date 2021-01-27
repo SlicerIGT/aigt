@@ -9,3 +9,8 @@ set TrainingScript=%5
 call %CondaPath%\Scripts\activate %EnvName%
 call python %TrainingScript% --save_location=%SaveLocation% --data_csv_file=%DataCSV% 
 call %CondaPath%\condabin\conda.bat deactivate
+
+if %ERRORLEVEL% neq 0 goto AlternateCondaDeactivate
+
+:AlternateCondaDeactivate
+call %CondaPath%\Scripts\deactivate

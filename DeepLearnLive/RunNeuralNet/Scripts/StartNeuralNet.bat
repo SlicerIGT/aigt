@@ -18,4 +18,9 @@ set DeviceName=%9
 
 call %CondaPath%\Scripts\activate %EnvName%
 call python %CurrentPath%\kerasNeuralNetwork.py --network_module_name=%NetworkType% --model_name=%ModelName% --model_directory=%ModelPath% --output_type=%OutputType% --incoming_host=%IncomingHostName% --incoming_port=%IncomingPort% --outgoing_host=%OutgoingHostName% --outgoing_port=%OutgoingPort% --device_name=%DeviceName%
+call %CondaPath%\condabin\conda.bat deactivate
+
+if %ERRORLEVEL% neq 0 goto AlternateCondaDeactivate
+
+:AlternateCondaDeactivate
 call %CondaPath%\Scripts\deactivate

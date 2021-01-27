@@ -6,6 +6,7 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from pathlib import Path
 import subprocess
+import time
 
 try:
   import pandas
@@ -817,12 +818,6 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       self.openWarningWidget(self.trainingRunName)
       self.warningWidget.show()
     else:
-      '''os.system('cmd.exe /K "python '+
-                str(self.trainingScriptPath)+
-                ' --save_location='+str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName))
-                +' --data_csv_file='+str(self.dataCSV)+'"')'''
-      username = os.environ['username']
-      userdomain = os.environ['userdomain']
       cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
              str(self.moduleDir),
              str(self.condaPath),
@@ -833,8 +828,8 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       strCMD = cmd[0]
       for i in range(1,len(cmd)):
         strCMD = strCMD + ' ' + cmd[i]
-      cmd = ['runas', '/noprofile', '/user:' + userdomain + '\\' + username, strCMD]
-      subprocess.Popen(cmd)
+      p = slicer.util.launchConsoleProcess(strCMD, useStartupEnvironment=True)
+      slicer.util.logProcessOutput(p)
       logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)))
 
   def openWarningWidget(self,trainingRunName):
@@ -861,8 +856,6 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       for file in os.listdir(os.path.join(baseDir,dir)):
         os.remove(os.path.join(baseDir,dir,file))
       os.removedirs(os.path.join(baseDir,dir))
-    username = os.environ['username']
-    userdomain = os.environ['userdomain']
     cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
            str(self.moduleDir),
            str(self.condaPath),
@@ -873,12 +866,8 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
     strCMD = cmd[0]
     for i in range(1, len(cmd)):
       strCMD = strCMD + ' ' + cmd[i]
-    cmd = ['runas', '/noprofile', '/user:' + userdomain + '\\' + username, strCMD]
-    subprocess.Popen(cmd)
-    '''os.system('cmd.exe /C "python ' +
-              str(self.trainingScriptPath) +
-              ' --save_location=' + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName))
-              + ' --data_csv_file=' + str(self.dataCSV) + '"')'''
+    p = slicer.util.launchConsoleProcess(strCMD,useStartupEnvironment=True)
+    slicer.util.logProcessOutput(p)
     logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName)))
 
   def cancelOverwrite(self):
