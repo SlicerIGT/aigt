@@ -334,11 +334,22 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       strCMD = cmd[0]
       for i in range(1,len(cmd)):
         strCMD = strCMD + ' ' + cmd[i]
-      cmd = ['runas','/noprofile','/user:'+userdomain+'\\' +username, strCMD]
-      subprocess.Popen(cmd)
+      cmd = ['runas','/noprofile','/savecred','/user:'+userdomain+'\\' +username, strCMD]
+      p = subprocess.Popen(cmd)
+      p.communicate()
+      startTime = time.time()
+      poll = p.poll()
+      while poll == 1 and time.time() - startTime < 2:
+        time.sleep(0.25)
+        poll = p.poll()
+      if poll == 1:
+        p.terminate()
+        cmd = ['runas', '/noprofile', '/user:' + userdomain + '\\' + username, strCMD]
+        p = subprocess.Popen(cmd)
+        p.communicate()
       logging.info("Starting neural network...")
     startTime = time.time()
-    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<45:
+    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<15:
       time.sleep(0.25)
     if self.incomingConnectorNode.GetState() !=2:
       logging.info("Failed to connect to neural network")
