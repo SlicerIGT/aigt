@@ -11,7 +11,7 @@ from pathlib import Path
 import time
 import socket
 
-#
+
 # RunNeuralNet
 #
 
@@ -146,6 +146,7 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow(self.runNeuralNetworkButton)
 
     condaSettingsCollapsibleButton = ctk.ctkCollapsibleButton()
+    condaSettingsCollapsibleButton = ctk.ctkCollapsibleButton()
     condaSettingsCollapsibleButton.text = "Conda settings"
     parametersFormLayout.addRow(condaSettingsCollapsibleButton)
     condaSettingsLayout = qt.QFormLayout(condaSettingsCollapsibleButton)
@@ -159,6 +160,7 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
 
     self.environmentNameLineEdit = qt.QLineEdit("EnvironmentName")
     self.environmentName = "kerasGPUEnv"
+    condaSettingsLayout.addRow(self.environmentNameLineEdit)
     condaSettingsLayout.addRow(self.environmentNameLineEdit)
 
     createNewModelCollapsibleButton = ctk.ctkCollapsibleButton()
@@ -333,6 +335,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
              str(self.incomingHostName),
              str(self.incomingPort),
              str(self.outputNode.GetName())]
+
       strCMD = cmd[0]
       for i in range(1,len(cmd)):
         strCMD = strCMD + ' ' + cmd[i]
