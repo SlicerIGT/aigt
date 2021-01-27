@@ -4,7 +4,6 @@ import numpy
 import random
 import pandas
 import argparse
-import SimpleITK as sitk
 import girder_client
 import tensorflow
 import tensorflow.keras

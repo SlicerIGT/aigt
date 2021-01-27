@@ -6,7 +6,12 @@ from slicer.ScriptedLoadableModule import *
 import logging
 import subprocess
 
-import cv2
+try:
+  import cv2
+except ModuleNotFoundError:
+  slicer.util.pip_install("opencv-python")
+  import cv2
+
 
 try:
   import pandas

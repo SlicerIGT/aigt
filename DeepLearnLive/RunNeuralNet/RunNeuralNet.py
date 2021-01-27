@@ -5,8 +5,6 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
 import subprocess
-import pandas
-import cv2
 from pathlib import Path
 import time
 import socket
