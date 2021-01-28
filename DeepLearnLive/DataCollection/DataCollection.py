@@ -73,9 +73,6 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
 
-    #self.imageSaveDirectory = qt.QLineEdit("Select directory to save images")
-    #parametersFormLayout.addRow(self.imageSaveDirectory)
-
     self.selectRecordingNodeComboBox = qt.QComboBox()
     self.selectRecordingNodeComboBox.addItems(["Select Image Node"])
     self.recordingNodes = slicer.util.getNodesByClass("vtkMRMLVolumeNode")
@@ -88,7 +85,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
     self.datasetSelector = ctk.ctkDirectoryButton()
     self.datasetSelector.directory = os.path.join(self.moduleDir,os.pardir,"Datasets")
-    parametersFormLayout.addRow(self.datasetSelector)
+    parametersFormLayout.addRow("Select dataset: ",self.datasetSelector)
 
     self.videoIDComboBox = qt.QComboBox()
     self.videoIDComboBox.addItems(["Select video ID","Create new video ID"])
@@ -155,10 +152,11 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
     # Refresh Start/Stop Collecting Images Button state
     self.onSelect()
+
+    #Create a live webcam stream
     try:
-      self.webcamReference = slicer.util.getNode('Webcam_Reference')
+      self.webcamReference = slicer.util.getNode('Live_Webcam_Reference')
     except slicer.util.MRMLNodeNotFoundException:
-    #if not self.webcamReference:
       imageSpacing = [0.2, 0.2, 0.2]
       imageData = vtk.vtkImageData()
       imageData.SetDimensions(640, 480, 1)
@@ -169,7 +167,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       thresholder.SetOutValue(0)
       # Create volume node
       self.webcamReference = slicer.vtkMRMLVectorVolumeNode()
-      self.webcamReference.SetName('Webcam_Reference')
+      self.webcamReference.SetName('Live_Webcam_Reference')
       self.webcamReference.SetSpacing(imageSpacing)
       self.webcamReference.SetImageDataConnection(thresholder.GetOutputPort())
       # Add volume to scene
@@ -224,13 +222,8 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     classificationFormLayout.addWidget(self.autoLabelFilePathSelector)
     self.autoLabelFilePathSelector.visible = False
 
-    '''self.autoLabelFileNameLineEdit = qt.QLineEdit("Auto_Labels.csv")
-    classificationFormLayout.addWidget(self.autoLabelFileNameLineEdit)
-    self.autoLabelFileNameLineEdit.visible=False'''
-
     self.classificationLabellingMethodComboBox.connect('currentIndexChanged(int)', self.onLabellingMethodSelected)
     self.autoLabelFilePathSelector.connect('currentPathChanged(QString)',self.onAutoLabelFileChanged)
-    #self.autoLabelFileNameLineEdit.connect('textChanged(QString)', self.onAutoLabelFileChanged)
 
   def detectionLayout(self):
     self.detectionFrame = qt.QFrame()
@@ -426,13 +419,13 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     if self.selectRecordingNodeComboBox.currentText != "Select Image Node":
       self.recordingNode = self.selectRecordingNodeComboBox.currentText
 
+
   def onDatasetSelected(self):
       for i in range(self.videoIDComboBox.count,2,-1):
         self.videoIDComboBox.removeItem(i)
       self.currentDatasetName = os.path.basename(self.datasetSelector.directory)
       self.videoPath = self.datasetSelector.directory
       self.addVideoIDsToComboBox()
-
 
 
   def addVideoIDsToComboBox(self):
@@ -550,16 +543,21 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
   def onAutoLabelFileChanged(self):
     self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.currentPath)
-    return
+    self.logic.setAutolabelPath(self.autoLabelPath)
 
   def onSelect(self):
     self.startStopCollectingImagesButton.enabled =  self.videoIDComboBox.currentText!= "Select video ID" and self.videoIDComboBox.currentText!= "Create new video ID" and self.selectRecordingNodeComboBox.currentText != "Select Image Node"
 
 
   def onStartStopCollectingImagesButton(self):
+    self.logic.setRecordingNode(self.recordingNode)
+    self.logic.setDatasetNameAndPath(self.videoPath,self.currentDatasetName)
+    self.logic.setVideoIDAndPath(self.currentVideoID, self.currentVideoIDFilePath)
+    self.logic.setAutolabelPath(self.autoLabelPath)
+    self.logic.setLabellingMethod(self.labellingMethod)
+
     try:
       self.imageLabels = pandas.read_csv(self.csvFilePath, index_col=0)
-      # self.imageLabels.drop("Unnamed: 0",axis=1)
     except FileNotFoundError:
       self.imageLabels = pandas.DataFrame(columns=["FileName", "Time Recorded"])
     if self.startStopCollectingImagesButton.text == "Start Image Collection":
@@ -569,18 +567,12 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.collectingImages = True
       self.startStopCollectingImagesButton.setText("Start Image Collection")
     if self.labellingMethod == "Single Label":
-      self.labelName = self.classificationLabelNameLineEdit.text
-      self.labelType = self.classificationLabelTypeLineEdit.text
-    elif self.labellingMethod == "Auto from file":
-      self.labelName = None
-      self.labelType = None
+      self.logic.setLabelName(self.classificationLabelNameLineEdit.text)
+      self.logic.setLabelType(self.classificationLabelTypeLineEdit.text)
     elif self.labellingMethod == "From Segmentation":
-      self.labelName = self.inputSegmentation
-      self.labelType = self.inputSegmentation
-    else:
-      self.labelName = None
-      self.labelType = None
-    self.logic.startImageCollection(self.recordingNode, self.fileType, self.collectingImages, self.currentVideoID,self.currentVideoIDFilePath, self.imageLabels,self.csvFilePath,self.labellingMethod,self.collectingFromSequence,self.labelName,self.labelType,self.autoLabelPath)
+      self.logic.setLabelName(self.inputSegmentation)
+      self.logic.setLabelType(self.inputSegmentation)
+    self.logic.startImageCollection (self.collectingImages, self.imageLabels,self.csvFilePath)
 
   def onLabellingMethodSelected(self):
     if self.problemType == "Classification":
@@ -589,17 +581,14 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         self.classificationLabelNameLineEdit.visible = True
         self.classificationLabelTypeLineEdit.visible = True
         self.autoLabelFilePathSelector.visible = False
-        #self.autoLabelFileNameLineEdit.visible = False
       elif self.labellingMethod == "Auto from file":
         self.classificationLabelNameLineEdit.visible = False
         self.classificationLabelTypeLineEdit.visible = False
         self.autoLabelFilePathSelector.visible = True
-        #self.autoLabelFileNameLineEdit.visible = True
       else:
         self.classificationLabelNameLineEdit.visible = False
         self.classificationLabelTypeLineEdit.visible = False
         self.autoLabelFilePathSelector.visible = False
-        #self.autoLabelFileNameLineEdit.visible = False
     elif self.problemType == "Segmentation":
       self.labellingMethod = self.segmentationLabellingMethodComboBox.currentText
       if self.labellingMethod == "Unlabelled":
@@ -608,10 +597,11 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         self.inputSegmentationSelector.visible = True
     else:
       self.labellingMethod = "Unlabelled"
-    return
+    self.logic.setLabellingMethod(self.labellingMethod)
 
   def onFileTypeSelected(self):
     self.fileType = self.fileTypeComboBox.currentText
+    self.logic.setFileType(self.fileType)
 
   def onSegmentationInputSelected(self):
     if self.inputSegmentationSelector.currentText != "Select Input Segmentation":
@@ -625,6 +615,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     else:
       self.classificationLabellingMethodComboBox.removeItem(self.classificationLabellingMethodComboBox.findText("Auto from file"))
       self.collectingFromSequence = False
+    self.logic.setCollectingFromSequence(self.collectingFromSequence)
 
 
 #
@@ -632,54 +623,35 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 #
 
 class DataCollectionLogic(ScriptedLoadableModuleLogic):
-  def startImageCollection(self,recordingNode,fileType, imageCollectionStarted,videoID, videoIDFilePath, imageLabels, labelFilePath, labellingMethod = "Unlabelled", fromSequence = False,labelName = None,labelType = None,autolabelFilePath = None):
-    try:
-      # the module is in the python path
-      import cv2
-    except ImportError:
-      # for the build directory, load from the file
-      import imp, platform
-      if platform.system() == 'Windows':
-        cv2File = 'cv2.pyd'
-        cv2Path = '../../../../OpenCV-build/lib/Release/' + cv2File
-      else:
-        cv2File = 'cv2.so'
-        cv2Path = '../../../../OpenCV-build/lib/' + cv2File
-      scriptPath = os.path.dirname(os.path.abspath(__file__))
-      cv2Path = os.path.abspath(os.path.join(scriptPath, cv2Path))
-      # in the build directory, this path should exist, but in the installed extension
-      # it should be in the python pat, so only use the short file name
-      if not os.path.isfile(cv2Path):
-        cv2Path = cv2File
-      cv2 = imp.load_dynamic('cv2', cv2File)
-    self.recordingVolumeNode = slicer.util.getNode(recordingNode)
-    self.fileType = fileType
+  def __init__(self):
+    self.imageSubtype = ''
+    self.fileType = '.jpg'
+    self.fromSequence = False
+    self.labellingMethod = "Unlabelled"
+    self.labelType = None
+    self.labelName = None
+
+
+  def startImageCollection(self, imageCollectionStarted, imageLabels, labelFilePath):
     self.collectingImages = imageCollectionStarted
     self.continueRecording = not(self.collectingImages)
-    self.videoID = videoID
-    self.videoIDFilePath = videoIDFilePath
-    self.labelName = labelName
-    self.labelType = labelType
     self.imageLabels = imageLabels
-    self.autoLabelFilePath = autolabelFilePath
     self.labelFilePath = labelFilePath
-    self.labellingMethod = labellingMethod
+
     self.lastRecordedTime = 0.0
     if self.labellingMethod == "From Segmentation":
       self.segmentationNodeName = labelName
-    self.fromSequence = fromSequence
+
     if self.labellingMethod == 'Auto from file':
       self.autoLabels = pandas.read_csv(self.autoLabelFilePath)
-      self.labelType = self.autoLabels.columns[0]
+      self.setLabelType(self.autoLabels.columns[0])
     if (not self.labelType in self.imageLabels.columns) and self.labelType != None and not self.imageLabels.empty:
       if self.labellingMethod == "Auto from file":
         self.imageLabels = self.labelExistingEntries(self.imageLabels,self.autoLabels)
-      elif not "Time Recorded" in self.imageLabels.columns:
+      elif "Time Recorded" in self.imageLabels.columns:
         self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
       else:
         logging.info("Cannot relabel images recorded from live sequence")
-    '''if "Time Recorded" in self.imageLabels.columns:
-      self.imageLabels = self.imageLabels.astype({'Time Recorded':'float64'})'''
 
     if self.collectingImages == False:
       if self.recordingVolumeNode.GetClassName() == "vtkMRMLStreamingVolumeNode":
@@ -712,26 +684,6 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
         playWidgetButtons[2].click()
 
   def onStartCollectingImages(self,caller,eventID):
-    import numpy
-    try:
-      # the module is in the python path
-      import cv2
-    except ModuleNotFoundError:
-      # for the build directory, load from the file
-      import imp, platform
-      if platform.system() == 'Windows':
-        cv2File = 'cv2.pyd'
-        cv2Path = '../../../../OpenCV-build/lib/Release/' + cv2File
-      else:
-        cv2File = 'cv2.so'
-        cv2Path = '../../../../OpenCV-build/lib/' + cv2File
-      scriptPath = os.path.dirname(os.path.abspath(__file__))
-      cv2Path = os.path.abspath(os.path.join(scriptPath, cv2Path))
-      # in the build directory, this path should exist, but in the installed extension
-      # it should be in the python pat, so only use the short file name
-      if not os.path.isfile(cv2Path):
-        cv2Path = cv2File
-      cv2 = imp.load_dynamic('cv2', cv2File)
     if self.fromSequence:
       seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
       seekWidget = seekWidget[0]
@@ -766,6 +718,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           addingtoexisting = False
           imagePath = os.path.dirname(self.labelFilePath)
           cv2.imwrite(os.path.join(imagePath, fileName), imData)
+      else:
+        imagePath = os.path.dirname(self.labelFilePath)
+        cv2.imwrite(os.path.join(imagePath, fileName), imData)
       if self.labellingMethod == "Unlabelled":
         if self.fromSequence:
           recordingTime = timeLabel.text
@@ -781,9 +736,6 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           (labelImData, self.labelName) = self.getSegmentationLabel(fileName)
           imagePath = os.path.dirname(self.labelFilePath)
           cv2.imwrite(os.path.join(imagePath,self.labelName),labelImData)
-        else:
-          imagePath = os.path.dirname(self.labelFilePath)
-          cv2.imwrite(os.path.join(imagePath, fileName), imData)
         if self.fromSequence:
           recordingTime = timeLabel.text
           self.lastRecordedTime = float(recordingTime)
@@ -791,7 +743,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
             self.imageLabels = self.imageLabels.append({'FileName': fileName, 'Time Recorded':self.lastRecordedTime, self.labelType: self.labelName},
                                                      ignore_index=True)
           else:
-            self.imageLabels[self.labelType].iloc[entry] = self.labelName
+            #self.imageLabels[self.labelType].iloc[entry] = self.labelName
+            #self.imageLabels[self.labelType].iloc._setitem_with_indexer(entry, self.labelName)
+            self.imageLabels.loc[entry,self.labelType] = self.labelName
         else:
           self.imageLabels = self.imageLabels.append({'FileName': fileName, self.labelType: self.labelName},
                                                      ignore_index=True)
@@ -807,7 +761,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     for i in range(0,len(autolabels.index)):
       entriesToLabel = imageLabels.loc[(imageLabels["Time Recorded"] >= autolabels["Start"][i]) & (imageLabels["Time Recorded"] < autolabels["End"][i])]
       for j in entriesToLabel.index:
-        imageLabels[self.labelType][j] = autolabels[self.labelType][i]
+        imageLabels[self.labelType].iloc._setitem_with_indexer(j,autolabels[self.labelType][i])
     return imageLabels
 
   def setImageSubtype(self,subtypeName):
@@ -925,6 +879,35 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     if components > 1:
       imageMat = cv2.cvtColor(imageMat, cv2.COLOR_RGB2BGR)
     return imageMat
+
+  def setDatasetNameAndPath(self,videoPath,datasetName):
+    self.videoPath = videoPath
+    self.dataSetName = datasetName
+
+  def setRecordingNode(self,recordingNodeName):
+    self.recordingVolumeNode = slicer.util.getNode(recordingNodeName)
+
+  def setFileType(self,fileType):
+    self.fileType = fileType
+
+  def setCollectingFromSequence(self,collectingFromSequence):
+    self.fromSequence = collectingFromSequence
+
+  def setLabellingMethod(self,labellingMethod):
+    self.labellingMethod = labellingMethod
+
+  def setLabelName(self,labelName):
+    self.labelName = labelName
+
+  def setLabelType(self,labelType):
+    self.labelType = labelType
+
+  def setAutolabelPath(self,autolabelPath):
+    self.autoLabelFilePath = autolabelPath
+
+  def setVideoIDAndPath(self,videoID,videoPath):
+    self.videoPath = videoPath
+    self.videoID = videoID
 
 class DataCollectionTest(ScriptedLoadableModuleTest):
   """
