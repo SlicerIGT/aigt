@@ -69,7 +69,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     # Parameters Area
     #
     parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    parametersCollapsibleButton.text = "Collect Images"
+    parametersCollapsibleButton.text = "Export Images"
     self.layout.addWidget(parametersCollapsibleButton)
 
     # Layout within the dummy collapsible button
@@ -168,7 +168,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     except slicer.util.MRMLNodeNotFoundException:
       imageSpacing = [0.2, 0.2, 0.2]
       imageData = vtk.vtkImageData()
-      imageData.SetDimensions(640, 480, 1)
+      imageData.SetDimensions(640, 480, 3)
       imageData.AllocateScalars(vtk.VTK_UNSIGNED_CHAR, 1)
       thresholder = vtk.vtkImageThreshold()
       thresholder.SetInputData(imageData)
@@ -292,11 +292,11 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     if not self.reviewing:
       self.logic.StartReview(self.labelCSV,self.labelType,self.reviewImageNode)
       self.reviewing = True
-      self.startReviewButton.setText("Stop Reviewing")
+      self.startReviewButton.setText("Stop Review")
     else:
       self.logic.StopReview()
       self.reviewing = False
-      self.startReviewButton.setText("Stop Reviewing")
+      self.startReviewButton.setText("Start Review")
 
   def addNodesToRecordingCombobox(self,caller,eventID):
     self.recordingNodes = slicer.util.getNodesByClass("vtkMRMLVolumeNode")
@@ -724,6 +724,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
   def onSegmentationInputSelected(self):
     if self.inputSegmentationSelector.currentText != "Select Input Segmentation":
       self.inputSegmentation = self.inputSegmentationSelector.currentText
+      self.logic.setInputSegmentationNode(self.inputSegmentation)
 
   def onCollectFromSequenceChecked(self):
     if self.collectFromSequenceCheckBox.checked:
@@ -753,6 +754,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.videoID = None
     self.recordingVolumeNode = None
     self.autoLabelFilePath = None
+    self.segmentationNodeName = None
 
 
   def startImageCollection(self, imageCollectionStarted, imageLabels, labelFilePath):
@@ -762,8 +764,6 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.labelFilePath = labelFilePath
 
     self.lastRecordedTime = 0.0
-    if self.labellingMethod == "From Segmentation":
-      self.segmentationNodeName = labelName
 
     if self.labellingMethod == 'Auto from file':
       self.autoLabels = pandas.read_csv(self.autoLabelFilePath)
@@ -1049,6 +1049,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.videoPath = videoPath
     self.videoID = videoID
 
+  def setInputSegmentationNode(self,segmentationNodeName):
+    self.segmentationNodeName = segmentationNodeName
+
   def StartReview(self,labelCSV,labelType,reviewImageNode):
     self.labelCSV = labelCSV
     self.labelCSV = self.labelCSV.astype({'Time Recorded': 'float64'})
@@ -1084,7 +1087,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
         self.labelString = self.labelString + str(label) + ': '+ str(self.labelCSV[label][labelIndex]) + '\n'
       self.lastDisplayedTime
     self.annotation.SetText(vtk.vtkCornerAnnotation.LowerRight,self.labelString)
-    
+
 
   def getSliceView(self,reviewImageNodeID):
     layoutManager = slicer.app.layoutManager()
