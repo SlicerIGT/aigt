@@ -14,6 +14,12 @@ except ModuleNotFoundError:
   slicer.util.pip_install("pandas")
   import pandas
 
+try:
+  from sklearn.model_selection import train_test_split
+except ModuleNotFoundError:
+  slicer.util.pip_install("scikit-learn")
+  from sklearn.model_selection import train_test_split
+
 
 #
 # TrainNeuralNet
