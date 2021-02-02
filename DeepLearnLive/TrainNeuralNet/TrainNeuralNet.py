@@ -4,9 +4,22 @@ import logging
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-import girder_client
-import pandas
-from sklearn.model_selection import train_test_split,KFold
+from pathlib import Path
+import subprocess
+import time
+
+try:
+  import pandas
+except ModuleNotFoundError:
+  slicer.util.pip_install("pandas")
+  import pandas
+
+try:
+  from sklearn.model_selection import train_test_split
+except ModuleNotFoundError:
+  slicer.util.pip_install("scikit-learn")
+  from sklearn.model_selection import train_test_split
+
 
 #
 # TrainNeuralNet
@@ -43,35 +56,41 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = TrainNeuralNetLogic()
     self.moduleDir = os.path.dirname(slicer.modules.trainneuralnet.path)
 
-    selectDataCollapsibleButton = ctk.ctkCollapsibleButton()
-    selectDataCollapsibleButton.text = "Select Data"
-    self.layout.addWidget(selectDataCollapsibleButton)
+    self.selectDataCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.selectDataCollapsibleButton.text = "Select Data"
+    self.layout.addWidget(self.selectDataCollapsibleButton)
+    self.selectDataCollapsibleButton.collapsed = False
 
     # Layout within the dummy collapsible button
-    selectDataFormLayout = qt.QFormLayout(selectDataCollapsibleButton)
+    selectDataFormLayout = qt.QFormLayout(self.selectDataCollapsibleButton)
     self.setupSelectDataLayout(selectDataFormLayout)
 
-    trainScriptCollapsibleButton = ctk.ctkCollapsibleButton()
-    trainScriptCollapsibleButton.text = "Create Training Script"
-    self.layout.addWidget(trainScriptCollapsibleButton)
+    self.trainScriptCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.trainScriptCollapsibleButton.text = "Create Training Script"
+    self.layout.addWidget(self.trainScriptCollapsibleButton)
+    self.trainScriptCollapsibleButton.collapsed=True
 
     # Layout within the dummy collapsible button
-    trainScriptFormLayout = qt.QFormLayout(trainScriptCollapsibleButton)
+    trainScriptFormLayout = qt.QFormLayout(self.trainScriptCollapsibleButton)
     self.setupTrainScriptLayout(trainScriptFormLayout)
 
-    trainNetworkCollapsibleButton = ctk.ctkCollapsibleButton()
-    trainNetworkCollapsibleButton.text = "Train Network"
-    self.layout.addWidget(trainNetworkCollapsibleButton)
+    self.trainNetworkCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.trainNetworkCollapsibleButton.text = "Train Network"
+    self.layout.addWidget(self.trainNetworkCollapsibleButton)
+    self.trainNetworkCollapsibleButton.collapsed = True
 
     # Layout within the dummy collapsible button
-    trainNetworkFormLayout = qt.QFormLayout(trainNetworkCollapsibleButton)
+    trainNetworkFormLayout = qt.QFormLayout(self.trainNetworkCollapsibleButton)
     self.setupTrainNetworkLayout(trainNetworkFormLayout)
+
 
   def setupSelectDataLayout(self,layout):
     self.datasetDirectorySelector = ctk.ctkDirectoryButton()
     self.datasetDirectoryPath = os.path.join(self.moduleDir,os.pardir,"Datasets")
     self.datasetDirectorySelector.directory = self.datasetDirectoryPath
     layout.addRow(self.datasetDirectorySelector)
+    if not os.path.isdir(self.datasetDirectoryPath):
+      os.mkdir(self.datasetDirectoryPath)
 
     self.girderClientLineEdit = qt.QLineEdit()
     self.girderClientLineEdit.setText("https://pocus.cs.queensu.ca/api/v1")
@@ -401,7 +420,7 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
           self.selectedVideoIDNames.append(folder["name"])
           self.selectedVideoIDgirderIDs.append(folder["_id"])
       else:
-        self.videoIDNames = os.listdir(self.datasetDirectorySelector.directory)
+        self.videoIDNames = [x for x in os.listdir(self.datasetDirectorySelector.directory) if not '.' in x]
         self.selectedVideoIDNames = self.videoIDNames
       self.addImageLabelsToComboBox()
     elif self.videoIDSelector.currentText == "Manually select video IDs":
@@ -516,6 +535,8 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         csvFileID = file["_id"]
       self.girderClient.downloadItem(csvFileID,tempFilePath)
       localcsvFilePath = os.path.join(tempFilePath,labelFileName)
+    else:
+      localcsvFilePath = os.path.join(self.datasetDirectorySelector.directory,self.selectedVideoIDNames[0],labelFileName)
     labelFile = pandas.read_csv(localcsvFilePath)
     headings = labelFile.columns
     self.imageLabels = []
@@ -569,28 +590,6 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.signInToGirderButton.visible = False
       self.setGirderCollectionComboBox.visible = False
 
-  def setupTrainScriptLayout(self,layout):
-    self.modelDirectoryFilePathSelector = ctk.ctkDirectoryButton()
-    self.modelDirectoryFilePath = os.path.join(self.moduleDir, os.pardir, "Networks")
-    self.modelDirectoryFilePathSelector.directory = self.modelDirectoryFilePath
-    layout.addRow(self.modelDirectoryFilePathSelector)
-
-    self.networkTypeSelector = qt.QComboBox()
-    self.networkTypeSelector.addItems(["Select network type","Create new network"])
-    networks = os.listdir(os.path.join(self.moduleDir, os.pardir, 'Networks'))
-    networks = [x for x in networks if not '.' in x]
-    self.networkTypeSelector.addItems(networks)
-    self.networkType = "Select network type"
-    layout.addRow(self.networkTypeSelector)
-
-    self.scriptTypeSelector = qt.QComboBox()
-    self.scriptTypeSelector.addItems(["Select your training script type","Jupyter notebook","Python script"])
-    self.scriptType = "Select your training script type"
-    layout.addRow(self.scriptTypeSelector)
-
-    self.createTrainScriptButton = qt.QPushButton("Create")
-    layout.addRow(self.createTrainScriptButton)
-
   def onCreateCSVClicked(self):
     self.logic.setCSVSavePath(self.csvFileSavePath,self.fileName)
     self.logic.setLabels(self.selectedImageLabels)
@@ -610,9 +609,9 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       status = self.logic.createCSV()
     if status ==0 :
-      self.resetWidget()
+      self.resetSelectDataWidget()
 
-  def resetWidget(self):
+  def resetSelectDataWidget(self):
     self.videoIDSelector.currentIndex = 0
     self.datasetDirectorySelector.directory = os.path.join(self.moduleDir,os.pardir,"Datasets")
     self.setGirderCollectionComboBox.currentIndex = 0
@@ -621,9 +620,192 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.trainValTestSplitComboBox.currentIndex=0
     self.fileNameLineEdit.setText("CSV File Name")
 
-  def setupTrainNetworkLayout(self,layout):
-    pass
+  def setupTrainScriptLayout(self,layout):
+    self.modelDirectoryFilePathSelector = ctk.ctkDirectoryButton()
+    self.modelDirectoryFilePath = os.path.join(self.moduleDir, os.pardir, "Networks")
+    self.modelDirectoryFilePathSelector.directory = self.modelDirectoryFilePath
+    layout.addRow(self.modelDirectoryFilePathSelector)
 
+    self.networkTypeSelector = qt.QComboBox()
+    self.networkTypeSelector.addItems(["Select network type","Create new network"])
+    networks = os.listdir(os.path.join(self.moduleDir, os.pardir, 'Networks'))
+    networks = [x for x in networks if not '.' in x]
+    self.networkTypeSelector.addItems(networks)
+    self.networkType = "Select network type"
+    layout.addRow(self.networkTypeSelector)
+
+    self.scriptTypeSelector = qt.QComboBox()
+    self.scriptTypeSelector.addItems(["Select training script type","Jupyter notebook","Python script"])
+    self.scriptType = "Select training script type"
+    layout.addRow(self.scriptTypeSelector)
+
+    self.createTrainScriptButton = qt.QPushButton("Create training script")
+    layout.addRow(self.createTrainScriptButton)
+
+    self.modelDirectoryFilePathSelector.connect('directorySelected(QString)',self.onModelDirectorySelected)
+    self.networkTypeSelector.connect('currentIndexChanged(int)',self.onNetworkTypeSelected)
+    self.scriptTypeSelector.connect('currentIndexChanged(int)',self.onScriptTypeSelected)
+    self.createTrainScriptButton.connect('clicked(bool)',self.onCreateTrainingScriptClicked)
+
+  def onModelDirectorySelected(self):
+    self.modelDirectoryFilePath = self.modelDirectoryFilePathSelector.directory
+    for i in range(self.networkTypeSelector.count,1,-1):
+      self.networkTypeSelector.removeItem(i)
+    networkTypes = [x for x in os.listdir(self.modelDirectoryFilePath) if not '.' in x]
+    self.networkTypeSelector.addItems(networkTypes)
+    self.logic.setModelDirectoryPath(self.modelDirectoryFilePath)
+
+  def onNetworkTypeSelected(self):
+    self.networkType = self.networkTypeSelector.currentText
+    if self.networkType == "Create new network":
+      self.openCreateNewNetworkDialog()
+      self.createNewNetworkDialog.show()
+    elif self.networkType != "Select networkType":
+      self.logic.setNetworkType(self.networkType)
+      self.logic.setModelDirectoryPath(self.modelDirectoryFilePath)
+
+  def openCreateNewNetworkDialog(self):
+    self.createNewNetworkDialog = qt.QDialog()
+    self.createNewNetworkDialog.setWindowTitle("Create New Network Type")
+    self.createNewNetworkDialog.resize(224, 176)
+    self.buttonBox = qt.QDialogButtonBox(self.createNewNetworkDialog)
+    self.buttonBox.setGeometry(qt.QRect(10, 120, 211, 32))
+    self.buttonBox.setOrientation(qt.Qt.Horizontal)
+    self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Cancel | qt.QDialogButtonBox.Ok)
+    self.buttonBox.setCenterButtons(True)
+    self.networkNamelineEdit = qt.QLineEdit(self.createNewNetworkDialog)
+    self.networkNamelineEdit.setGeometry(qt.QRect(20, 50, 181, 20))
+    self.networkNamelineEdit.setText("Model name")
+    self.newNetworkErrorLabel = qt.QLabel(self.createNewNetworkDialog)
+    self.newNetworkErrorLabel.setGeometry(qt.QRect(20, 80, 181, 13))
+    self.newNetworkErrorLabel.setText("")
+
+    self.buttonBox.accepted.connect(self.newNetworkNameSelected)
+    self.buttonBox.rejected.connect(self.cancelCreateNewNetwork)
+
+  def newNetworkNameSelected(self):
+    newNetworkName = self.networkNamelineEdit.text
+    if newNetworkName == "Model name":
+      self.newNetworkErrorLabel.setText("Invalid name: Model name")
+    elif os.path.isdir(os.path.join(self.modelDirectoryFilePath,newNetworkName)):
+      self.newNetworkErrorLabel.setText("Model "+newNetworkName+" already exists")
+    else:
+      self.newNetworkErrorLabel.setText("")
+      self.createNewNetworkDialog.hide()
+      self.networkType = newNetworkName
+      self.networkTypeSelector.addItem(newNetworkName)
+      self.networkTypeSelector.currentText = newNetworkName
+      self.logic.setModelDirectoryPath(self.modelDirectoryFilePath)
+      self.logic.setNetworkType(self.networkType)
+      import RunNeuralNet
+      runNeuralNetLogic = RunNeuralNet.RunNeuralNetLogic()
+      runNeuralNetLogic.createNewModel(self.networkType,self.modelDirectoryFilePath)
+
+  def cancelCreateNewNetwork(self):
+    self.networkTypeSelector.currentText = "Select network type"
+    self.createNewNetworkDialog.hide()
+
+  def onScriptTypeSelected(self):
+    self.scriptType = self.scriptTypeSelector.currentText
+    if self.scriptType != "Select training script type":
+      self.logic.setTrainingScriptType(self.scriptType)
+
+  def onCreateTrainingScriptClicked(self):
+    if self.networkType == "Select network type":
+      logging.info("No network type selected, could not create training script")
+    elif self.scriptType == "Select training script type":
+      logging.info("No script type selected, could not create training script")
+    else:
+      self.logic.createTrainingScript(self.moduleDir)
+
+  def setupTrainNetworkLayout(self,layout):
+    self.condaDirectoryPathSelector = ctk.ctkDirectoryButton()
+    self.condaDirectoryPath = self.getCondaPath()
+    self.condaDirectoryPathSelector.directory = self.condaDirectoryPath
+    layout.addRow("Conda executable location: ", self.condaDirectoryPathSelector)
+    self.logic.setCondaDirectory(self.condaDirectoryPath)
+
+    self.environmentNameLineEdit = qt.QLineEdit("EnvironmentName")
+    self.environmentName = "kerasGPUEnv"
+    layout.addRow("Conda enviroment name: ", self.environmentNameLineEdit)
+    self.logic.setCondaEnvironmentName(self.environmentName)
+
+    self.dataCSVSelector = ctk.ctkPathLineEdit()
+    self.dataCSVSelector.showBrowseButton = True
+    self.dataCSV = os.path.join(self.moduleDir, os.pardir, "Datasets")
+    self.dataCSVSelector.setCurrentPath(self.dataCSV)
+    layout.addRow("Data CSV: ", self.dataCSVSelector)
+
+    self.trainingScriptSelector = ctk.ctkPathLineEdit()
+    self.trainingScriptSelector.showBrowseButton = True
+    self.trainingScript = os.path.join(self.moduleDir, os.pardir, "Networks")
+    self.trainingScriptSelector.setCurrentPath(self.trainingScript)
+    layout.addRow("Training Script: ",self.trainingScriptSelector)
+
+    self.trainingRunNameLineEdit = qt.QLineEdit()
+    self.trainingRunNameLineEdit.setText("Name of training run")
+    layout.addRow(self.trainingRunNameLineEdit)
+
+    self.runTrainingButton = qt.QPushButton("Train")
+    self.runTrainingButton.enabled = False
+    layout.addRow(self.runTrainingButton)
+
+    self.trainScriptSelected = False
+    self.trainNameSelected = False
+    self.dataCSVSelected  = False
+
+    self.condaDirectoryPathSelector.connect('directorySelected(QString)', self.condaPathChanged)
+    self.environmentNameLineEdit.connect('textChanged(QString)', self.onEnvironmentNameChanged)
+    self.dataCSVSelector.connect('currentPathChanged(QString)',self.ondataCSVSelected)
+    self.trainingScriptSelector.connect('currentPathChanged(QString)',self.onTrainingScriptSelected)
+    self.trainingRunNameLineEdit.connect('textChanged(QString)',self.onTrainingRunNameChanged)
+    self.runTrainingButton.connect('clicked(bool)',self.onTrainClicked)
+
+  def ondataCSVSelected(self):
+    print("Got here")
+    if ".csv" in os.path.basename(self.dataCSVSelector.currentPath):
+      self.logic.setDataCSV(self.dataCSVSelector.currentPath)
+      self.dataCSVSelected = True
+      print("Data csv selected")
+      if self.trainScriptSelected and self.trainNameSelected:
+        self.runTrainingButton.enabled = True
+
+  def getCondaPath(self):
+    condaPath = str(Path.home())
+    homePath = str(Path.home())
+    if "Anaconda3" in os.listdir(homePath):
+        condaPath = os.path.join(homePath,"Anaconda3")
+    return condaPath
+
+  def condaPathChanged(self):
+    self.condaDirectoryPath = self.condaDirectoryPathSelector.directory
+    self.logic.setCondaDirectory(self.condaDirectoryPath)
+
+  def onEnvironmentNameChanged(self):
+    self.environmentName = self.environmentNameLineEdit.text
+    self.logic.setCondaEnvironmentName(self.environmentName)
+
+  def onTrainingScriptSelected(self):
+    self.trainingScript = self.trainingScriptSelector.currentPath
+    if not ".py" in os.path.basename(self.trainingScript) and not ".ipynb" in os.path.basename(self.trainingScript):
+      logging.info("Training script needs to be a .py or .ipynb file")
+    else:
+      self.logic.setTrainingScriptLocation(self.trainingScript)
+      self.trainScriptSelected = True
+
+      if self.trainNameSelected and self.dataCSVSelected:
+        self.runTrainingButton.enabled = True
+
+  def onTrainingRunNameChanged(self):
+    self.trainingRunName = self.trainingRunNameLineEdit.text
+    if self.trainingRunName != "Name of training run":
+      self.logic.setTrainingRunName(self.trainingRunName)
+      self.trainNameSelected = True
+      if self.trainScriptSelected and self.dataCSVSelected:
+        self.runTrainingButton.enabled = True
+
+  def onTrainClicked(self):
+    self.logic.runTraining(self.moduleDir)
 
   def cleanup(self):
     pass
@@ -634,6 +816,122 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 #
 
 class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
+
+  def runTraining(self,moduleDir):
+    self.moduleDir = moduleDir
+    saveLocation = os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName+'_Fold_0')
+    if os.path.isdir(saveLocation):
+      self.openWarningWidget(self.trainingRunName)
+      self.warningWidget.show()
+    else:
+      cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
+             str(self.moduleDir),
+             str(self.condaPath),
+             str(self.condaEnvName),
+             str(self.dataCSV),
+             str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)),
+             str(self.trainingScriptPath)]
+      strCMD = cmd[0]
+      for i in range(1,len(cmd)):
+        strCMD = strCMD + ' ' + cmd[i]
+      p = slicer.util.launchConsoleProcess(strCMD, useStartupEnvironment=True)
+      slicer.util.logProcessOutput(p)
+      logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)))
+
+  def openWarningWidget(self,trainingRunName):
+    self.warningWidget = qt.QDialog()
+    self.warningWidget.setWindowTitle("Permission")
+    self.warningWidget.resize(211, 118)
+    self.buttonBox = qt.QDialogButtonBox(self.warningWidget)
+    self.buttonBox.setGeometry(qt.QRect(10, 70, 191, 32))
+    self.buttonBox.setOrientation(qt.Qt.Horizontal)
+    self.buttonBox.setStandardButtons(qt.QDialogButtonBox.Cancel | qt.QDialogButtonBox.Ok)
+    self.buttonBox.setCenterButtons(True)
+    self.warninglabel = qt.QLabel(self.warningWidget)
+    self.warninglabel.setGeometry(qt.QRect(10, 10, 191, 51))
+    self.warninglabel.setText("A training run named:\n\t" + self.trainingRunName + "\nalready exists.\nDo you want to overwrite?")
+
+    self.buttonBox.accepted.connect(self.overwriteSelected)
+    self.buttonBox.rejected.connect(self.cancelOverwrite)
+
+  def overwriteSelected(self):
+    self.warningWidget.hide()
+    DirsToRemove = [dir for dir in os.listdir(os.path.dirname(self.trainingScriptPath)) if self.trainingRunName+'_Fold' in dir]
+    baseDir = os.path.dirname(self.trainingScriptPath)
+    for dir in DirsToRemove:
+      for file in os.listdir(os.path.join(baseDir,dir)):
+        os.remove(os.path.join(baseDir,dir,file))
+      os.removedirs(os.path.join(baseDir,dir))
+    cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
+           str(self.moduleDir),
+           str(self.condaPath),
+           str(self.condaEnvName),
+           str(self.dataCSV),
+           str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)),
+           str(self.trainingScriptPath)]
+    strCMD = cmd[0]
+    for i in range(1, len(cmd)):
+      strCMD = strCMD + ' ' + cmd[i]
+    p = slicer.util.launchConsoleProcess(strCMD,useStartupEnvironment=True)
+    slicer.util.logProcessOutput(p)
+    logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName)))
+
+  def cancelOverwrite(self):
+    self.warningWidget.hide()
+
+  def setDataCSV(self,dataCSV):
+    self.dataCSV = dataCSV
+
+  def setTrainingRunName(self,trainRunName):
+    self.trainingRunName = trainRunName
+
+  def setTrainingScriptLocation(self,trainingScript):
+    self.trainingScriptPath = trainingScript
+    if ".py" in os.path.basename(self.trainingScriptPath):
+      self.setTrainingScriptType("Python script")
+    else:
+      self.setTrainingScriptType("Jupyter notebook")
+
+
+  def setCondaDirectory(self,condaPath):
+    self.condaPath = condaPath
+
+  def setCondaEnvironmentName(self,envName):
+    self.condaEnvName = envName
+
+  def createTrainingScript(self,moduleDir):
+    if self.scriptType == "Python":
+      templateTrainScriptFilePath = os.path.join(moduleDir, "Scripts", "TemplatePythonTrainFile.txt")
+    else:
+      templateTrainScriptFilePath = os.path.join(moduleDir, "Scripts", "TemplateJupyterTrainFile.txt")
+    newTrainScriptPath = os.path.join(self.modelDirectoryPath, self.networkType)
+    templateFile = open(templateTrainScriptFilePath, 'r')
+    templateFileText = templateFile.read()
+    templateFile.close()
+    newFileText = templateFileText.replace('MODELNAME', self.networkType)
+    if self.scriptType == "Python":
+      newModelFile = open(os.path.join(newTrainScriptPath, "Train_" +self.networkType + '.py'), 'w')
+      newModelFileName = os.path.join(newTrainScriptPath, "Train_" +self.networkType + '.py')
+    else:
+      newModelFile = open(os.path.join(newTrainScriptPath, "Train_" +self.networkType + '.ipynb'), 'w')
+      newModelFileName = os.path.join(newTrainScriptPath, "Train_" + self.networkType + '.ipynb')
+    newModelFile.write(newFileText)
+    newModelFile.close()
+    logging.info("Successfully created training script: " + newModelFileName)
+
+
+
+  def setTrainingScriptType(self,trainingScriptType):
+    if trainingScriptType == "Jupyter notebook":
+      self.scriptType = "Jupyter"
+    else:
+      self.scriptType = "Python"
+
+  def setModelDirectoryPath(self,modelDirectoryPath):
+    self.modelDirectoryPath = modelDirectoryPath
+
+  def setNetworkType(self,networkType):
+    self.networkType = networkType
 
   def createCSV(self):
     self.datasetPath = os.path.dirname(self.csvSavePath)

@@ -6,13 +6,6 @@ import numpy
 import random
 import argparse
 import logging
-import SimpleITK as sitk
-import tensorflow
-import tensorflow.keras
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras import layers
-from tensorflow.keras.models import model_from_json
-#from pyIGTLink import pyIGTLink
 import pyigtl
 
 FLAGS = None
@@ -46,43 +39,47 @@ def main():
     print("Client starting...")
     client = pyigtl.OpenIGTLinkClient(host=FLAGS.incoming_host, port=FLAGS.incoming_port)
     client.start()
+    print(FLAGS.incoming_host)
+    print(FLAGS.incoming_port)
     print("Client running...")
     lastMessageTime = time.time()
     ImageReceived = False
     frameCount = 0
     try:
         while (not ImageReceived) or (ImageReceived and time.time() - lastMessageTime < FLAGS.timeout):
-            if server.is_connected() and client.is_connected():
-                messages = client.get_latest_messages()
-                if len(messages) > 0:
-                    for message in messages:
-                        if message._message_type == "IMAGE":
-                            frameCount +=1
-                            ImageReceived = True
-                            lastMessageTime = time.time()
-                            image = message.image
-                            image = image[0]
-                            print(time.time())
-                            (networkOutput) = model.predict(image)
-                            print(time.time())
-                            if FLAGS.output_type == 'STRING':
-                                labelMessage = pyigtl.StringMessage(networkOutput, device_name=FLAGS.device_name)
-                                server.send_message(labelMessage)
-                            elif FLAGS.output_type == 'IMAGE':
-                                labelMessage = pyigtl.ImageMessage(networkOutput, device_name=FLAGS.device_name)
-                                server.send_message(labelMessage)
-                            elif FLAGS.output_type == 'TRANSFORM':
-                                pass
 
-                            print(frameCount)
-                        if message._message_type == "STRING":
-                            print("Received stop message")
-                            text = message.string
-                            if text == "STOP":
-                                client.stop()
-                                server.stop()
-                else:
-                    pass
+            #if server.is_connected() and client.is_connected():
+
+            messages = client.get_latest_messages()
+            if len(messages) > 0:
+                for message in messages:
+                    if message._message_type == "IMAGE":
+                        frameCount +=1
+                        ImageReceived = True
+                        lastMessageTime = time.time()
+                        image = message.image
+                        image = image[0]
+                        print(time.time())
+                        (networkOutput) = model.predict(image)
+                        print(time.time())
+                        if FLAGS.output_type == 'STRING':
+                            labelMessage = pyigtl.StringMessage(networkOutput, device_name=FLAGS.device_name)
+                            server.send_message(labelMessage)
+                        elif FLAGS.output_type == 'IMAGE':
+                            labelMessage = pyigtl.ImageMessage(networkOutput, device_name=FLAGS.device_name)
+                            server.send_message(labelMessage)
+                        elif FLAGS.output_type == 'TRANSFORM':
+                            pass
+
+                        print(frameCount)
+                    if message._message_type == "STRING":
+                        print("Received stop message")
+                        text = message.string
+                        if text == "STOP":
+                            client.stop()
+                            server.stop()
+            else:
+                pass
             time.sleep(0.25)
     except KeyboardInterrupt:
         pass
@@ -129,7 +126,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--incoming_port',
       type=int,
-      default=18945,
+      default=18946,
       help='Location of model.'
   )
   parser.add_argument(

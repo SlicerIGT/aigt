@@ -5,11 +5,10 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
 import subprocess
-import pandas
-import cv2
 from pathlib import Path
 import time
 import socket
+
 #
 # RunNeuralNet
 #
@@ -129,7 +128,7 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.outgoinghostnameLabel = qt.QLabel()
     self.outgoinghostnameLabel.setText("Outgoing Hostname: ")
     self.plusServerOutgoingPortLineEdit = qt.QLineEdit()
-    self.plusServerOutgoingPortLineEdit.setText("18945")
+    self.plusServerOutgoingPortLineEdit.setText("18946")
     self.outgoingportLabel = qt.QLabel()
     self.outgoingportLabel.setText("Port: ")
     outgoinghbox = qt.QHBoxLayout()
@@ -152,6 +151,7 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
 
     self.condaDirectoryPathSelector = ctk.ctkDirectoryButton()
     self.condaDirectoryPath = self.getCondaPath()
+    self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
     self.condaDirectoryPathSelector.directory = self.condaDirectoryPath
     condaSettingsLayout.addRow(self.condaDirectoryPathSelector)
 
@@ -247,8 +247,8 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.runNeuralNetworkButton.enabled = self.inputNodeSelector.currentNode() and self.outputNodeSelector.currentNode() and self.outputType!= "Select network output type"
 
   def onStartNetworkClicked(self):
-    self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
-    self.logic.setCondaEnvironmentName(self.environmentName)
+    #self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
+    #self.logic.setCondaEnvironmentName(self.environmentName)
     self.logic.setInputNode(self.inputNodeSelector.currentNode())
     self.logic.setOutputNode(self.outputNodeSelector.currentNode())
     outgoingHostName = self.plusServerOutgoingHostNameLineEdit.text
@@ -316,7 +316,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.outgoingConnectorNode.Start()
     this_Host = self.getIPAddress()
     if self.incomingHostName == "localhost" or self.incomingHostName == "127.0.0.1" or self.incomingHostName == this_Host:
-      cmd = [str(self.moduleDir + "\Scripts\StartNeuralNet.lnk"),
+      cmd = [str(self.moduleDir + "\Scripts\\openCMDPrompt.bat"),
              str(self.condaPath),
              str(self.condaEnvName),
              str(self.moduleDir + "\Scripts"),
@@ -329,10 +329,13 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
              str(self.incomingHostName),
              str(self.incomingPort),
              str(self.outputNode.GetName())]
-      self.p = subprocess.Popen(cmd, shell=True)
-      logging.info("Starting neural network...")
+      strCMD = cmd[0]
+      for i in range(1,len(cmd)):
+        strCMD = strCMD + ' ' + cmd[i]
+      p = slicer.util.launchConsoleProcess(strCMD, useStartupEnvironment=True)
+      #slicer.util.logProcessOutput(p)
     startTime = time.time()
-    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<30:
+    while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<15:
       time.sleep(0.25)
     if self.incomingConnectorNode.GetState() !=2:
       logging.info("Failed to connect to neural network")
@@ -427,9 +430,12 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.incomingConnectorNode.RegisterIncomingMRMLNode(self.outputNode)
     self.outgoingConnectorNode.RegisterOutgoingMRMLNode(self.inputNode)
 
-  def createNewModel(self,newModelName):
+  def createNewModel(self,newModelName,newModelLocation = None):
     templateModelFilePath = os.path.join(self.moduleDir,"Scripts","TemplateNetworkFile.txt")
-    newModelPath = os.path.join(self.moduleDir,os.pardir,"Networks",newModelName)
+    if newModelLocation == None:
+      newModelPath = os.path.join(self.moduleDir,os.pardir,"Networks",newModelName)
+    else:
+      newModelPath = os.path.join(newModelLocation,newModelName)
     templateFile = open(templateModelFilePath,'r')
     templateFileText = templateFile.read()
     templateFile.close()
