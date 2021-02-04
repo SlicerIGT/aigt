@@ -156,7 +156,7 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     condaSettingsLayout.addRow(self.condaDirectoryPathSelector)
 
     self.environmentNameLineEdit = qt.QLineEdit("EnvironmentName")
-    self.environmentName = "kerasGPUEnv"
+    self.environmentName = "kerasGPUEnv2"
     condaSettingsLayout.addRow(self.environmentNameLineEdit)
 
     createNewModelCollapsibleButton = ctk.ctkCollapsibleButton()
@@ -212,9 +212,11 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
 
   def onCondaDirectorySelected(self):
     self.condaDirectoryPath = self.condaDirectoryPathSelector.directory
+    self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
 
   def onCondaEnvironmentNameChanged(self):
     self.environmentName = self.environmentNameLineEdit.text
+    self.logic.setCondaEnvironmentName(self.environmentName)
 
   def onNetworkTypeSelected(self):
     self.networkType = self.networkTypeSelector.currentText
@@ -316,6 +318,8 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.outgoingConnectorNode.Start()
     this_Host = self.getIPAddress()
     if self.incomingHostName == "localhost" or self.incomingHostName == "127.0.0.1" or self.incomingHostName == this_Host:
+      username = os.environ['username']
+      userdomain = os.environ['userdomain']
       cmd = [str(self.moduleDir + "\Scripts\\openCMDPrompt.bat"),
              str(self.condaPath),
              str(self.condaEnvName),
@@ -329,11 +333,30 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
              str(self.incomingHostName),
              str(self.incomingPort),
              str(self.outputNode.GetName())]
+      print(self.condaEnvName)
       strCMD = cmd[0]
       for i in range(1,len(cmd)):
         strCMD = strCMD + ' ' + cmd[i]
-      p = slicer.util.launchConsoleProcess(strCMD, useStartupEnvironment=True)
-      #slicer.util.logProcessOutput(p)
+      cmd = ['runas', '/noprofile', '/savecred', '/user:' + userdomain + '\\' + username, strCMD]
+      self.state_name = None
+
+      startupEnv = slicer.util.startupEnvironment()
+      info = subprocess.STARTUPINFO()
+      info.dwFlags = subprocess.CREATE_NEW_CONSOLE
+      p = subprocess.Popen(cmd,env=startupEnv)
+      p.communicate()
+      startTime = time.time()
+      poll = p.poll()
+      while poll == 1 and time.time() - startTime < 2:
+        time.sleep(0.25)
+        poll = p.poll()
+      if poll == 1:
+        p.terminate()
+        print(strCMD)
+        cmd = ['runas', '/noprofile', '/user:' + userdomain + '\\' + username, strCMD]
+        #cmd = [strCMD]
+        p = subprocess.Popen(cmd,env=startupEnv)
+        p.communicate()
     startTime = time.time()
     while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<15:
       time.sleep(0.25)
@@ -341,14 +364,34 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       logging.info("Failed to connect to neural network")
     else:
       logging.info("Connected to neural network")
+  def handle_state(self,state):
+    states = {qt.QProcess.NotRunning: 'Not running',
+            qt.QProcess.Starting: 'Starting',
+            qt.QProcess.Running: 'Running'}
+    self.state_name = states[state]
+    logging.info(self.state_name)
+  def handle_stdout(self):
+    data = self.p.readAllStandardOutput()
+    #stdout = bytes(data).decode("utf8")
+    stdout = data.data()
+    logging.info(stdout)
+  def handle_stderr(self):
+    data = self.p.readAllStandardOutput()
+    #stdout = bytes(data).decode("utf8")
+    stderr = data.data()
+    logging.info(stderr)
 
   def getIPAddress(self):
       hostname = socket.gethostbyname(socket.gethostname())
       return hostname
 
   def stopNeuralNetwork(self):
+    if self.state_name != None:
+      self.p.kill()
     self.outgoingConnectorNode.UnregisterOutgoingMRMLNode(self.inputNode)
     self.incomingConnectorNode.UnregisterIncomingMRMLNode(self.outputNode)
+    self.outgoingConnectorNode.Stop()
+    self.incomingConnectorNode.Stop()
     logging.info("Stopping neural network")
 
   def setPathToCondaExecutable(self,condaPath):
