@@ -41,6 +41,7 @@ def create_standard_project_folders(local_data_folder):
     
     return data_arrays_fullpath, notebooks_save_fullpath, results_save_fullpath, models_save_fullpath, val_data_fullpath
 
+
 def load_girder_data(csv_fullname, data_arrays_fullpath, girder_url, girder_key=None, overwrite_existing_files=False):
     """
     Download numpy array files from a Girder server to a local folder. Then load them from the local folder to the
