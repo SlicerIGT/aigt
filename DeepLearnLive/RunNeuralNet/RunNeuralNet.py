@@ -318,8 +318,6 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.outgoingConnectorNode.Start()
     this_Host = self.getIPAddress()
     if self.incomingHostName == "localhost" or self.incomingHostName == "127.0.0.1" or self.incomingHostName == this_Host:
-      username = os.environ['username']
-      userdomain = os.environ['userdomain']
       cmd = [str(self.moduleDir + "\Scripts\\openCMDPrompt.bat"),
              str(self.condaPath),
              str(self.condaEnvName),
@@ -337,26 +335,10 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       strCMD = cmd[0]
       for i in range(1,len(cmd)):
         strCMD = strCMD + ' ' + cmd[i]
-      cmd = ['runas', '/noprofile', '/savecred', '/user:' + userdomain + '\\' + username, strCMD]
-      self.state_name = None
-
       startupEnv = slicer.util.startupEnvironment()
       info = subprocess.STARTUPINFO()
       info.dwFlags = subprocess.CREATE_NEW_CONSOLE
       p = subprocess.Popen(cmd,env=startupEnv)
-      p.communicate()
-      startTime = time.time()
-      poll = p.poll()
-      while poll == 1 and time.time() - startTime < 2:
-        time.sleep(0.25)
-        poll = p.poll()
-      if poll == 1:
-        p.terminate()
-        print(strCMD)
-        cmd = ['runas', '/noprofile', '/user:' + userdomain + '\\' + username, strCMD]
-        #cmd = [strCMD]
-        p = subprocess.Popen(cmd,env=startupEnv)
-        p.communicate()
     startTime = time.time()
     while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<15:
       time.sleep(0.25)
