@@ -6,6 +6,7 @@ from slicer.ScriptedLoadableModule import *
 import logging
 import subprocess
 import time
+import datetime
 
 
 try:
@@ -68,9 +69,29 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     #
     # Parameters Area
     #
+    self.labelSequenceCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.labelSequenceCollapsibleButton.text = "Label Sequence"
+    self.layout.addWidget(self.labelSequenceCollapsibleButton)
+
+    labelSequenceLayout = qt.QFormLayout(self.labelSequenceCollapsibleButton)
+    self.setupLabelSequenceLayout(labelSequenceLayout)
+    self.labelSequenceCollapsibleButton.collapsed = True
+
+    reviewLabelsCollapsibleButton = ctk.ctkCollapsibleButton()
+    reviewLabelsCollapsibleButton.text = "Review Labels"
+    self.layout.addWidget(reviewLabelsCollapsibleButton)
+    reviewLabelsCollapsibleButton.collapsed = True
+
+    reviewLabelsFormLayout = qt.QFormLayout(reviewLabelsCollapsibleButton)
+    self.setupReviewLayout(reviewLabelsFormLayout)
+
+    #self.infoLabel = qt.QLabel("")
+    #parametersFormLayout.addRow(self.infoLabel)
+
     parametersCollapsibleButton = ctk.ctkCollapsibleButton()
     parametersCollapsibleButton.text = "Export Images"
     self.layout.addWidget(parametersCollapsibleButton)
+    parametersCollapsibleButton.collapsed = False
 
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
@@ -83,7 +104,6 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         recordingNodeNames.append(recordingNode.GetName())
     self.selectRecordingNodeComboBox.addItems(recordingNodeNames)
     parametersFormLayout.addRow(self.selectRecordingNodeComboBox)
-
 
     self.datasetSelector = ctk.ctkDirectoryButton()
     self.datasetSelector.directory = os.path.join(self.moduleDir,os.pardir,"Datasets")
@@ -132,16 +152,6 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.startStopCollectingImagesButton.enabled = False
     parametersFormLayout.addRow(self.startStopCollectingImagesButton)
 
-    reviewLabelsCollapsibleButton = ctk.ctkCollapsibleButton()
-    reviewLabelsCollapsibleButton.text = "Review Labels"
-    self.layout.addWidget(reviewLabelsCollapsibleButton)
-    reviewLabelsCollapsibleButton.collapsed = True
-
-    reviewLabelsFormLayout = qt.QFormLayout(reviewLabelsCollapsibleButton)
-    self.setupReviewLayout(reviewLabelsFormLayout)
-
-    self.infoLabel = qt.QLabel("")
-    parametersFormLayout.addRow(self.infoLabel)
     # connections
     self.nodeAddedToSceneObserver = slicer.mrmlScene.AddObserver(slicer.mrmlScene.NodeAddedEvent,self.addNodesToRecordingCombobox)
     self.nodeRemovedFromSceneObserver = slicer.mrmlScene.AddObserver(slicer.mrmlScene.NodeRemovedEvent, self.removeNodesFromRecordingCombobox)
@@ -188,6 +198,200 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.webcamConnectorNode = self.createWebcamPlusConnector()
     self.webcamConnectorNode.Start()
     self.setupWebcamResliceDriver()
+
+  def setupLabelSequenceLayout(self,layout):
+    self.selectSequenceBox = slicer.qMRMLNodeComboBox()
+    self.selectSequenceBox.selectNodeUponCreation = True
+    self.selectSequenceBox.nodeTypes = ["vtkMRMLSequenceBrowserNode"]
+    self.selectSequenceBox.addEnabled = False
+    self.selectSequenceBox.removeEnabled = False
+    self.selectSequenceBox.editEnabled = False
+    self.selectSequenceBox.renameEnabled = False
+    self.selectSequenceBox.noneEnabled = False
+    self.selectSequenceBox.showHidden = False
+    self.selectSequenceBox.showChildNodeTypes = False
+    self.selectSequenceBox.setMRMLScene(slicer.mrmlScene)
+    layout.addRow(self.selectSequenceBox)
+
+    self.logic.setSequenceBrowserNode(self.selectSequenceBox.currentNode())
+
+    self.selectImageNodeBox = qt.QComboBox()
+    self.selectImageNodeBox.addItem("Select Image Node")
+    layout.addRow(self.selectImageNodeBox)
+
+    self.labelproblemTypeComboBox = qt.QComboBox()
+    self.labelproblemTypeComboBox.addItems(["Select problem type","Classification","Segmentation","Detection"])
+    layout.addRow(self.labelproblemTypeComboBox)
+
+    self.selectLabelTypeCombobox = slicer.qMRMLNodeComboBox()
+    self.selectLabelTypeCombobox.selectNodeUponCreation = True
+    self.selectLabelTypeCombobox.nodeTypes = ["vtkMRMLTextNode"]
+    self.selectLabelTypeCombobox.addEnabled = True
+    self.selectLabelTypeCombobox.removeEnabled = False
+    self.selectLabelTypeCombobox.editEnabled = False
+    self.selectLabelTypeCombobox.renameEnabled = True
+    self.selectLabelTypeCombobox.noneEnabled = False
+    self.selectLabelTypeCombobox.showHidden = False
+    self.selectLabelTypeCombobox.showChildNodeTypes = False
+    self.selectLabelTypeCombobox.setMRMLScene(slicer.mrmlScene)
+    layout.addRow("Label node: ",self.selectLabelTypeCombobox)
+
+    self.logic.setLabelNode(self.selectLabelTypeCombobox.currentNode())
+
+    self.labelTableWidget = qt.QTableWidget(0,3)
+    self.labelTableWidget.setColumnWidth(0, 80)
+    self.labelTableWidget.setColumnWidth(1,300)
+    self.labelTableWidget.setColumnWidth(2,50)
+    self.labelTableWidget.setHorizontalHeaderLabels(["Label name","Range","Remove"])
+    self.labelTableWidget.setGeometry(qt.QRect(0,0,10,10))
+
+    layout.addRow(self.labelTableWidget)
+    self.labelTableWidget.visible = False
+
+    self.addRowButton = qt.QPushButton("Add row")
+    self.addRowButton.visible = False
+
+    layout.addRow(self.addRowButton)
+
+    self.removeRowButton = qt.QPushButton("Remove selected rows")
+    self.removeRowButton.visible = False
+
+    layout.addRow(self.removeRowButton)
+
+    self.labelSequenceButton = qt.QPushButton("Label sequence")
+    layout.addRow(self.labelSequenceButton)
+
+    self.addImageNodeNamesToComboBox()
+
+    self.selectSequenceBox.connect("currentNodeChanged(vtkMRMLNode*)",self.onSequenceBrowserSelected)
+    self.labelproblemTypeComboBox.connect('currentIndexChanged(int)',self.onlabelProblemTypeSelected)
+    self.selectImageNodeBox.connect('currentIndexChanged(int)',self.onImageNodeSelected)
+    self.selectLabelTypeCombobox.connect("currentNodeChanged(vtkMRMLNode*)",self.onLabelNodeSelected)
+    self.removeRowButton.connect('clicked(bool)',self.onRemoveRowClicked)
+    self.addRowButton.connect('clicked(bool)',self.onAddRowClicked)
+    self.labelSequenceButton.connect('clicked(bool)',self.onLabelSequenceClicked)
+
+  def onlabelProblemTypeSelected(self):
+    if self.labelproblemTypeComboBox.currentText == "Classification":
+      self.labelTableWidget.visible = True
+      self.addRowButton.visible = True
+      self.removeRowButton.visible = True
+      self.selectLabelTypeCombobox.nodeTypes = ["vtkMRMLTextNode"]
+    elif self.labelproblemTypeComboBox.currentText == "Segmentation":
+      self.labelTableWidget.visible = False
+      self.addRowButton.visible = False
+      self.removeRowButton.visible = False
+      self.selectLabelTypeCombobox.nodeTypes = ["vtkMRMLSegmentationNode"]
+    elif self.labelproblemTypeComboBox.currentText == "Detection":
+      self.labelTableWidget.visible = False
+      self.addRowButton.visible = False
+      self.removeRowButton.visible = True
+    else:
+      self.labelTableWidget.visible = False
+      self.addRowButton.visible = False
+      self.removeRowButton.visible = False
+      print(self.labelproblemTypeComboBox.currentText)
+
+  def onSequenceBrowserSelected(self):
+    self.sequenceBrowserNode = self.selectSequenceBox.currentNode()
+    self.logic.setSequenceBrowserNode(self.selectSequenceBox.currentNode())
+    self.addImageNodeNamesToComboBox()
+
+  def addImageNodeNamesToComboBox(self):
+    imageNodeNames = []
+    proxyNodes = vtk.vtkCollection()
+    try:
+      self.selectSequenceBox.currentNode().GetAllProxyNodes(proxyNodes)
+      numProxyNodes = proxyNodes.GetNumberOfItems()
+      for i in range(numProxyNodes):
+        proxyNode = proxyNodes.GetItemAsObject(i)
+        proxyNodeClass = proxyNode.GetClassName()
+        if proxyNodeClass in ["vtkMRMLVectorVolumeNode", "vtkMRMLScalarVolumeNode", "vtkMRMLStreamingVolumeNode"]:
+          imageNodeNames.append(proxyNode.GetName())
+      for i in range(self.selectImageNodeBox.count - 1, 0, -1):
+        self.selectImageNodeBox.removeItem(i)
+      self.selectImageNodeBox.addItems(imageNodeNames)
+    except AttributeError:
+      pass
+
+  def onImageNodeSelected(self):
+    self.logic.setImageNode(self.selectImageNodeBox.currentText)
+    self.sequenceNode = self.selectSequenceBox.currentNode().GetSequenceNode(slicer.util.getNode(self.selectImageNodeBox.currentText))
+    self.numDataNodes = self.sequenceNode.GetNumberOfDataNodes()
+
+  def onLabelNodeSelected(self):
+    self.logic.setLabelNode(self.selectLabelTypeCombobox.currentNode())
+
+  def onAddRowClicked(self):
+    numRows = self.labelTableWidget.rowCount
+    self.labelTableWidget.insertRow(numRows)
+    labelNameLineEdit = qt.QLineEdit()
+    labelNameLineEdit.setText("Label")
+    self.labelTableWidget.setCellWidget(numRows, 0, labelNameLineEdit)
+
+    RangeSelectorWidget = qt.QWidget()
+    RangeSelectorWidget.setObjectName("RangeSelectorWidget_"+str(numRows))
+    layout = qt.QHBoxLayout()
+    minTimeLabel = qt.QLabel("0.00 s")
+    minTimeLabel.setObjectName("minLabel_"+str(numRows))
+    maxTimeLabel = qt.QLabel("%.2f" % float(self.sequenceNode.GetNthIndexValue(self.numDataNodes-1)))
+    maxTimeLabel.setObjectName("maxLabel_"+str(numRows))
+    rangeSlider = ctk.ctkRangeSlider()
+    rangeSlider.setOrientation(qt.Qt.Horizontal)
+    rangeSlider.setObjectName("rangeSlider_"+str(numRows))
+    rangeSlider.setMinimum(0)
+    rangeSlider.setMaximum(self.numDataNodes-1)
+    layout.addWidget(minTimeLabel)
+    layout.addWidget(rangeSlider)
+    layout.addWidget(maxTimeLabel)
+    RangeSelectorWidget.setLayout(layout)
+    self.labelTableWidget.setCellWidget(numRows, 1, RangeSelectorWidget)
+
+    removeButton = qt.QCheckBox()
+    removeButton.setGeometry(qt.QRect(0, 0, 10, 10))
+    self.labelTableWidget.setCellWidget(numRows, 2, removeButton)
+
+    rangeSlider.connect('positionsChanged(int,int)',self.onSliderPositionChanged)
+
+  def onSliderPositionChanged(self):
+    rangeSliders = self.labelTableWidget.findChildren('ctkRangeSlider')
+    minLabels = [x for x in self.labelTableWidget.findChildren('QLabel') if "minLabel" in x.name]
+    maxLabels = [x for x in self.labelTableWidget.findChildren('QLabel') if "maxLabel" in x.name]
+    rangeSliders[0].minimumPosition = 0
+    maxLabels[0].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[0].maximumPosition))
+    for i in range(1,len(rangeSliders)):
+      minLabels[i].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[i-1].maximumPosition))
+      rangeSliders[i].minimumPosition = rangeSliders[i-1].maximumPosition
+      maxLabels[i].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[i].maximumPosition))
+    rangeSliders[len(rangeSliders)-1].maximumPosition = self.numDataNodes
+    maxLabels[len(rangeSliders)-1].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(self.numDataNodes-1))
+
+
+  def onRemoveRowClicked(self):
+    numRows = self.labelTableWidget.rowCount
+    rowsToRemove = []
+    for i in range(numRows):
+      checkBox = self.labelTableWidget.cellWidget(i,2)
+      if checkBox.checked:
+        rowsToRemove.append(i)
+    rowsToRemove.sort(reverse=True)
+    for row in rowsToRemove:
+      self.labelTableWidget.removeRow(row)
+    rangeSliders = self.labelTableWidget.findChildren('ctkRangeSlider')
+    minLabels = [x for x in self.labelTableWidget.findChildren('QLabel') if "minLabel" in x.name]
+    maxLabels = [x for x in self.labelTableWidget.findChildren('QLabel') if "maxLabel" in x.name]
+    rangeSliders[0].minimumPosition = 0
+    maxLabels[0].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[0].maximumPosition))
+    for i in range(1, len(rangeSliders)):
+      minLabels[i].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[i - 1].maximumPosition))
+      rangeSliders[i].minimumPosition = rangeSliders[i - 1].maximumPosition
+      maxLabels[i].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[i].maximumPosition))
+    rangeSliders[len(rangeSliders) - 1].maximumPosition = self.numDataNodes
+    maxLabels[len(rangeSliders) - 1].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(self.numDataNodes - 1))
+
+
+  def onLabelSequenceClicked(self):
+    self.logic.labelSequence(self.labelTableWidget)
 
   def setupReviewLayout(self,layout):
     self.reviewNodeSelector = slicer.qMRMLNodeComboBox()
@@ -340,8 +544,24 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     classificationFormLayout.addWidget(self.autoLabelFilePathSelector)
     self.autoLabelFilePathSelector.visible = False
 
+    self.classificationSequenceSelector = slicer.qMRMLNodeComboBox()
+    self.classificationSequenceSelector.selectNodeUponCreation = True
+    self.classificationSequenceSelector.nodeTypes = ["vtkMRMLSequenceNode"]
+    self.classificationSequenceSelector.addEnabled = False
+    self.classificationSequenceSelector.removeEnabled = False
+    self.classificationSequenceSelector.editEnabled = False
+    self.classificationSequenceSelector.renameEnabled = False
+    self.classificationSequenceSelector.noneEnabled = False
+    self.classificationSequenceSelector.showHidden = False
+    self.classificationSequenceSelector.showChildNodeTypes = False
+    self.classificationSequenceSelector.setMRMLScene(slicer.mrmlScene)
+    classificationFormLayout.addWidget(self.classificationSequenceSelector)
+    self.classificationSequenceSelector.visible = False
+    self.classificationLabelNode = self.classificationSequenceSelector.currentNode()
+
     self.classificationLabellingMethodComboBox.connect('currentIndexChanged(int)', self.onLabellingMethodSelected)
     self.autoLabelFilePathSelector.connect('currentPathChanged(QString)',self.onAutoLabelFileChanged)
+    self.classificationSequenceSelector.connect('currentNodeChanged(vtkMRMLNode*)',self.onClassificationLabelNodeSelected)
 
   def detectionLayout(self):
     self.detectionFrame = qt.QFrame()
@@ -644,9 +864,13 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         autoFromFilePresent = self.classificationLabellingMethodComboBox.findText("Auto from file")
         if autoFromFilePresent == -1:
           self.classificationLabellingMethodComboBox.addItems(["Auto from file"])
+        fromSequencePresent = self.classificationLabellingMethodComboBox.findText("From Sequence")
+        if fromSequencePresent == -1:
+          self.classificationLabellingMethodComboBox.addItems(["From Sequence"])
         self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.currentPath)
       else:
         self.classificationLabellingMethodComboBox.removeItem(self.classificationLabellingMethodComboBox.findText("Auto from file"))
+        self.classificationLabellingMethodComboBox.removeItem(self.classificationLabellingMethodComboBox.findText("From Sequence"))
       self.classificationFrame.visible = True
       self.detectionFrame.visible = False
       self.segmentationFrame.visible = False
@@ -690,6 +914,9 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     elif self.labellingMethod == "From Segmentation":
       self.logic.setLabelName(self.inputSegmentation)
       self.logic.setLabelType(self.inputSegmentation)
+    elif self.labellingMethod == "From Sequence":
+      self.logic.setLabelSequence(self.classificationLabelNode)
+      self.logic.setLabelType(self.classificationLabelTypeLineEdit.text)
     self.logic.startImageCollection (self.collectingImages, self.imageLabels,self.csvFilePath)
 
   def onLabellingMethodSelected(self):
@@ -699,14 +926,22 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         self.classificationLabelNameLineEdit.visible = True
         self.classificationLabelTypeLineEdit.visible = True
         self.autoLabelFilePathSelector.visible = False
+        self.classificationSequenceSelector.visible = False
       elif self.labellingMethod == "Auto from file":
         self.classificationLabelNameLineEdit.visible = False
         self.classificationLabelTypeLineEdit.visible = False
         self.autoLabelFilePathSelector.visible = True
+        self.classificationSequenceSelector.visible = False
+      elif self.labellingMethod == "From Sequence":
+        self.classificationLabelTypeLineEdit.visible = True
+        self.classificationLabelNameLineEdit.visible = False
+        self.autoLabelFilePathSelector.visible = False
+        self.classificationSequenceSelector.visible = True
       else:
         self.classificationLabelNameLineEdit.visible = False
         self.classificationLabelTypeLineEdit.visible = False
         self.autoLabelFilePathSelector.visible = False
+        self.classificationSequenceSelector.visible = False
     elif self.problemType == "Segmentation":
       self.labellingMethod = self.segmentationLabellingMethodComboBox.currentText
       if self.labellingMethod == "Unlabelled":
@@ -729,14 +964,16 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
   def onCollectFromSequenceChecked(self):
     if self.collectFromSequenceCheckBox.checked:
       if self.problemTypeComboBox.currentText == "Classification":
-        self.classificationLabellingMethodComboBox.addItems(["Auto from file"])
+        self.classificationLabellingMethodComboBox.addItems(["Auto from file","From Sequence"])
       self.collectingFromSequence = True
     else:
       self.classificationLabellingMethodComboBox.removeItem(self.classificationLabellingMethodComboBox.findText("Auto from file"))
+      self.classificationLabellingMethodComboBox.removeItem(self.classificationLabellingMethodComboBox.findText("From Sequence"))
       self.collectingFromSequence = False
     self.logic.setCollectingFromSequence(self.collectingFromSequence)
 
-
+  def onClassificationLabelNodeSelected(self):
+    self.classificationLabelNode = self.classificationSequenceSelector.currentNode()
 #
 # DataCollectionLogic
 #
@@ -755,7 +992,58 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.recordingVolumeNode = None
     self.autoLabelFilePath = None
     self.segmentationNodeName = None
+    self.labelSequenceNode = None
 
+  def labelSequence(self,labelTable):
+    self.labelTable = labelTable
+    self.labels = self.getLabels(self.labelTable)
+    self.sequenceNode = self.sequenceBrowserNode.GetSequenceNode(self.imageNode)
+    try:
+      self.labelSequenceNode = slicer.util.getNode(self.labelNode.GetName() + "-Sequence")
+    except slicer.util.MRMLNodeNotFoundException:
+      self.labelSequenceNode = slicer.vtkMRMLSequenceNode()
+      self.labelSequenceNode.SetName(self.labelNode.GetName() + "-Sequence")
+      slicer.mrmlScene.AddNode(self.labelSequenceNode)
+    for i in range(self.sequenceNode.GetNumberOfDataNodes()):
+      index = self.sequenceNode.GetNthIndexValue(i)
+      newTextNode = slicer.vtkMRMLTextNode()
+      newTextNode.SetName(self.labelNode.GetName()+"-Sequence_"+str(i).zfill(4))
+      label = self.labels.loc[(self.labels["Start"] <= float(index)) & (self.labels["End"] > float(index))]
+      if label.empty:
+        label = self.labels.loc[(self.labels["Start"] <= float(index)) & (float(index) - self.labels["End"] < 0.01 )]
+      labelName = label.iloc[0][self.labelNode.GetName()]
+      newTextNode.SetText(labelName)
+      self.labelSequenceNode.SetDataNodeAtValue(newTextNode,index)
+      if i != self.labelSequenceNode.GetNumberOfDataNodes():
+        logging.info("Created data node " + str(i+1) + " with label " + labelName)
+      #logging.info(str(self.labelSequenceNode.GetNumberOfDataNodes()) + " / " + str(self.sequenceNode.GetNumberOfDataNodes()))
+    #self.sequenceBrowserNode.AddSynchronizedSequenceNodeID(self.labelSequenceNode.GetID())
+
+  def getLabels(self,labelTable):
+    labels = pandas.DataFrame(columns=[self.labelNode.GetName(),"Start","End"])
+    lineEdits = labelTable.findChildren("QLineEdit")
+    minLabels = [x for x in labelTable.findChildren('QLabel') if "minLabel" in x.name]
+    maxLabels = [x for x in labelTable.findChildren('QLabel') if "maxLabel" in x.name]
+    for i in range(len(lineEdits)):
+      labelName = lineEdits[i].text
+      minValue = minLabels[i].text
+      minValue = minValue.replace(" s","")
+      minValue = float(minValue)
+      maxValue = maxLabels[i].text
+      maxValue = maxValue.replace(" s", "")
+      maxValue = float(maxValue)
+      labels = labels.append({self.labelNode.GetName():labelName,"Start":minValue,"End":maxValue},ignore_index=True)
+    return labels
+
+
+  def setSequenceBrowserNode(self,sequenceBrowser):
+    self.sequenceBrowserNode = sequenceBrowser
+
+  def setImageNode(self,imageNodeName):
+    self.imageNode = slicer.util.getNode(imageNodeName)
+
+  def setLabelNode(self,labelNode):
+    self.labelNode = labelNode
 
   def startImageCollection(self, imageCollectionStarted, imageLabels, labelFilePath):
     self.collectingImages = imageCollectionStarted
@@ -765,47 +1053,50 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
     self.lastRecordedTime = 0.0
 
-    if self.labellingMethod == 'Auto from file':
-      self.autoLabels = pandas.read_csv(self.autoLabelFilePath)
-      self.labelType = self.autoLabels.columns[0]
-    if (not self.labelType in self.imageLabels.columns) and self.labelType != None and not self.imageLabels.empty:
-      if self.labellingMethod == "Auto from file":
-        self.imageLabels = self.labelExistingEntries(self.imageLabels,self.autoLabels)
-      elif "Time Recorded" in self.imageLabels.columns:
-        self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
-      else:
-        logging.info("Cannot relabel images recorded from live sequence")
-
-    if self.collectingImages == False:
-      if self.recordingVolumeNode.GetClassName() == "vtkMRMLStreamingVolumeNode":
-        self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameModifiedEvent,self.onStartCollectingImages)
-      elif self.recordingVolumeNode.GetClassName() == "vtkMRMLVectorVolumeNode":
-        self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLVectorVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
-      elif self.recordingVolumeNode.GetClassName() == "vtkMRMLScalarVolumeNode":
-        self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
-      else:
-        logging.info(self.recordingVolumeNode.GetClassName() + " is not a supported recording volume type")
-      logging.info("Start collecting images")
-
+    if self.labellingMethod == "From Sequence":
+      self.exportImagesFromSequence()
     else:
-      self.recordingVolumeNode.RemoveObserver(self.recordingVolumeNodeObserver)
-      self.recordingVolumeNodeObserver = None
-      self.numImagesInFile = len(os.listdir(os.path.dirname(self.labelFilePath)))
-      logging.info("Saved " + str(self.numImagesInFile) + " to directory : " + str(os.path.dirname(self.labelFilePath)))
-
-    if self.fromSequence:
-      try:
-        if not self.finishedVideo:
-          playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
-          playWidgetButtons = playWidget[0].findChildren('QPushButton')
-          playWidgetButtons[2].click()
+      if self.labellingMethod == 'Auto from file':
+        self.autoLabels = pandas.read_csv(self.autoLabelFilePath)
+        self.labelType = self.autoLabels.columns[0]
+      if (not self.labelType in self.imageLabels.columns) and self.labelType != None and not self.imageLabels.empty:
+        if self.labellingMethod == "Auto from file":
+          self.imageLabels = self.labelExistingEntries(self.imageLabels,self.autoLabels)
+        elif "Time Recorded" in self.imageLabels.columns:
+          self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
         else:
-          logging.info("Video processing complete")
-      except AttributeError:
-        pass
-        '''playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
-        playWidgetButtons = playWidget[0].findChildren('QPushButton')
-        playWidgetButtons[2].click()'''
+          logging.info("Cannot relabel images recorded from live sequence")
+
+      if self.collectingImages == False:
+        if self.recordingVolumeNode.GetClassName() == "vtkMRMLStreamingVolumeNode":
+          self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameModifiedEvent,self.onStartCollectingImages)
+        elif self.recordingVolumeNode.GetClassName() == "vtkMRMLVectorVolumeNode":
+          self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLVectorVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
+        elif self.recordingVolumeNode.GetClassName() == "vtkMRMLScalarVolumeNode":
+          self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
+        else:
+          logging.info(self.recordingVolumeNode.GetClassName() + " is not a supported recording volume type")
+        logging.info("Start collecting images")
+
+      else:
+        self.recordingVolumeNode.RemoveObserver(self.recordingVolumeNodeObserver)
+        self.recordingVolumeNodeObserver = None
+        self.numImagesInFile = len(os.listdir(os.path.dirname(self.labelFilePath)))
+        logging.info("Saved " + str(self.numImagesInFile) + " to directory : " + str(os.path.dirname(self.labelFilePath)))
+
+      if self.fromSequence:
+        try:
+          if not self.finishedVideo:
+            playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
+            playWidgetButtons = playWidget[0].findChildren('QPushButton')
+            playWidgetButtons[2].click()
+          else:
+            logging.info("Video processing complete")
+        except AttributeError:
+          pass
+          '''playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
+          playWidgetButtons = playWidget[0].findChildren('QPushButton')
+          playWidgetButtons[2].click()'''
 
   def onStartCollectingImages(self,caller,eventID):
     if self.fromSequence:
@@ -860,6 +1151,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           (labelImData, self.labelName) = self.getSegmentationLabel(fileName)
           imagePath = os.path.dirname(self.labelFilePath)
           cv2.imwrite(os.path.join(imagePath,self.labelName),labelImData)
+        elif self.labellingMethod == "From Sequence":
+          labelDataNode = self.labelSequenceNode.GetDataNodeAtValue(str(recordingTime))
+          self.labelName = labelDataNode.GetText()
         if self.fromSequence:
           recordingTime = timeLabel.text
           self.lastRecordedTime = float(recordingTime)
@@ -880,6 +1174,32 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       playWidgetButtons[2].click()
       self.finishedVideo = True
 
+  def exportImagesFromSequence(self):
+    sequenceName = self.recordingVolumeNode.GetName().split(sep="_")
+    sequenceNode = slicer.util.getFirstNodeByName(sequenceName[0])
+    numDataNodes = sequenceNode.GetNumberOfDataNodes()
+    addingToExisting = False
+    if (not self.labelType in self.imageLabels.columns) and not self.imageLabels.empty:
+      self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max() + 1)]
+      addingToExisting = True
+    elif not self.imageLabels.empty:
+      addingToExisting = True
+    for i in range(numDataNodes):
+      logging.info(str(i) + " / " + str(numDataNodes) + " written")
+      dataNode = sequenceNode.GetNthDataNode(i)
+      labelNode = self.labelSequenceNode.GetNthDataNode(i)
+      labelName = labelNode.GetText()
+      if addingToExisting:
+        self.imageLabels.loc[i,self.labelType] = labelName
+      else:
+        imData = self.getVtkImageDataAsOpenCVMat(dataNode,True)
+        timeRecorded = sequenceNode.GetNthIndexValue(i)
+        fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
+        imagePath = os.path.dirname(self.labelFilePath)
+        cv2.imwrite(os.path.join(imagePath, fileName), imData)
+        self.imageLabels = self.imageLabels.append({"FileName":fileName,"Time Recorded":timeRecorded,self.labelType:labelName},ignore_index=True)
+    self.imageLabels.to_csv(self.labelFilePath)
+
   def labelExistingEntries(self,imageLabels,autolabels):
     imageLabels[self.labelType] = ['None' for i in range(len(imageLabels.index))]
     for i in range(0,len(autolabels.index)):
@@ -891,6 +1211,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
   def setImageSubtype(self,subtypeName):
     self.imageSubtype = subtypeName
     self.finishedVideo = False
+
+  def setLabelSequence(self,sequenceNode):
+    self.labelSequenceNode = sequenceNode
 
   def getClassificationLabelFromFile(self):
     seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
@@ -972,27 +1295,12 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
     return mergedLabelmap_Reference
 
-  def getVtkImageDataAsOpenCVMat(self, volumeNodeName):
-    try:
-      # the module is in the python path
-      import cv2
-    except ModuleNotFoundError:
-      # for the build directory, load from the file
-      import imp, platform
-      if platform.system() == 'Windows':
-        cv2File = 'cv2.pyd'
-        cv2Path = '../../../../OpenCV-build/lib/Release/' + cv2File
-      else:
-        cv2File = 'cv2.so'
-        cv2Path = '../../../../OpenCV-build/lib/' + cv2File
-      scriptPath = os.path.dirname(os.path.abspath(__file__))
-      cv2Path = os.path.abspath(os.path.join(scriptPath, cv2Path))
-      # in the build directory, this path should exist, but in the installed extension
-      # it should be in the python pat, so only use the short file name
-      if not os.path.isfile(cv2Path):
-        cv2Path = cv2File
-      cv2 = imp.load_dynamic('cv2', cv2File)
-    cameraVolume = slicer.util.getNode(volumeNodeName)
+  def getVtkImageDataAsOpenCVMat(self, volumeNodeName,NodeGiven=False):
+    import cv2
+    if not NodeGiven:
+      cameraVolume = slicer.util.getNode(volumeNodeName)
+    else:
+      cameraVolume = volumeNodeName
     image = cameraVolume.GetImageData()
     shape = list(cameraVolume.GetImageData().GetDimensions())
     components = image.GetNumberOfScalarComponents()
