@@ -7,6 +7,7 @@ import logging
 import subprocess
 import time
 import datetime
+from sequenceSpinBox import sequenceSpinBox
 
 
 try:
@@ -327,6 +328,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.labelTableWidget.insertRow(numRows)
     labelNameLineEdit = qt.QLineEdit()
     labelNameLineEdit.setText("Label")
+    labelNameLineEdit.setObjectName("labelEdit_"+str(numRows))
     self.labelTableWidget.setCellWidget(numRows, 0, labelNameLineEdit)
 
     RangeSelectorWidget = qt.QWidget()
@@ -336,6 +338,14 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     minTimeLabel.setObjectName("minLabel_"+str(numRows))
     maxTimeLabel = qt.QLabel("%.2f" % float(self.sequenceNode.GetNthIndexValue(self.numDataNodes-1)))
     maxTimeLabel.setObjectName("maxLabel_"+str(numRows))
+    #maxTimeBox = qt.QDoubleSpinBox()
+    maxTimeBox = sequenceSpinBox()
+    valueRange = ["%.2f" % float(self.sequenceNode.GetNthIndexValue(x)) for x in range(self.numDataNodes)]
+    maxTimeBox.setValueRange(valueRange)
+    maxTimeBox.setMinimum(0)
+    maxTimeBox.setMaximum(self.numDataNodes-1)
+    maxTimeBox.setSuffix(" s")
+    maxTimeBox.setValue(int(self.numDataNodes-1))
     rangeSlider = ctk.ctkRangeSlider()
     rangeSlider.setOrientation(qt.Qt.Horizontal)
     rangeSlider.setObjectName("rangeSlider_"+str(numRows))
@@ -343,28 +353,53 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     rangeSlider.setMaximum(self.numDataNodes-1)
     layout.addWidget(minTimeLabel)
     layout.addWidget(rangeSlider)
-    layout.addWidget(maxTimeLabel)
+    layout.addWidget(maxTimeBox)
     RangeSelectorWidget.setLayout(layout)
     self.labelTableWidget.setCellWidget(numRows, 1, RangeSelectorWidget)
 
     removeButton = qt.QCheckBox()
     removeButton.setGeometry(qt.QRect(0, 0, 10, 10))
     self.labelTableWidget.setCellWidget(numRows, 2, removeButton)
-
+    maxTimeBox.connect('valueChanged(double)',self.maxValueChanged)
     rangeSlider.connect('positionsChanged(int,int)',self.onSliderPositionChanged)
+    rangeSlider.connect('sliderReleased()', self.onSliderReleased)
+    rangeSlider.connect('sliderPressed()', self.onSliderClicked)
+
+  def onSliderClicked(self):
+    maxLabels = [x for x in self.labelTableWidget.findChildren('QDoubleSpinBox')]
+    for widget in maxLabels:
+      widget.blockSignals(True)
+
+  def onSliderReleased(self):
+    maxLabels = [x for x in self.labelTableWidget.findChildren('QDoubleSpinBox')]
+    for widget in maxLabels:
+      widget.blockSignals(False)
+
+  def maxValueChanged(self):
+    minLabels = [x for x in self.labelTableWidget.findChildren('QLabel') if "minLabel" in x.name]
+    rangeSliders = self.labelTableWidget.findChildren('ctkRangeSlider')
+    maxLabels = [x for x in self.labelTableWidget.findChildren('QDoubleSpinBox')]
+    for widget in rangeSliders:
+      widget.blockSignals(True)
+    for i in range(len(maxLabels)):
+      if i < len(maxLabels)-1:
+        minLabels[i+1].text = maxLabels[i].text
+      rangeSliders[i].maximumPosition = maxLabels[i].value
+    for widget in rangeSliders:
+      widget.blockSignals(False)
 
   def onSliderPositionChanged(self):
     rangeSliders = self.labelTableWidget.findChildren('ctkRangeSlider')
     minLabels = [x for x in self.labelTableWidget.findChildren('QLabel') if "minLabel" in x.name]
-    maxLabels = [x for x in self.labelTableWidget.findChildren('QLabel') if "maxLabel" in x.name]
+    maxLabels = [x for x in self.labelTableWidget.findChildren('QDoubleSpinBox')]
     rangeSliders[0].minimumPosition = 0
-    maxLabels[0].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[0].maximumPosition))
+    maxLabels[0].setValue(rangeSliders[0].maximumPosition)
     for i in range(1,len(rangeSliders)):
       minLabels[i].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[i-1].maximumPosition))
       rangeSliders[i].minimumPosition = rangeSliders[i-1].maximumPosition
-      maxLabels[i].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(rangeSliders[i].maximumPosition))
+      maxLabels[i].setValue(rangeSliders[i].maximumPosition)
     rangeSliders[len(rangeSliders)-1].maximumPosition = self.numDataNodes
-    maxLabels[len(rangeSliders)-1].text = "%5.2f s" % float(self.sequenceNode.GetNthIndexValue(self.numDataNodes-1))
+    maxLabels[len(rangeSliders)-1].setValue(self.numDataNodes-1)
 
 
   def onRemoveRowClicked(self):
@@ -1006,12 +1041,16 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       slicer.mrmlScene.AddNode(self.labelSequenceNode)
     for i in range(self.sequenceNode.GetNumberOfDataNodes()):
       index = self.sequenceNode.GetNthIndexValue(i)
+      indexFloat = round(float(index),2)
       newTextNode = slicer.vtkMRMLTextNode()
       newTextNode.SetName(self.labelNode.GetName()+"-Sequence_"+str(i).zfill(4))
-      label = self.labels.loc[(self.labels["Start"] <= float(index)) & (self.labels["End"] > float(index))]
+      label = self.labels.loc[(self.labels["Start"] <= indexFloat) & (self.labels["End"] > indexFloat)]
       if label.empty:
-        label = self.labels.loc[(self.labels["Start"] <= float(index)) & (float(index) - self.labels["End"] < 0.01 )]
-      labelName = label.iloc[0][self.labelNode.GetName()]
+        maxIndex = self.labels.index.max()
+        print(self.labels)
+        labelName = self.labels[self.labelNode.GetName()][maxIndex]
+      else:
+        labelName = label.iloc[0][self.labelNode.GetName()]
       newTextNode.SetText(labelName)
       self.labelSequenceNode.SetDataNodeAtValue(newTextNode,index)
       if i != self.labelSequenceNode.GetNumberOfDataNodes():
@@ -1021,10 +1060,10 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
   def getLabels(self,labelTable):
     labels = pandas.DataFrame(columns=[self.labelNode.GetName(),"Start","End"])
-    lineEdits = labelTable.findChildren("QLineEdit")
+    lineEdits = [x for x in labelTable.findChildren("QLineEdit") if "labelEdit" in x.name]
     minLabels = [x for x in labelTable.findChildren('QLabel') if "minLabel" in x.name]
-    maxLabels = [x for x in labelTable.findChildren('QLabel') if "maxLabel" in x.name]
-    for i in range(len(lineEdits)):
+    maxLabels = [x for x in labelTable.findChildren('QDoubleSpinBox')]
+    for i in range(len(maxLabels)):
       labelName = lineEdits[i].text
       minValue = minLabels[i].text
       minValue = minValue.replace(" s","")
@@ -1184,21 +1223,46 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       addingToExisting = True
     elif not self.imageLabels.empty:
       addingToExisting = True
+    labels = self.getLabelsFromSequence()
     for i in range(numDataNodes):
       logging.info(str(i) + " / " + str(numDataNodes) + " written")
       dataNode = sequenceNode.GetNthDataNode(i)
-      labelNode = self.labelSequenceNode.GetNthDataNode(i)
-      labelName = labelNode.GetText()
+      timeRecorded = float(sequenceNode.GetNthIndexValue(i))
+      '''labelNode = self.labelSequenceNode.GetNthDataNode(i)
+      labelName = labelNode.GetText()'''
+      label = labels.loc[(labels["Start"] <= timeRecorded) & (labels["End"] > timeRecorded)]
+      if label.empty:
+        maxIndex = labels.index.max()
+        labelName = labels[self.labelNode.GetName()][maxIndex]
+      else:
+        labelName = label.iloc[0][self.labelType]
       if addingToExisting:
         self.imageLabels.loc[i,self.labelType] = labelName
       else:
         imData = self.getVtkImageDataAsOpenCVMat(dataNode,True)
-        timeRecorded = sequenceNode.GetNthIndexValue(i)
         fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
         imagePath = os.path.dirname(self.labelFilePath)
         cv2.imwrite(os.path.join(imagePath, fileName), imData)
         self.imageLabels = self.imageLabels.append({"FileName":fileName,"Time Recorded":timeRecorded,self.labelType:labelName},ignore_index=True)
     self.imageLabels.to_csv(self.labelFilePath)
+
+  def getLabelsFromSequence(self):
+    labels = pandas.DataFrame(columns = [self.labelType,"Start","End"])
+    numDataNodes = self.labelSequenceNode.GetNumberOfDataNodes()
+    startIndex = float(self.labelSequenceNode.GetNthIndexValue(0))
+    startLabel = self.labelSequenceNode.GetNthDataNode(0).GetText()
+    endIndex = float(self.labelSequenceNode.GetNthIndexValue(0))
+    for i in range(1,numDataNodes):
+      currentLabel = self.labelSequenceNode.GetNthDataNode(i).GetText()
+      if currentLabel == startLabel:
+        endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
+      else:
+        endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
+        labels = labels.append({self.labelType:startLabel,"Start":startIndex,"End":endIndex},ignore_index=True)
+        startIndex = endIndex
+        startLabel = currentLabel
+        #endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
+    return labels
 
   def labelExistingEntries(self,imageLabels,autolabels):
     imageLabels[self.labelType] = ['None' for i in range(len(imageLabels.index))]
