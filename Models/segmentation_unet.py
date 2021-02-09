@@ -10,6 +10,50 @@ from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
 from tensorflow.keras.regularizers import l1, l2
 
+def segmentation_unet_128(input_size, num_classes, filter_multiplier=10, regularization_rate=0.):
+    input_ = Input((input_size, input_size, 1))
+    skips = []
+    output = input_
+
+    num_layers = int(np.floor(np.log2(input_size)))
+    down_conv_kernel_sizes = np.zeros([num_layers], dtype=int)
+    down_filter_numbers = np.zeros([num_layers], dtype=int)
+    up_conv_kernel_sizes = np.zeros([num_layers], dtype=int)
+    up_filter_numbers = np.zeros([num_layers], dtype=int)
+
+    for layer_index in range(num_layers):
+        down_conv_kernel_sizes[layer_index] = int(3)
+        down_filter_numbers[layer_index] = int((layer_index + 1) * filter_multiplier + num_classes)
+        up_conv_kernel_sizes[layer_index] = int(4)
+        up_filter_numbers[layer_index] = int((num_layers - layer_index - 1) * filter_multiplier + num_classes)
+
+    if input_size == 128:
+        skips.append(output)
+        output = Conv2D(down_filter_numbers[0], kernel_size=3, padding="same", activation="relu", bias_regularizer=l1(regularization_rate))(output)
+
+    for shape, filters in zip(down_conv_kernel_sizes, down_filter_numbers):
+        skips.append(output)
+        output = Conv2D(filters, (shape, shape), strides=2, padding="same", activation="relu",
+                        bias_regularizer=l1(regularization_rate))(output)
+
+    for shape, filters in zip(up_conv_kernel_sizes, up_filter_numbers):
+        output = UpSampling2D()(output)
+        skip_output = skips.pop()
+        output = concatenate([output, skip_output], axis=3)
+        if filters != num_classes or input_size == 128:
+            output = Conv2D(filters, (shape, shape), activation="relu", padding="same",
+                            bias_regularizer=l1(regularization_rate))(output)
+            output = BatchNormalization(momentum=.9)(output)
+        else:
+            output = Conv2D(filters, (shape, shape), activation="softmax", padding="same",
+                            bias_regularizer=l1(regularization_rate))(output)
+
+    if input_size == 128:
+        skip_output = skips.pop()
+        output = Conv2D(up_filter_numbers[num_layers-1], kernel_size=4, activation="softmax", padding="same", bias_regularizer=l1(regularization_rate))(output)
+
+    assert len(skips) == 0
+    return Model([input_], [output])
 
 def segmentation_unet(input_size, num_classes, filter_multiplier=10, regularization_rate=0.):
     input_ = Input((input_size, input_size,1))
