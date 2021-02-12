@@ -774,7 +774,9 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     condaPath = str(Path.home())
     homePath = str(Path.home())
     if "Anaconda3" in os.listdir(homePath):
-        condaPath = os.path.join(homePath,"Anaconda3")
+      condaPath = os.path.join(homePath,"Anaconda3")
+    elif "anaconda3" in os.listdir(homePath):
+      condaPath = os.path.join(homePath, "anaconda3")
     return condaPath
 
   def condaPathChanged(self):
@@ -834,8 +836,10 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       strCMD = cmd[0]
       for i in range(1,len(cmd)):
         strCMD = strCMD + ' ' + cmd[i]
-      p = slicer.util.launchConsoleProcess(strCMD, useStartupEnvironment=True)
-      slicer.util.logProcessOutput(p)
+      #p = slicer.util.launchConsoleProcess(strCMD, useStartupEnvironment=True)
+      #slicer.util.logProcessOutput(p)
+      startupEnv = slicer.util.startupEnvironment()
+      p = subprocess.Popen(cmd, env=startupEnv)
       logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)))
 
   def openWarningWidget(self,trainingRunName):
@@ -872,8 +876,10 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
     strCMD = cmd[0]
     for i in range(1, len(cmd)):
       strCMD = strCMD + ' ' + cmd[i]
-    p = slicer.util.launchConsoleProcess(strCMD,useStartupEnvironment=True)
-    slicer.util.logProcessOutput(p)
+    #p = slicer.util.launchConsoleProcess(strCMD,useStartupEnvironment=True)
+    #slicer.util.logProcessOutput(p)
+    startupEnv = slicer.util.startupEnvironment()
+    p = subprocess.Popen(cmd, env=startupEnv)
     logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName)))
 
   def cancelOverwrite(self):
