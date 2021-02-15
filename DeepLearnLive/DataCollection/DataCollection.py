@@ -1267,8 +1267,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       logging.info(str(i) + " / " + str(numDataNodes) + " written")
       dataNode = sequenceNode.GetNthDataNode(i)
       timeRecorded = float(sequenceNode.GetNthIndexValue(i))
-      '''labelNode = self.labelSequenceNode.GetNthDataNode(i)
-      labelName = labelNode.GetText()'''
+      roundedtimeRecorded = "%.2f" % timeRecorded
+      roundedtimeRecorded = float(roundedtimeRecorded)
       label = labels.loc[(labels["Start"] <= timeRecorded) & (labels["End"] > timeRecorded)]
       if label.empty:
         maxIndex = labels.index.max()
@@ -1276,7 +1276,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       else:
         labelName = label.iloc[0][self.labelType]
       if addingToExisting:
-        self.imageLabels.loc[i,self.labelType] = labelName
+        entry = self.imageLabels.loc[(self.imageLabels["Time Recorded"] == roundedtimeRecorded)]
+        if entry.empty:
+          entry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - roundedtimeRecorded) <= 0.05)]
+        for j in entry.index:
+          self.imageLabels.loc[j, self.labelType] = labelName
       else:
         imData = self.getVtkImageDataAsOpenCVMat(dataNode,True)
         fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
