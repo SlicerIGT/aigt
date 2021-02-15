@@ -280,20 +280,24 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.labelTableWidget.visible = True
       self.addRowButton.visible = True
       self.removeRowButton.visible = True
+      self.labelSequenceButton.visible = True
       self.selectLabelTypeCombobox.nodeTypes = ["vtkMRMLTextNode"]
     elif self.labelproblemTypeComboBox.currentText == "Segmentation":
       self.labelTableWidget.visible = False
       self.addRowButton.visible = False
       self.removeRowButton.visible = False
+      self.labelSequenceButton.visible = False
       self.selectLabelTypeCombobox.nodeTypes = ["vtkMRMLSegmentationNode"]
     elif self.labelproblemTypeComboBox.currentText == "Detection":
       self.labelTableWidget.visible = False
       self.addRowButton.visible = False
-      self.removeRowButton.visible = True
+      self.removeRowButton.visible = False
+      self.labelSequenceButton.visible = False
     else:
       self.labelTableWidget.visible = False
       self.addRowButton.visible = False
       self.removeRowButton.visible = False
+      self.labelSequenceButton.visible = False
       print(self.labelproblemTypeComboBox.currentText)
 
   def onSequenceBrowserSelected(self):
@@ -319,31 +323,35 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       pass
 
   def onImageNodeSelected(self):
-    self.logic.setImageNode(self.selectImageNodeBox.currentText)
-    self.sequenceNode = self.selectSequenceBox.currentNode().GetSequenceNode(slicer.util.getNode(self.selectImageNodeBox.currentText))
-    self.numDataNodes = self.sequenceNode.GetNumberOfDataNodes()
+    if self.selectImageNodeBox.currentText != "Select Image Node":
+      self.logic.setImageNode(self.selectImageNodeBox.currentText)
+      self.sequenceNode = self.selectSequenceBox.currentNode().GetSequenceNode(slicer.util.getNode(self.selectImageNodeBox.currentText))
+      self.numDataNodes = self.sequenceNode.GetNumberOfDataNodes()
 
   def onLabelNodeSelected(self):
-    self.logic.setLabelNode(self.selectLabelTypeCombobox.currentNode())
-    currentNodeName = self.selectLabelTypeCombobox.currentNode().GetName()
-    if "Sequence" in currentNodeName:
-      sequenceBrowserNode = slicer.util.getNode(currentNodeName + " browser")
-      self.sequenceNode = sequenceBrowserNode.GetSequenceNode(self.selectLabelTypeCombobox.currentNode())
-      self.numDataNodes = self.sequenceNode.GetNumberOfDataNodes()
-      if self.sequenceNode.GetNumberOfDataNodes() != 0:
-        labels = self.logic.getLabelsFromSequence(self.sequenceNode)
-        numTableRows = labels.index.max() + 1
-        maxValues = []
-        for i in range(numTableRows):
-          minValue = self.sequenceNode.GetItemNumberFromIndexValue(str(labels["Start"][i]))
-          maxValue = self.sequenceNode.GetItemNumberFromIndexValue(str(labels["End"][i]))
-          maxValues.append(maxValue)
-          labelTypeName = currentNodeName.replace("-Sequence","")
-          rowLabel = labels[labelTypeName][i]
-          self.onAddRowClicked(minValue,rowLabel)
-        maxLabels = [x for x in self.labelTableWidget.findChildren('QDoubleSpinBox')]
-        for i in range(len(maxLabels)):
-          maxLabels[i].setValue(maxValues[i])
+    for i in range(self.labelTableWidget.rowCount, -1, -1):
+      self.labelTableWidget.removeRow(i)
+    if self.selectLabelTypeCombobox.currentNode() != None:
+      self.logic.setLabelNode(self.selectLabelTypeCombobox.currentNode())
+      currentNodeName = self.selectLabelTypeCombobox.currentNode().GetName()
+      if "Sequence" in currentNodeName:
+        sequenceBrowserNode = slicer.util.getNode(currentNodeName + " browser")
+        self.sequenceNode = sequenceBrowserNode.GetSequenceNode(self.selectLabelTypeCombobox.currentNode())
+        self.numDataNodes = self.sequenceNode.GetNumberOfDataNodes()
+        if self.sequenceNode.GetNumberOfDataNodes() != 0:
+          labels = self.logic.getLabelsFromSequence(self.sequenceNode)
+          numTableRows = labels.index.max() + 1
+          maxValues = []
+          for i in range(numTableRows):
+            minValue = self.sequenceNode.GetItemNumberFromIndexValue(str(labels["Start"][i]))
+            maxValue = self.sequenceNode.GetItemNumberFromIndexValue(str(labels["End"][i]))
+            maxValues.append(maxValue)
+            labelTypeName = currentNodeName.replace("-Sequence","")
+            rowLabel = labels[labelTypeName][i]
+            self.onAddRowClicked(minValue,rowLabel)
+          maxLabels = [x for x in self.labelTableWidget.findChildren('QDoubleSpinBox')]
+          for i in range(len(maxLabels)):
+            maxLabels[i].setValue(maxValues[i])
 
   def onAddRowClicked(self,minValue=None,label=None):
     numRows = self.labelTableWidget.rowCount
@@ -373,6 +381,8 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     maxTimeBox.setMaximum(self.numDataNodes-1)
     maxTimeBox.setSuffix(" s")
     maxTimeBox.setValue(int(self.numDataNodes-1))
+    maxLineEdit = maxTimeBox.findChildren("QLineEdit")
+    maxLineEdit[0].setReadOnly(True)
     rangeSlider = ctk.ctkRangeSlider()
     rangeSlider.setOrientation(qt.Qt.Horizontal)
     rangeSlider.setObjectName("rangeSlider_"+str(numRows))
