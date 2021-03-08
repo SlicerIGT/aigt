@@ -1257,12 +1257,13 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     sequenceNode = slicer.util.getFirstNodeByName(sequenceName[0])
     numDataNodes = sequenceNode.GetNumberOfDataNodes()
     addingToExisting = False
+    labels = self.getLabelsFromSequence()
     if (not self.labelType in self.imageLabels.columns) and not self.imageLabels.empty:
       self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max() + 1)]
       addingToExisting = True
     elif not self.imageLabels.empty:
       addingToExisting = True
-    labels = self.getLabelsFromSequence()
+
     for i in range(numDataNodes):
       logging.info(str(i) + " / " + str(numDataNodes) + " written")
       dataNode = sequenceNode.GetNthDataNode(i)
@@ -1272,7 +1273,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       label = labels.loc[(labels["Start"] <= timeRecorded) & (labels["End"] > timeRecorded)]
       if label.empty:
         maxIndex = labels.index.max()
-        labelName = labels[self.labelNode.GetName()][maxIndex]
+        labelName = labels[self.labelType][maxIndex]
       else:
         labelName = label.iloc[0][self.labelType]
       if addingToExisting:
