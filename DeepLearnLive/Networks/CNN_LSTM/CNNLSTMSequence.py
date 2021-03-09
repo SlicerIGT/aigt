@@ -18,10 +18,11 @@ class CNNSequence(Sequence):
             self.inputs = numpy.array([self.downloadGirderData(x,datacsv) for x in indexes])
         else:
             self.inputs = numpy.array([os.path.join(datacsv["Folder"][x],datacsv["FileName"][x]) for x in indexes])
-        self.targets = numpy.array([datacsv[labelName][x] for x in indexes])
         self.batchSize = batchSize
         self.labelName = labelName
         self.labels = datacsv[self.labelName].unique()
+        self.targets = numpy.array([self.convertTextToNumericLabels(datacsv[labelName][x]) for x in indexes])
+
 
     def __len__(self):
         # author Rebecca Hisey
@@ -48,6 +49,7 @@ class CNNSequence(Sequence):
             os.mkdir(self.tempFileDir)
         fileID = datacsv["GirderID"][index]
         fileName = datacsv["FileName"][index]
+        numFilesWritten = 0
         if not os.path.isfile(os.path.join(self.tempFileDir, fileName)):
             self.gClient.downloadItem(fileID, self.tempFileDir)
             numFilesWritten += 1
@@ -60,7 +62,7 @@ class CNNSequence(Sequence):
         startIndex = index*self.batchSize
         indexOfNextBatch = (index + 1)*self.batchSize
         inputBatch = numpy.array([self.readImage(x) for x in self.inputs[startIndex : indexOfNextBatch]])
-        outputBatch = numpy.array([self.convertTextToNumericLabels(x) for x in self.targets[startIndex : indexOfNextBatch]])
+        outputBatch = numpy.array([x for x in self.targets[startIndex : indexOfNextBatch]])
         return (inputBatch,outputBatch)
 
 
@@ -90,15 +92,21 @@ class LSTMSequence(Sequence):
     def readImages(self,files):
         images = []
         numLoaded = 0
-        for file in files:
-            image = cv2.imread(file)
+        allOutputs = numpy.array([])
+        for i in range(len(files)):
+            image = cv2.imread(files[i])
             resized_image = cv2.resize(image, (224, 224))
             images.append(resized_image)
             numLoaded +=1
-            if numLoaded % 1000 == 0:
+            if numLoaded % 1000 == 0 or i == (len(files)-1):
                 print("loaded " +str(numLoaded)+' / '+str(len(files))+ ' images')
-        cnnOutput = self.cnnModel.predict(numpy.array(images))
-        return cnnOutput
+                if allOutputs.size == 0:
+                    allOutputs = self.cnnModel.predict(numpy.array(images))
+                else:
+                    cnnOutput = self.cnnModel.predict(numpy.array(images))
+                    allOutputs = numpy.append(allOutputs,cnnOutput,axis=0)
+                images = []
+        return allOutputs
 
     def getSequenceLabels(self, sequence):
         textLabel = self.targets[sequence[len(sequence)-1]]
