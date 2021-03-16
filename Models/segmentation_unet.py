@@ -10,7 +10,7 @@ from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
 from tensorflow.keras.regularizers import l1, l2
 
-def segmentation_unet_128(input_size, num_classes, filter_multiplier=10, regularization_rate=0.):
+def segmentation_unet_128(input_size, num_classes, num_extra_layers=0, filter_multiplier=10, regularization_rate=0.):
     input_ = Input((input_size, input_size, 1))
     skips = []
     output = input_
@@ -27,7 +27,7 @@ def segmentation_unet_128(input_size, num_classes, filter_multiplier=10, regular
         up_conv_kernel_sizes[layer_index] = int(4)
         up_filter_numbers[layer_index] = int((num_layers - layer_index - 1) * filter_multiplier + num_classes)
 
-    if input_size == 128:
+    for i in range(0, num_extra_layers):
         skips.append(output)
         output = Conv2D(down_filter_numbers[0], kernel_size=3, padding="same", activation="relu", bias_regularizer=l1(regularization_rate))(output)
 
@@ -48,7 +48,7 @@ def segmentation_unet_128(input_size, num_classes, filter_multiplier=10, regular
             output = Conv2D(filters, (shape, shape), activation="softmax", padding="same",
                             bias_regularizer=l1(regularization_rate))(output)
 
-    if input_size == 128:
+    for i in range(0, num_extra_layers):
         skip_output = skips.pop()
         output = Conv2D(up_filter_numbers[num_layers-1], kernel_size=4, activation="softmax", padding="same", bias_regularizer=l1(regularization_rate))(output)
 
