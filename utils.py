@@ -57,22 +57,25 @@ def load_girder_data(csv_fullname, data_arrays_fullpath, girder_url, girder_key=
     n_arrays = csv_df.shape[0]
     groupby_subjects = csv_df.groupby('subject_id')
     n_subjects = len(groupby_subjects.groups.keys())
-    gclient = girder_client.GirderClient(apiUrl=girder_url)
-    if girder_key is not None:
-        gclient.authenticate(apiKey=girder_key)
+    try:
+        gclient = girder_client.GirderClient(apiUrl=girder_url)
+        if girder_key is not None:
+            gclient.authenticate(apiKey=girder_key)
 
-    # Download
+        # Download
 
-    for i in range(n_arrays):
-        ultrasound_fullname = os.path.join(data_arrays_fullpath, csv_df.iloc[i]['ultrasound_filename'])
-        if not os.path.exists(ultrasound_fullname) or overwrite_existing_files:
-            print("Downloading {}...".format(ultrasound_fullname))
-            gclient.downloadFile(csv_df.iloc[i]['ultrasound_id'], ultrasound_fullname)
+        for i in range(n_arrays):
+            ultrasound_fullname = os.path.join(data_arrays_fullpath, csv_df.iloc[i]['ultrasound_filename'])
+            if not os.path.exists(ultrasound_fullname) or overwrite_existing_files:
+                print("Downloading {}...".format(ultrasound_fullname))
+                gclient.downloadFile(csv_df.iloc[i]['ultrasound_id'], ultrasound_fullname)
 
-        segmentation_fullname = os.path.join(data_arrays_fullpath, csv_df.iloc[i]['segmentation_filename'])
-        if not os.path.exists(segmentation_fullname) or overwrite_existing_files:
-            print("Downloading {}...".format(segmentation_fullname))
-            gclient.downloadFile(csv_df.iloc[i]['segmentation_id'], segmentation_fullname)
+            segmentation_fullname = os.path.join(data_arrays_fullpath, csv_df.iloc[i]['segmentation_filename'])
+            if not os.path.exists(segmentation_fullname) or overwrite_existing_files:
+                print("Downloading {}...".format(segmentation_fullname))
+                gclient.downloadFile(csv_df.iloc[i]['segmentation_id'], segmentation_fullname)
+    except:
+        print("Download from Girder did not work. Trying to load files from disc.")
 
     # Load arrays from local files
 
