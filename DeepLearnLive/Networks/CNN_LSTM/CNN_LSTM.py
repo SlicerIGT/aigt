@@ -5,6 +5,7 @@ import numpy
 import tensorflow
 import tensorflow.keras
 from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.applications import InceptionV3
 from tensorflow.keras import layers
 from tensorflow.keras.models import model_from_json
 
@@ -15,12 +16,12 @@ class CNN_LSTM():
         self.imageSequence = numpy.zeros((50,8))
 
     def loadModel(self,modelFolder,modelName):
-        self.cnnModel = self.loadCNNModel(modelFolder,'cnn_'+modelName)
-        self.lstmModel = self.loadLSTMModel(modelFolder,'lstm_' + modelName)
+        self.cnnModel = self.loadCNNModel(modelFolder)
+        self.lstmModel = self.loadLSTMModel(modelFolder)
 
-    def loadCNNModel(self,modelFolder, modelName):
-        structureFileName = modelName + '.json'
-        weightsFileName = modelName + '.h5'
+    def loadCNNModel(self,modelFolder):
+        structureFileName = 'mobileNetv2.json'
+        weightsFileName = 'mobileNetv2.h5'
         modelFolder = modelFolder.replace("'","")
         with open(os.path.join(modelFolder, structureFileName), "r") as modelStructureFile:
             JSONModel = modelStructureFile.read()
@@ -29,9 +30,9 @@ class CNN_LSTM():
         #model.compile()
         return model
 
-    def loadLSTMModel(self,modelFolder, modelName):
-        structureFileName = modelName + '.json'
-        weightsFileName = modelName + '.h5'
+    def loadLSTMModel(self,modelFolder):
+        structureFileName = 'parallel_LSTM.json'
+        weightsFileName = 'parallel_LSTM.h5'
         modelFolder = modelFolder.replace("'", "")
         with open(os.path.join(modelFolder, structureFileName), "r") as modelStructureFile:
             JSONModel = modelStructureFile.read()
@@ -44,7 +45,8 @@ class CNN_LSTM():
     def predict(self,image):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         labels = ['anesthetic', 'dilator', 'insert_catheter', 'insert_guidewire', 'insert_needle', 'nothing','remove_guidewire', 'scalpel']
-        resized = cv2.resize(image, (224, 224))
+        resized = cv2.resize(image, (224, 224)) #MobileNet
+        #resized = cv2.resize(image, (299, 299))  #InceptionV3
         resized = numpy.expand_dims(resized, axis=0)
         toolClassification = self.cnnModel.predict(numpy.array(resized))
         self.imageSequence = numpy.append(self.imageSequence[1:], toolClassification, axis=0)
@@ -59,8 +61,11 @@ class CNN_LSTM():
         # in this example we create a MobileNetV2 model and initialize the model with weights from training on ImageNet
         model = tensorflow.keras.models.Sequential()
         model.add(MobileNetV2(weights='imagenet',include_top=False,input_shape=imageSize))
+        #model.add(InceptionV3(weights='imagenet', include_top=False, input_shape=imageSize))
         model.add(layers.GlobalAveragePooling2D())
         model.add(layers.Dense(512,activation='relu'))
+        #model.add(layers.Dense(256, activation='relu'))
+        #model.add(layers.Dense(128, activation='relu'))
         model.add(layers.Dense(num_classes,activation='softmax'))
         return model
 
@@ -88,6 +93,8 @@ class CNN_LSTM():
         JSONmodel = trainedCNNModel.to_json()
         structureFileName = 'mobileNetv2.json'
         weightsFileName = 'mobileNetv2.h5'
+        #structureFileName = 'inceptionv3.json'
+        #weightsFileName = 'inceptionv3.h5'
         with open(os.path.join(saveLocation,structureFileName),"w") as modelStructureFile:
             modelStructureFile.write(JSONmodel)
         trainedCNNModel.save_weights(os.path.join(saveLocation,weightsFileName))

@@ -1,16 +1,15 @@
 import numpy
 import math
-import pandas
 import os
 import cv2
-import tensorflow
-import tensorflow.keras
+import pandas
 from tensorflow.keras.utils import Sequence
 import girder_client
+from sklearn.utils import shuffle
 
 
 class CNNSequence(Sequence):
-    def __init__(self,datacsv,indexes,batchSize,labelName,gClient = None,tempFileDir = None):
+    def __init__(self,datacsv,indexes,batchSize,labelName,gClient = None,tempFileDir = None,shuffle=True):
         # author Rebecca Hisey
         if "GirderID" in datacsv.columns:
             self.gClient = gClient
@@ -20,8 +19,16 @@ class CNNSequence(Sequence):
             self.inputs = numpy.array([os.path.join(datacsv["Folder"][x],datacsv["FileName"][x]) for x in indexes])
         self.batchSize = batchSize
         self.labelName = labelName
-        self.labels = datacsv[self.labelName].unique()
+        self.labels = numpy.array(sorted(datacsv[self.labelName].unique()))
         self.targets = numpy.array([self.convertTextToNumericLabels(datacsv[labelName][x]) for x in indexes])
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def on_epoch_end(self):
+        if self.shuffle:
+            shuffledInputs,shuffledTargets = shuffle(self.inputs,self.targets)
+            self.inputs = shuffledInputs
+            self.targets = shuffledTargets
 
 
     def __len__(self):
@@ -39,7 +46,9 @@ class CNNSequence(Sequence):
     def readImage(self,file):
         image = cv2.imread(file)
         resized_image = cv2.resize(image, (224, 224))
-        return resized_image
+        #resized_image = cv2.resize(image, (299, 299))
+        normImg = cv2.normalize(resized_image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        return normImg
 
     def downloadGirderData(self,index,datacsv):
         # tempFileDir is a folder in which to temporarily store the files downloaded from Girder
@@ -67,7 +76,7 @@ class CNNSequence(Sequence):
 
 
 class LSTMSequence(Sequence):
-    def __init__(self, datacsv, indexes, sequences, model, batchSize, labelName,tempFileDir = None):
+    def __init__(self, datacsv, indexes, sequences, model, batchSize, labelName,tempFileDir = None,shuffle=True):
         # author Rebecca Hisey
         self.cnnModel = model
         if tempFileDir == None:
@@ -78,10 +87,19 @@ class LSTMSequence(Sequence):
         self.sequences = sequences
         self.batchSize = batchSize
         self.labelName = labelName
-        self.labels = datacsv[self.labelName].unique()
-        inputSequences, targetSequences = self.readImageSequences()
+        self.labels = numpy.array(sorted(datacsv[self.labelName].unique()))
+        inputSequences, targetSequences = self.readImageSequences(indexes)
         self.inputs = inputSequences
         self.targets = targetSequences
+        print('Class counts:' + str(numpy.sum(self.targets,axis=0)))
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def on_epoch_end(self):
+        if self.shuffle:
+            shuffledInputs,shuffledTargets = shuffle(self.inputs,self.targets)
+            self.inputs = shuffledInputs
+            self.targets = shuffledTargets
 
     def __len__(self):
         # author Rebecca Hisey
@@ -89,27 +107,31 @@ class LSTMSequence(Sequence):
         length = math.ceil(length)
         return length
 
-    def readImages(self,files):
+    def readImages(self, files):
         images = []
         numLoaded = 0
         allOutputs = numpy.array([])
         for i in range(len(files)):
             image = cv2.imread(files[i])
             resized_image = cv2.resize(image, (224, 224))
-            images.append(resized_image)
-            numLoaded +=1
-            if numLoaded % 1000 == 0 or i == (len(files)-1):
-                print("loaded " +str(numLoaded)+' / '+str(len(files))+ ' images')
+            normImg = cv2.normalize(resized_image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+            images.append(normImg)
+            numLoaded += 1
+            if numLoaded % 500 == 0 or i == (len(files) - 1):
+                print("loaded " + str(numLoaded) + ' / ' + str(len(files)) + ' images')
                 if allOutputs.size == 0:
                     allOutputs = self.cnnModel.predict(numpy.array(images))
                 else:
                     cnnOutput = self.cnnModel.predict(numpy.array(images))
-                    allOutputs = numpy.append(allOutputs,cnnOutput,axis=0)
+                    allOutputs = numpy.append(allOutputs, cnnOutput, axis=0)
                 images = []
         return allOutputs
 
-    def getSequenceLabels(self, sequence):
-        textLabel = self.targets[sequence[len(sequence)-1]]
+    def getSequenceLabels(self, sequence,smallestIndex):
+        '''if sequence[len(sequence)-1] >= len(self.targets):
+            textLabel = self.targets[-1]
+        else:'''
+        textLabel = self.targets[sequence[-1]-smallestIndex]
         label = self.convertTextToNumericLabels(textLabel)
         return numpy.array(label)
 
@@ -119,19 +141,20 @@ class LSTMSequence(Sequence):
         label[labelIndex] = 1
         return label
 
-    def readImageSequences(self):
+    def readImageSequences(self,indexes):
         allSequences = []
         allLabels = []
+        smallestIndex = indexes[0]
         for sequence in self.sequences:
             predictedSequence = []
-            label = self.getSequenceLabels(sequence)
+            label = self.getSequenceLabels(sequence,smallestIndex)
             for i in range(len(sequence)):
-                image = self.inputs[sequence[i]]
+                image = self.inputs[sequence[i]-smallestIndex]
                 predictedSequence.append(image)
             if predictedSequence != []:
                 allSequences.append(predictedSequence)
                 allLabels.append(label)
-        return(numpy.array(allSequences),numpy.array(allLabels))
+        return (numpy.array(allSequences), numpy.array(allLabels))
 
     def __getitem__(self, index):
         # author Rebecca Hisey
