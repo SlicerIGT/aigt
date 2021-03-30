@@ -50,6 +50,7 @@ def segmentation_unet_128(input_size, num_classes, num_extra_layers=0, filter_mu
 
     for i in range(0, num_extra_layers):
         skip_output = skips.pop()
+        output = concatenate([output, skip_output], axis=3)
         output = Conv2D(up_filter_numbers[num_layers-1], kernel_size=4, activation="softmax", padding="same", bias_regularizer=l1(regularization_rate))(output)
 
     assert len(skips) == 0
