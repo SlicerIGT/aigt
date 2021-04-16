@@ -45,10 +45,10 @@ class MODELNAME():
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         resized = cv2.resize(image, (224, 224))
         resized = numpy.expand_dims(resized, axis=0)
-        toolClassification = self.cnnModel.predict(numpy.array(resized))
-        labelIndex = numpy.argmax(toolClassification)
+        classification = self.cnnModel.predict(numpy.array(resized))
+        labelIndex = numpy.argmax(classification)
         label = self.labels[labelIndex]
-        networkOutput = str(label) + str(toolClassification)
+        networkOutput = str(label) + str(classification)
         return networkOutput
 
     def createModel(self,imageSize,num_classes):
