@@ -7,7 +7,7 @@ import logging
 import subprocess
 import time
 import datetime
-from sequenceSpinBox import sequenceSpinBox
+from Libs.sequenceSpinBox import sequenceSpinBox as sequenceSpinBox
 
 
 try:

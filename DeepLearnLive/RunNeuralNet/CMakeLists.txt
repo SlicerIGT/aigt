@@ -6,9 +6,17 @@ set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
   )
 
+set(MODULE_ADDITIONAL_SCRIPTS
+  Scripts/kerasNeuralNetwork.py
+  Scripts/openCMDPrompt.bat
+  Scripts/StartNeuralNet.bat
+  Scripts/TemplateNetworkFile.txt
+  )
+
 set(MODULE_PYTHON_RESOURCES
   Resources/Icons/${MODULE_NAME}.png
   Resources/UI/${MODULE_NAME}.ui
+  ${MODULE_ADDITIONAL_SCRIPTS}
   )
 
 #-----------------------------------------------------------------------------

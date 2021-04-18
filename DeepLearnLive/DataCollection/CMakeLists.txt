@@ -4,6 +4,7 @@ set(MODULE_NAME DataCollection)
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
   ${MODULE_NAME}.py
+  Libs/sequenceSpinBox.py
   )
 
 set(MODULE_PYTHON_RESOURCES
