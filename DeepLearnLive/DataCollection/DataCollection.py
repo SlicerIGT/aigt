@@ -615,6 +615,8 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.autoLabelFilePathSelector.showBrowseButton = True
     self.autoLabelPath = os.path.join(self.moduleDir,os.pardir,"Datasets")
     self.autoLabelFilePathSelector.setCurrentPath(self.autoLabelPath)
+    self.autoLabelFilePathSelector.nameFilters = ["CSV (*.csv)"]
+    self.autoLabelFilePathSelector.filters = ctk.ctkPathLineEdit.Files | ctk.ctkPathLineEdit.Readable
     classificationFormLayout.addWidget(self.autoLabelFilePathSelector)
     self.autoLabelFilePathSelector.visible = False
 

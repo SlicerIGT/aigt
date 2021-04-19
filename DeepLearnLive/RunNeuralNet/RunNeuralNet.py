@@ -187,10 +187,17 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.createNewModelButton.connect('clicked(bool)',self.onCreateModelClicked)
 
   def getCondaPath(self):
+    settings = qt.QSettings()
+    condaPath = settings.value("AIGT/Anaconda")
+    if not condaPath is None:
+      return condaPath
+
     condaPath = str(Path.home())
     homePath = str(Path.home())
     if "Anaconda3" in os.listdir(homePath):
         condaPath = os.path.join(homePath,"Anaconda3")
+
+    settings.setValue("AIGT/Anaconda", condaPath)
     return condaPath
 
 
@@ -213,6 +220,8 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
   def onCondaDirectorySelected(self):
     self.condaDirectoryPath = self.condaDirectoryPathSelector.directory
     self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
+    settings = qt.QSettings()
+    settings.setValue("AIGT/Anaconda", self.condaDirectoryPath)
 
   def onCondaEnvironmentNameChanged(self):
     self.environmentName = self.environmentNameLineEdit.text
@@ -311,6 +320,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.incomingHostName = incomingHostName
     self.incomingPort = incomingPort
     self.moduleDir = os.path.dirname(slicer.modules.runneuralnet.path)
+    self.state_name = ""
 
   def startNeuralNetwork(self):
     self.registerIncomingAndOutgoingNodes()
@@ -338,7 +348,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       startupEnv = slicer.util.startupEnvironment()
       info = subprocess.STARTUPINFO()
       info.dwFlags = subprocess.CREATE_NEW_CONSOLE
-      p = subprocess.Popen(cmd,env=startupEnv)
+      self.p = subprocess.Popen(cmd,env=startupEnv)
     startTime = time.time()
     while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<15:
       time.sleep(0.25)
@@ -371,7 +381,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     if self.state_name != None:
       self.p.kill()
     self.outgoingConnectorNode.UnregisterOutgoingMRMLNode(self.inputNode)
-    self.incomingConnectorNode.UnregisterIncomingMRMLNode(self.outputNode)
+    #self.incomingConnectorNode.UnregisterIncomingMRMLNode(self.outputNode) # TODO: Uncomment when RegisterIncomingMRMLNode is restored
     self.outgoingConnectorNode.Stop()
     self.incomingConnectorNode.Stop()
     logging.info("Stopping neural network")
@@ -452,7 +462,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
 
   def registerIncomingAndOutgoingNodes(self):
     self.setupIGTLinkConnectors(self.incomingHostName,self.incomingPort,self.outgoingPort)
-    self.incomingConnectorNode.RegisterIncomingMRMLNode(self.outputNode)
+    #self.incomingConnectorNode.RegisterIncomingMRMLNode(self.outputNode) # TODO: Function signature doesn't exist in latest Slicer
     self.outgoingConnectorNode.RegisterOutgoingMRMLNode(self.inputNode)
 
   def createNewModel(self,newModelName,newModelLocation = None):

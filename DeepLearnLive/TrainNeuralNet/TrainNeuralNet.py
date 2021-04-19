@@ -734,12 +734,16 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.dataCSVSelector.showBrowseButton = True
     self.dataCSV = os.path.join(self.moduleDir, os.pardir, "Datasets")
     self.dataCSVSelector.setCurrentPath(self.dataCSV)
+    self.dataCSVSelector.filters = ctk.ctkPathLineEdit.Files | ctk.ctkPathLineEdit.Readable
+    self.dataCSVSelector.nameFilters = ["CSV (*.csv)"]
     layout.addRow("Data CSV: ", self.dataCSVSelector)
 
     self.trainingScriptSelector = ctk.ctkPathLineEdit()
     self.trainingScriptSelector.showBrowseButton = True
     self.trainingScript = os.path.join(self.moduleDir, os.pardir, "Networks")
     self.trainingScriptSelector.setCurrentPath(self.trainingScript)
+    self.trainingScriptSelector.filters = ctk.ctkPathLineEdit.Files | ctk.ctkPathLineEdit.Readable
+    self.trainingScriptSelector.nameFilters = ["Python (*.py)"]
     layout.addRow("Training Script: ",self.trainingScriptSelector)
 
     self.trainingRunNameLineEdit = qt.QLineEdit()
@@ -771,17 +775,25 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.runTrainingButton.enabled = True
 
   def getCondaPath(self):
+    settings = qt.QSettings()
+    condaPath = settings.value("AIGT/Anaconda")
+    if not condaPath is None:
+      return condaPath
+
     condaPath = str(Path.home())
     homePath = str(Path.home())
     if "Anaconda3" in os.listdir(homePath):
       condaPath = os.path.join(homePath,"Anaconda3")
     elif "anaconda3" in os.listdir(homePath):
       condaPath = os.path.join(homePath, "anaconda3")
+    settings.setValue("AIGT/Anaconda", condaPath)
     return condaPath
 
   def condaPathChanged(self):
     self.condaDirectoryPath = self.condaDirectoryPathSelector.directory
     self.logic.setCondaDirectory(self.condaDirectoryPath)
+    settings = qt.QSettings()
+    settings.setValue("AIGT/Anaconda", self.condaDirectoryPath)
 
   def onEnvironmentNameChanged(self):
     self.environmentName = self.environmentNameLineEdit.text
