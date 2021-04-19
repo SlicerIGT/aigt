@@ -6,3 +6,6 @@
 /DeepLearnLive/Networks/CNN_LSTM/cnn_TBME_0.json
 /DeepLearnLive/Networks/CNN_LSTM/lstm_TBME_0.h5
 /DeepLearnLive/Networks/CNN_LSTM/lstm_TBME_0.json
+
+# Ignore pyc files
+*.pyc
