@@ -34,3 +34,7 @@ pip_install("tensorflow opencv-contrib-python girder_client pandas nbformat nbco
 # Process exported data
 - It is recommended that you save separate sequences for validation and testing
 - Use Notebooks/FoldersToSavedArrays to save data sequences as single files for faster data loading during training.
+
+# Acknowledgements
+
+![Canarie Logo](Logos/CanarieLogo.png) This work was supported through CANARIE’s Research Software Program through RS3-036. Principal investigator: Gabor Fichtinger.
