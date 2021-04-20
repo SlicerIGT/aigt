@@ -283,12 +283,12 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     if original_index_str is None or original_index_str == "None" or original_index_str == "":
       selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
       self.logic.captureSlice(selectedSegmentationBrowser, selectedSegmentation, inputImage)
-      self.logic.eraseCurrentSegmentation(selectedSegmentation)
-      selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
-      inputBrowserNode.SelectNextItem(numSkip)
     else:
       self.logic.captureSlice(selectedSegmentationBrowser, selectedSegmentation, inputImage)
-    
+
+    self.logic.eraseCurrentSegmentation(selectedSegmentation)
+    selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
+    inputBrowserNode.SelectNextItem(numSkip)
 
   def onClearButton(self):
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
@@ -317,6 +317,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
     selectedImage = self.ui.inputVolumeSelector.currentNode()
+    selectedImageSequence = self.ui.inputSequenceBrowserSelector.currentNode()
     outputFolder = self.ui.outputDirectoryButton.directory
     baseName = self.ui.filenamePrefixEdit.text
 
@@ -329,8 +330,12 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     if selectedImage is None:
       logging.error("No image selected!")
       return
+    if selectedImage is None:
+      logging.error("No image sequence browser selected!")
+      return
 
     self.logic.exportPngSequence(selectedImage,
+                                 selectedImageSequence,
                                  selectedSegmentation,
                                  selectedSegmentationSequence,
                                  outputFolder,
@@ -686,6 +691,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
   def exportPngSequence(self,
                         selectedImage,
+                        selectedImageSequence,
                         selectedSegmentation,
                         selectedSegmentationSequence,
                         outputFolder,
@@ -703,6 +709,14 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     num_items = selectedSegmentationSequence.GetNumberOfItems()
     selectedSegmentationSequence.SelectFirstItem()
     for i in range(num_items):
+      originalIndex = selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
+      try:
+        selectedImageSequence.SetSelectedItemNumber(int(originalIndex))
+      except:
+        logging.error(f"Original image not found for segmentation {i} - skipping")
+        continue
+      slicer.modules.sequences.logic().UpdateAllProxyNodes()
+
       slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
                                                                                self.LabelmapNode,
                                                                                selectedImage)
@@ -729,7 +743,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       pngWriter.Write()
 
       selectedSegmentationSequence.SelectNextItem()
-      slicer.app.processEvents()
+      slicer.modules.sequences.logic().UpdateAllProxyNodes()
 
 
   def captureSlice(self, selectedSegmentationSequence, selectedSegmentation, inputImage):
