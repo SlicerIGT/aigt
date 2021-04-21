@@ -323,7 +323,7 @@ class SequenceLabellerLogic(ScriptedLoadableModuleLogic):
     output_sequenceBrowser_node.AddSynchronizedSequenceNode(labelmap_sequence_node)
 
     masterSequence = sequenceBrowser_node.GetMasterSequenceNode()
-    for i in range(min(100, sequenceBrowser_node.GetNumberOfItems())):
+    for i in range(sequenceBrowser_node.GetNumberOfItems()):
       sequenceBrowser_node.SetSelectedItemNumber(i)
 
       slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(segmentation_node, labelmap_volume_node)
@@ -365,7 +365,7 @@ class SequenceLabellerLogic(ScriptedLoadableModuleLogic):
     image_sequence_node.RemoveAllDataNodes()
 
     masterSequence = input_sequence_browser_node.GetMasterSequenceNode()
-    for i in range(min(100, input_sequence_browser_node.GetNumberOfItems())):
+    for i in range(input_sequence_browser_node.GetNumberOfItems()):
       input_sequence_browser_node.SetSelectedItemNumber(i)
       sequenceValue = masterSequence.GetNthIndexValue(i)
 
