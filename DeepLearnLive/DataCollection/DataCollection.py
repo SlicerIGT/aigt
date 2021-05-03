@@ -7,7 +7,7 @@ import logging
 import subprocess
 import time
 import datetime
-from Libs.sequenceSpinBox import sequenceSpinBox as sequenceSpinBox
+from sequenceSpinBox import sequenceSpinBox
 
 
 try:
@@ -615,8 +615,6 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.autoLabelFilePathSelector.showBrowseButton = True
     self.autoLabelPath = os.path.join(self.moduleDir,os.pardir,"Datasets")
     self.autoLabelFilePathSelector.setCurrentPath(self.autoLabelPath)
-    self.autoLabelFilePathSelector.nameFilters = ["CSV (*.csv)"]
-    self.autoLabelFilePathSelector.filters = ctk.ctkPathLineEdit.Files | ctk.ctkPathLineEdit.Readable
     classificationFormLayout.addWidget(self.autoLabelFilePathSelector)
     self.autoLabelFilePathSelector.visible = False
 
@@ -1254,23 +1252,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       playWidgetButtons[2].click()
       self.finishedVideo = True
 
-  def getSequenceFromProxyNode(self, proxyNode):
-    if proxyNode is None:
-      return None
-
-    browserNodes = slicer.util.getNodesByClass("vtkMRMLSequenceBrowserNode")
-    for browserNode in browserNodes:
-      sequenceNode = browserNode.GetSequenceNode(proxyNode)
-      if sequenceNode:
-        return sequenceNode
-    return None
-
   def exportImagesFromSequence(self):
-    sequenceNode = self.getSequenceFromProxyNode(self.recordingVolumeNode)
-    if sequenceNode is None:
-      logging.error("Could not find sequence node")
-      return
-
+    sequenceName = self.recordingVolumeNode.GetName().split(sep="_")
+    sequenceNode = slicer.util.getFirstNodeByName(sequenceName[0])
     numDataNodes = sequenceNode.GetNumberOfDataNodes()
     addingToExisting = False
     labels = self.getLabelsFromSequence()
@@ -1279,31 +1263,34 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       addingToExisting = True
     elif not self.imageLabels.empty:
       addingToExisting = True
-
+    prevTimeRecorded = 0
     for i in range(numDataNodes):
-      logging.info(str(i+1) + " / " + str(numDataNodes) + " written")
+      logging.info(str(i) + " / " + str(numDataNodes) + " written")
       dataNode = sequenceNode.GetNthDataNode(i)
       timeRecorded = float(sequenceNode.GetNthIndexValue(i))
       roundedtimeRecorded = "%.2f" % timeRecorded
-      roundedtimeRecorded = float(roundedtimeRecorded)
-      label = labels.loc[(labels["Start"] <= timeRecorded) & (labels["End"] > timeRecorded)]
-      if label.empty:
-        maxIndex = labels.index.max()
-        labelName = labels[self.labelType][maxIndex]
-      else:
-        labelName = label.iloc[0][self.labelType]
-      if addingToExisting:
-        entry = self.imageLabels.loc[(self.imageLabels["Time Recorded"] == roundedtimeRecorded)]
-        if entry.empty:
-          entry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - roundedtimeRecorded) <= 0.05)]
-        for j in entry.index:
-          self.imageLabels.loc[j, self.labelType] = labelName
-      else:
-        imData = self.getVtkImageDataAsOpenCVMat(dataNode,True)
-        fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
-        imagePath = os.path.dirname(self.labelFilePath)
-        cv2.imwrite(os.path.join(imagePath, fileName), imData)
-        self.imageLabels = self.imageLabels.append({"FileName":fileName,"Time Recorded":timeRecorded,self.labelType:labelName},ignore_index=True)
+      if timeRecorded - prevTimeRecorded > 0.01:
+        prevTimeRecorded = timeRecorded
+        roundedtimeRecorded = float(roundedtimeRecorded)
+        label = labels.loc[(labels["Start"] <= timeRecorded) & (labels["End"] > timeRecorded)]
+        if label.empty:
+          maxIndex = labels.index.max()
+          labelName = labels[self.labelType][maxIndex]
+        else:
+          labelName = label.iloc[0][self.labelType]
+        if addingToExisting:
+          entry = self.imageLabels.loc[(self.imageLabels["Time Recorded"] == roundedtimeRecorded)]
+          if entry.empty:
+            entry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - roundedtimeRecorded) <= 0.05)]
+          for j in entry.index:
+            self.imageLabels.loc[j, self.labelType] = labelName
+        else:
+          imData = self.getVtkImageDataAsOpenCVMat(dataNode,True)
+          fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
+          imagePath = os.path.dirname(self.labelFilePath)
+          cv2.imwrite(os.path.join(imagePath, fileName), imData)
+          self.imageLabels = self.imageLabels.append({"FileName":fileName,"Time Recorded":timeRecorded,self.labelType:labelName},ignore_index=True)
+      prevTimeRecorded = timeRecorded
     self.imageLabels.to_csv(self.labelFilePath)
 
   def getLabelsFromSequence(self,labelSequenceNode=None):
