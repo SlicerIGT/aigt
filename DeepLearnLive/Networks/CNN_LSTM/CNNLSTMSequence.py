@@ -1,6 +1,7 @@
 import numpy
 import math
 import os
+import gc
 import cv2
 import pandas
 from tensorflow.keras.utils import Sequence
@@ -124,16 +125,24 @@ class LSTMSequence(Sequence):
                 else:
                     cnnOutput = self.cnnModel.predict(numpy.array(images))
                     allOutputs = numpy.append(allOutputs, cnnOutput, axis=0)
+                del images
+                gc.collect()
                 images = []
+            del image
+            del resized_image
+            del normImg
         return allOutputs
 
     def getSequenceLabels(self, sequence,smallestIndex):
         '''if sequence[len(sequence)-1] >= len(self.targets):
             textLabel = self.targets[-1]
         else:'''
-        textLabel = self.targets[sequence[-1]-smallestIndex]
-        label = self.convertTextToNumericLabels(textLabel)
-        return numpy.array(label)
+        try:
+            textLabel = self.targets[sequence[-1]-smallestIndex]
+            label = self.convertTextToNumericLabels(textLabel)
+            return numpy.array(label)
+        except IndexError:
+            print(sequence)
 
     def convertTextToNumericLabels(self, textLabel):
         label = numpy.zeros(len(self.labels))
@@ -149,7 +158,12 @@ class LSTMSequence(Sequence):
             predictedSequence = []
             label = self.getSequenceLabels(sequence,smallestIndex)
             for i in range(len(sequence)):
-                image = self.inputs[sequence[i]-smallestIndex]
+                if sequence[i] == -1:
+                    image = numpy.zeros(self.inputs[0].shape)
+                    labelIndex = numpy.where(self.labels == "nothing")
+                    image[labelIndex] = 1.0
+                else:
+                    image = self.inputs[sequence[i]-smallestIndex]
                 predictedSequence.append(image)
             if predictedSequence != []:
                 allSequences.append(predictedSequence)
