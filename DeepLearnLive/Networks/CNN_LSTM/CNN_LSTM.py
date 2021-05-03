@@ -4,8 +4,8 @@ import sys
 import numpy
 import tensorflow
 import tensorflow.keras
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.applications import InceptionV3
+from tensorflow.keras.applications import MobileNet,MobileNetV2
+from tensorflow.keras.applications import InceptionV3,ResNet50
 from tensorflow.keras import layers
 from tensorflow.keras.models import model_from_json
 
@@ -20,8 +20,8 @@ class CNN_LSTM():
         self.lstmModel = self.loadLSTMModel(modelFolder)
 
     def loadCNNModel(self,modelFolder):
-        structureFileName = 'mobileNetv2.json'
-        weightsFileName = 'mobileNetv2.h5'
+        structureFileName = 'resnet50.json'
+        weightsFileName = 'resnet50.h5'
         modelFolder = modelFolder.replace("'","")
         with open(os.path.join(modelFolder, structureFileName), "r") as modelStructureFile:
             JSONModel = modelStructureFile.read()
@@ -44,11 +44,19 @@ class CNN_LSTM():
 
     def predict(self,image):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        #flipped = cv2.flip(image, 0)
         labels = ['anesthetic', 'dilator', 'insert_catheter', 'insert_guidewire', 'insert_needle', 'nothing','remove_guidewire', 'scalpel']
+        toolLabels = ['anesthetic', 'catheter', 'dilator', 'guidewire','guidewire_casing', 'nothing', 'scalpel', 'syringe']
         resized = cv2.resize(image, (224, 224)) #MobileNet
         #resized = cv2.resize(image, (299, 299))  #InceptionV3
-        resized = numpy.expand_dims(resized, axis=0)
-        toolClassification = self.cnnModel.predict(numpy.array(resized))
+        normImage = cv2.normalize(resized, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        #cv2.imshow("norm", normImage)
+        #cv2.waitKey(0)
+        normImage = numpy.expand_dims(normImage, axis=0)
+
+        toolClassification = self.cnnModel.predict(numpy.array(normImage))
+        print(toolLabels[numpy.argmax(toolClassification)])
         self.imageSequence = numpy.append(self.imageSequence[1:], toolClassification, axis=0)
         taskClassification = self.lstmModel.predict(numpy.array([self.imageSequence]))
         labelIndex = numpy.argmax(taskClassification)
@@ -60,18 +68,16 @@ class CNN_LSTM():
         #Replace the following lines with your model definition
         # in this example we create a MobileNetV2 model and initialize the model with weights from training on ImageNet
         model = tensorflow.keras.models.Sequential()
-        model.add(MobileNetV2(weights='imagenet',include_top=False,input_shape=imageSize))
+        model.add(ResNet50(weights='imagenet',include_top=False,input_shape=imageSize,pooling='avg'))
         #model.add(InceptionV3(weights='imagenet', include_top=False, input_shape=imageSize))
-        model.add(layers.GlobalAveragePooling2D())
         model.add(layers.Dense(512,activation='relu'))
-        #model.add(layers.Dense(256, activation='relu'))
-        #model.add(layers.Dense(128, activation='relu'))
         model.add(layers.Dense(num_classes,activation='softmax'))
         return model
 
     def createLSTMModel(self,sequenceLength, numClasses):
         input = layers.Input(shape=(sequenceLength, numClasses))
         # model = tensorflow.keras.models.Sequential()
+
         bLSTM0 = layers.Bidirectional(layers.LSTM(numClasses, return_sequences=False))(input)
         bLSTM1 = layers.Bidirectional(layers.LSTM(numClasses, return_sequences=False))(input)
         bLSTM2 = layers.Bidirectional(layers.LSTM(numClasses, return_sequences=False))(input)
@@ -89,19 +95,31 @@ class CNN_LSTM():
         model.compile(optimizer=adam, loss='categorical_crossentropy', metrics=['accuracy'])
         return model
 
+    def createSingleLSTMModel(self,sequenceLength, numClasses):
+        input = layers.Input(shape=(sequenceLength, numClasses))
+        # model = tensorflow.keras.models.Sequential()
+        bLSTM = layers.Bidirectional(layers.LSTM(numClasses, return_sequences=False))(input)
+        r1 = layers.Dense(numClasses, activation='relu')(bLSTM)
+        r2 = layers.Dense(numClasses, activation='relu')(r1)
+        out = layers.Dense(numClasses, activation='softmax')(r2)
+        model = tensorflow.keras.models.Model(inputs=input, outputs=out)
+        adam = tensorflow.keras.optimizers.Adam(learning_rate=0.0001)
+        model.compile(optimizer=adam, loss='categorical_crossentropy', metrics=['accuracy'])
+        return model
+
     def saveModel(self,trainedCNNModel,trainedLSTMModel,saveLocation):
         JSONmodel = trainedCNNModel.to_json()
-        structureFileName = 'mobileNetv2.json'
-        weightsFileName = 'mobileNetv2.h5'
+        structureFileName = 'resnet50.json'
+        weightsFileName = 'resnet50.h5'
         #structureFileName = 'inceptionv3.json'
         #weightsFileName = 'inceptionv3.h5'
         with open(os.path.join(saveLocation,structureFileName),"w") as modelStructureFile:
             modelStructureFile.write(JSONmodel)
-        trainedCNNModel.save_weights(os.path.join(saveLocation,weightsFileName))
+        #trainedCNNModel.save_weights(os.path.join(saveLocation,weightsFileName))
 
         JSONmodel = trainedLSTMModel.to_json()
         structureFileName = 'parallel_LSTM.json'
         weightsFileName = 'parallel_LSTM.h5'
         with open(os.path.join(saveLocation, structureFileName), "w") as modelStructureFile:
             modelStructureFile.write(JSONmodel)
-        trainedLSTMModel.save_weights(os.path.join(saveLocation, weightsFileName))
+        #trainedLSTMModel.save_weights(os.path.join(saveLocation, weightsFileName))
