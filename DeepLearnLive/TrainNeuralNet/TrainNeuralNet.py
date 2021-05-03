@@ -289,6 +289,7 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         trainRadioButton = qt.QRadioButton(videoIDGroupBox)
         trainRadioButton.setGeometry(qt.QRect(10, 20, 50, 20))
         trainRadioButton.setText("Train")
+        trainRadioButton.checked = True
         valRadioButton = qt.QRadioButton(videoIDGroupBox)
         valRadioButton.setGeometry(qt.QRect(60, 20, 70, 20))
         valRadioButton.setText("Validation")
@@ -360,7 +361,7 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onDatasetSelected(self):
     self.datasetDirectoryPath = self.datasetDirectorySelector.directory
-    self.videoIDNames = [x for x in os.listdir(self.datasetDirectorySelector.directory) if not "." in x]
+    self.videoIDNames = [x for x in os.listdir(self.datasetDirectorySelector.directory) if os.path.isdir(os.path.join(self.datasetDirectorySelector.directory,x))]
     self.onVideoIDSelected()
 
   def onImageLabelSelected(self):
@@ -420,7 +421,7 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
           self.selectedVideoIDNames.append(folder["name"])
           self.selectedVideoIDgirderIDs.append(folder["_id"])
       else:
-        self.videoIDNames = [x for x in os.listdir(self.datasetDirectorySelector.directory) if not '.' in x]
+        self.videoIDNames = [x for x in os.listdir(self.datasetDirectorySelector.directory) if os.path.isdir(os.path.join(self.datasetDirectorySelector.directory,x))]
         self.selectedVideoIDNames = self.videoIDNames
       self.addImageLabelsToComboBox()
     elif self.videoIDSelector.currentText == "Manually select video IDs":
@@ -461,7 +462,7 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         numImageSubtypes = sum(1 for _ in videoID)
       else:
         videoID = self.videoIDNames[video]
-        imageSubtypes = os.listdir(os.path.join(self.datasetDirectoryPath,videoID))
+        imageSubtypes = [x for x in os.listdir(os.path.join(self.datasetDirectoryPath,videoID)) if os.path.isdir(os.path.join(self.datasetDirectorySelector.directory,videoID,x))]
         numImageSubtypes = len([x for x in imageSubtypes if not '.' in x])
       if numImageSubtypes == 0:
         videoCheckBox = qt.QCheckBox(self.videoIDNames[video])
@@ -473,7 +474,7 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
           imageSubtypeGenerator = self.girderClient.listFolder(self.videoIDgirderIDs[video])
           self.selectableGirderIDs.append(self.videoIDgirderIDs[video])
         else:
-          imageSubtypeGenerator = os.listdir(os.path.join(self.datasetDirectoryPath,videoID))
+          imageSubtypeGenerator = [x for x in os.listdir(os.path.join(self.datasetDirectoryPath,videoID)) if os.path.isdir(os.path.join(self.datasetDirectorySelector.directory,videoID,x))]
         videoCollapsibleButton = ctk.ctkCollapsibleButton()
         videoCollapsibleButton.text = self.videoIDNames[video]
         self.videoButtonLayout = qt.QFormLayout(videoCollapsibleButton)
@@ -593,6 +594,7 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onCreateCSVClicked(self):
     self.logic.setCSVSavePath(self.csvFileSavePath,self.fileName)
     self.logic.setLabels(self.selectedImageLabels)
+    self.logic.setNumVideos(len(self.selectedVideoIDNames))
     if self.trainValTestSplitComboBox.currentText == "Random percentage":
       if self.useDataFromGirderServerCheckBox.checked:
         self.logic.setSelectedVideoIDs(self.selectedVideoIDNames,self.selectedVideoIDgirderIDs,numberOfFolds = self.numberOfFolds,train=self.trainPercentage,val=self.valPercentage,test=self.testPercentage)
@@ -734,16 +736,12 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.dataCSVSelector.showBrowseButton = True
     self.dataCSV = os.path.join(self.moduleDir, os.pardir, "Datasets")
     self.dataCSVSelector.setCurrentPath(self.dataCSV)
-    self.dataCSVSelector.filters = ctk.ctkPathLineEdit.Files | ctk.ctkPathLineEdit.Readable
-    self.dataCSVSelector.nameFilters = ["CSV (*.csv)"]
     layout.addRow("Data CSV: ", self.dataCSVSelector)
 
     self.trainingScriptSelector = ctk.ctkPathLineEdit()
     self.trainingScriptSelector.showBrowseButton = True
     self.trainingScript = os.path.join(self.moduleDir, os.pardir, "Networks")
     self.trainingScriptSelector.setCurrentPath(self.trainingScript)
-    self.trainingScriptSelector.filters = ctk.ctkPathLineEdit.Files | ctk.ctkPathLineEdit.Readable
-    self.trainingScriptSelector.nameFilters = ["Python (*.py)"]
     layout.addRow("Training Script: ",self.trainingScriptSelector)
 
     self.trainingRunNameLineEdit = qt.QLineEdit()
@@ -775,25 +773,17 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.runTrainingButton.enabled = True
 
   def getCondaPath(self):
-    settings = qt.QSettings()
-    condaPath = settings.value("AIGT/Anaconda")
-    if not condaPath is None:
-      return condaPath
-
     condaPath = str(Path.home())
     homePath = str(Path.home())
     if "Anaconda3" in os.listdir(homePath):
       condaPath = os.path.join(homePath,"Anaconda3")
     elif "anaconda3" in os.listdir(homePath):
       condaPath = os.path.join(homePath, "anaconda3")
-    settings.setValue("AIGT/Anaconda", condaPath)
     return condaPath
 
   def condaPathChanged(self):
     self.condaDirectoryPath = self.condaDirectoryPathSelector.directory
     self.logic.setCondaDirectory(self.condaDirectoryPath)
-    settings = qt.QSettings()
-    settings.setValue("AIGT/Anaconda", self.condaDirectoryPath)
 
   def onEnvironmentNameChanged(self):
     self.environmentName = self.environmentNameLineEdit.text
@@ -960,44 +950,93 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
     totalRowCount = 0
     for fold in range(0, len(self.trainList)):
       setType = "Train"
+      self.availableIndexes = []
       for j in range(len(self.trainList[fold])):
         folderName = os.path.join(self.datasetPath,self.trainList[fold][j])
         labelFileName = self.trainList[fold][j].replace("/","_") + "_Labels.csv"
         labelCSV = pandas.read_csv(os.path.join(folderName,labelFileName))
-        for row in range(0,len(labelCSV.index)):
-          csvDataFrame = csvDataFrame.append({"Fold": fold,
+        self.availableImages = [i for i in labelCSV.index]
+        if self.splitType == "Video":
+          temp = pandas.DataFrame({'Fold':[fold for x in labelCSV.index],"Set":[setType for x in labelCSV.index],"Folder":[folderName for x in labelCSV.index],"FileName":labelCSV["FileName"]})
+          for i in range(0,len(self.Labels)):
+            temp[self.Labels[i]] = labelCSV[self.Labels[i]]
+        else:
+          numTrainSamples = int(round(len(labelCSV.index) * (self.trainPercentage/100.0),0))
+          temp = pandas.DataFrame({'Fold': [fold for x in range(numTrainSamples)], "Set": [setType for x in range(numTrainSamples)],"Folder": [folderName for x in range(numTrainSamples)]})
+          trainSamples = labelCSV.sample(n=numTrainSamples)
+          self.availableImages = [x for x in self.availableImages if not x in trainSamples.index]
+          temp["FileName"] = [trainSamples["FileName"][i] for i in trainSamples.index]
+          self.availableIndexes.append(self.availableImages)
+          for i in range(0,len(self.Labels)):
+            temp[self.Labels[i]] = [trainSamples[self.Labels[i]][x] for x in trainSamples.index]
+        csvDataFrame = csvDataFrame.append(temp, ignore_index=True)
+
+        '''csvDataFrame = csvDataFrame.append({"Fold": fold,
                                                 "Set": setType,
                                                 "Folder": folderName,
-                                                "FileName": labelCSV["FileName"][row]}, ignore_index=True)
-          for i in range(0,len(self.Labels)):
-            csvDataFrame[self.Labels[i]][totalRowCount] = labelCSV[self.Labels[i]][row]
-          totalRowCount += 1
+                                                "FileName": labelCSV["FileName"][row]}, ignore_index=True)'''
+
       setType = "Validation"
       for j in range(len(self.valList[fold])):
         folderName = os.path.join(self.datasetPath, self.valList[fold][j])
         labelFileName = self.valList[fold][j].replace("/", "_") + "_Labels.csv"
         labelCSV = pandas.read_csv(os.path.join(folderName, labelFileName))
-        for row in range(0, len(labelCSV.index)):
+        if self.splitType == "Video":
+          temp = pandas.DataFrame({'Fold': [fold for x in labelCSV.index], "Set": [setType for x in labelCSV.index],
+                                   "Folder": [folderName for x in labelCSV.index], "FileName": labelCSV["FileName"]})
+          for i in range(0, len(self.Labels)):
+            temp[self.Labels[i]] = labelCSV[self.Labels[i]]
+        else:
+          numValSamples = int(round(len(labelCSV.index) * (self.valPercentage/100.0), 0))
+          temp = pandas.DataFrame(
+            {'Fold': [fold for x in range(numValSamples)], "Set": [setType for x in range(numValSamples)],
+             "Folder": [folderName for x in range(numValSamples)]})
+          availableSamples = labelCSV.iloc[self.availableIndexes[j]]
+          valSamples = availableSamples.sample(n=numValSamples)
+          self.availableImages = [x for x in self.availableIndexes[j] if not x in valSamples.index]
+          temp["FileName"] = [valSamples["FileName"][i] for i in valSamples.index]
+          self.availableIndexes[j] = self.availableImages
+          for i in range(0,len(self.Labels)):
+            temp[self.Labels[i]] = [valSamples[self.Labels[i]][x] for x in valSamples.index]
+        csvDataFrame = csvDataFrame.append(temp, ignore_index=True)
+
+
+        '''for row in range(0, len(labelCSV.index)):
           csvDataFrame = csvDataFrame.append({"Fold": fold,
                                               "Set": setType,
                                               "Folder": folderName,
                                               "FileName": labelCSV["FileName"][row]}, ignore_index=True)
           for i in range(0, len(self.Labels)):
             csvDataFrame[self.Labels[i]][totalRowCount] = labelCSV[self.Labels[i]][row]
-          totalRowCount += 1
+          totalRowCount += 1'''
       setType = "Test"
       for j in range(len(self.testList[fold])):
         folderName = os.path.join(self.datasetPath, self.testList[fold][j])
         labelFileName = self.testList[fold][j].replace("/", "_") + "_Labels.csv"
         labelCSV = pandas.read_csv(os.path.join(folderName, labelFileName))
-        for row in range(0, len(labelCSV.index)):
+        if self.splitType == "Video":
+          temp = pandas.DataFrame({'Fold': [fold for x in labelCSV.index], "Set": [setType for x in labelCSV.index],
+                                   "Folder": [folderName for x in labelCSV.index], "FileName": labelCSV["FileName"]})
+          for i in range(0, len(self.Labels)):
+            temp[self.Labels[i]] = labelCSV[self.Labels[i]]
+        else:
+          numTestSamples = len(self.availableIndexes[j])
+          temp = pandas.DataFrame(
+            {'Fold': [fold for x in range(numTestSamples)], "Set": [setType for x in range(numTestSamples)],
+             "Folder": [folderName for x in range(numTestSamples)]})
+          testSamples = labelCSV.iloc[self.availableIndexes[j]]
+          temp["FileName"] = [testSamples["FileName"][i] for i in testSamples.index]
+          for i in range(0,len(self.Labels)):
+            temp[self.Labels[i]] = [testSamples[self.Labels[i]][x] for x in testSamples.index]
+        csvDataFrame = csvDataFrame.append(temp, ignore_index=True)
+        '''for row in range(0, len(labelCSV.index)):
           csvDataFrame = csvDataFrame.append({"Fold": fold,
                                               "Set": setType,
                                               "Folder": folderName,
                                               "FileName": labelCSV["FileName"][row]}, ignore_index=True)
           for i in range(0, len(self.Labels)):
             csvDataFrame[self.Labels[i]][totalRowCount] = labelCSV[self.Labels[i]][row]
-          totalRowCount += 1
+          totalRowCount += 1'''
     csvDataFrame.to_csv(self.csvSavePath)
     logging.info("Successfully saved csv to: " + str(self.csvSavePath))
     return 0
@@ -1136,19 +1175,36 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
 
   def setSelectedVideoIDs(self,selectedVideoIDNames,selectedVideoGirderIDS=None,numberOfFolds=1,train=None,val=None,test=None):
     if selectedVideoGirderIDS != None:
+      self.splitType = "Video"
       self.trainList,self.trainGirderIDs,self.valList,self.valGirderIDs,self.testList,self.testGirderIDs = self.selectByPercentage(selectedVideoIDNames,numberOfFolds,train,val,test,selectedVideoGirderIDS)
     else:
-      self.trainList,self.valList,self.testList = self.selectByPercentage(selectedVideoIDNames,numberOfFolds,train,val,test)
+      if len(selectedVideoIDNames)>=2:
+        self.splitType = "Video"
+        self.trainList,self.valList,self.testList = self.selectByPercentage(selectedVideoIDNames,numberOfFolds,train,val,test)
+      else:
+        self.splitType = "Image"
+        self.trainPercentage = train
+        self.valPercentage = val
+        self.testPercentage = test
+        self.trainList = [selectedVideoIDNames for i in range(numberOfFolds)]
+        self.valList = [selectedVideoIDNames for i in range(numberOfFolds)]
+        self.testList = [selectedVideoIDNames for i in range(numberOfFolds)]
 
   def setTrainValTestSet(self,trainSet,valSet,testSet):
+    self.splitType = "Video"
     self.trainList = trainSet
     self.valList = valSet
     self.testList = testSet
 
   def setTrainValTestGirderIDs(self,trainSet,valSet,testSet):
+    self.splitType = "Video"
     self.trainGirderIDs = trainSet
     self.valGirderIDs = valSet
     self.testGirderIDs = testSet
+
+  def setNumVideos(self,numVideos):
+    self.numVideos = numVideos
+
 
   def selectByPercentage(self,selectedVideoIDNames,numFolds,train,val,test,selectedVideoGirderIDs = None):
     if numFolds == 1:
