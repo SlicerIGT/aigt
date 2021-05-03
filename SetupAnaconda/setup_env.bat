@@ -15,7 +15,7 @@ call conda create -y -p %EnvironmentPath%
 call activate %EnvironmentPath%
 call conda install -y tensorflow-gpu=2.1
 call conda install -y pandas opencv jupyter scikit-learn scikit-image matplotlib
-call pip install girder-client
+call pip install girder-client pyigtl
 
 :: Exiting install script
 
