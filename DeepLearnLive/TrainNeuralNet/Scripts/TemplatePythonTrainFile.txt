@@ -158,7 +158,7 @@ class Train_MODELNAME:
             valImages,valLabels = self.loadData(fold,"Validation")
             testImages,testLabels = self.loadData(fold,"Test")
 
-            labelValues = self.dataCSVFile[labelName].unique()
+            labelValues = numpy.array(sorted(self.dataCSVFile[labelName].unique()))
             numpy.savetxt(os.path.join(foldDir,"labels.txt"),labelValues,fmt='%s',delimiter=',')
 
             numericTrainLabels = self.convertTextToNumericLabels(trainLabels[labelName],labelValues)

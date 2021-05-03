@@ -187,17 +187,10 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
     self.createNewModelButton.connect('clicked(bool)',self.onCreateModelClicked)
 
   def getCondaPath(self):
-    settings = qt.QSettings()
-    condaPath = settings.value("AIGT/Anaconda")
-    if not condaPath is None:
-      return condaPath
-
     condaPath = str(Path.home())
     homePath = str(Path.home())
     if "Anaconda3" in os.listdir(homePath):
         condaPath = os.path.join(homePath,"Anaconda3")
-
-    settings.setValue("AIGT/Anaconda", condaPath)
     return condaPath
 
 
@@ -220,8 +213,6 @@ class RunNeuralNetWidget(ScriptedLoadableModuleWidget):
   def onCondaDirectorySelected(self):
     self.condaDirectoryPath = self.condaDirectoryPathSelector.directory
     self.logic.setPathToCondaExecutable(self.condaDirectoryPath)
-    settings = qt.QSettings()
-    settings.setValue("AIGT/Anaconda", self.condaDirectoryPath)
 
   def onCondaEnvironmentNameChanged(self):
     self.environmentName = self.environmentNameLineEdit.text
@@ -320,7 +311,6 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.incomingHostName = incomingHostName
     self.incomingPort = incomingPort
     self.moduleDir = os.path.dirname(slicer.modules.runneuralnet.path)
-    self.state_name = ""
 
   def startNeuralNetwork(self):
     self.registerIncomingAndOutgoingNodes()
@@ -348,7 +338,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       startupEnv = slicer.util.startupEnvironment()
       info = subprocess.STARTUPINFO()
       info.dwFlags = subprocess.CREATE_NEW_CONSOLE
-      self.p = subprocess.Popen(cmd,env=startupEnv)
+      p = subprocess.Popen(cmd,env=startupEnv)
     startTime = time.time()
     while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<15:
       time.sleep(0.25)
@@ -378,10 +368,10 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       return hostname
 
   def stopNeuralNetwork(self):
-    if self.state_name != None:
-      self.p.kill()
+    '''if self.state_name != None:
+      self.p.kill()'''
     self.outgoingConnectorNode.UnregisterOutgoingMRMLNode(self.inputNode)
-    #self.incomingConnectorNode.UnregisterIncomingMRMLNode(self.outputNode) # TODO: Uncomment when RegisterIncomingMRMLNode is restored
+    self.incomingConnectorNode.UnregisterIncomingMRMLNode(self.outputNode)
     self.outgoingConnectorNode.Stop()
     self.incomingConnectorNode.Stop()
     logging.info("Stopping neural network")
@@ -408,6 +398,9 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     if node.GetClassName() == "vtkMRMLStreamingVolumeNode":
       try:
         self.videoImage = slicer.util.getNode(node.GetName()+'_Image')
+        self.videoImage.SetAndObserveImageData(node.GetImageData())
+        node.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameModifiedEvent, self.referenceImageModified)
+        self.streamingNode = node
       except slicer.util.MRMLNodeNotFoundException:
         #Create a node to store the image data of the video so that IGTLink is
         # sending an IMAGE message, not a VIDEO message
@@ -417,14 +410,18 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
         self.videoImage.SetName(node.GetName() + '_Image')
         self.videoImage.SetSpacing(imageSpacing)
         self.videoImage.SetAndObserveImageData(node.GetImageData())
+        #self.videoImage.SetImageDataConnection(node.GetImageDataConnection())
         node.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameModifiedEvent, self.referenceImageModified)
         # Add volume to scene
         slicer.mrmlScene.AddNode(self.videoImage)
       self.inputNode = self.videoImage
+      self.streamingNode= node
     else:
       self.inputNode = node
 
   def referenceImageModified(self,caller,eventId):
+    self.videoImage.SetAndObserveImageData(self.streamingNode.GetImageData())
+    self.videoImage.UpdateScene(slicer.mrmlScene)
     self.videoImage.InvokeEvent(slicer.vtkMRMLVolumeNode.ImageDataModifiedEvent)
 
   def setOutputNode(self,node):
@@ -462,7 +459,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
 
   def registerIncomingAndOutgoingNodes(self):
     self.setupIGTLinkConnectors(self.incomingHostName,self.incomingPort,self.outgoingPort)
-    #self.incomingConnectorNode.RegisterIncomingMRMLNode(self.outputNode) # TODO: Function signature doesn't exist in latest Slicer
+    #self.incomingConnectorNode.RegisterIncomingMRMLNode(self.outputNode,self.outputNode.GetName())
     self.outgoingConnectorNode.RegisterOutgoingMRMLNode(self.inputNode)
 
   def createNewModel(self,newModelName,newModelLocation = None):
