@@ -261,8 +261,7 @@ class Train_CNN_LSTM:
         self.numFolds = self.dataCSVFile["Fold"].max() + 1
         self.gClient = None
         network = CNN_LSTM.CNN_LSTM()
-        for fold in range(0,self.numFolds):
-            foldDir = self.saveLocation+"_Fold_"+str(fold)
+            balancedDataset = self.createBalancedCNNDataset(fold)            foldDir = self.saveLocation+"_Fold_"+str(fold)
             os.mkdir(foldDir)
             taskLabelName = "Task" #This should be the label that will be used to train the network
             toolLabelName = "Tool"
@@ -287,20 +286,6 @@ class Train_CNN_LSTM:
             else:
                 self.gClient = None
                 tempFileDir = None
-            if balanceCNNData:
-                cnnTrainDataSet = CNNSequence(balancedDataset,cnnTrainIndexes,self.batch_size,toolLabelName,self.gClient,tempFileDir)
-                print(cnnTrainDataSet.labels)
-                cnnValDataSet = CNNSequence(balancedDataset, cnnValIndexes, self.batch_size, toolLabelName,self.gClient,tempFileDir)
-                print(cnnValDataSet.labels)
-                cnnTestDataSet = CNNSequence(balancedDataset, cnnTestIndexes, self.batch_size, toolLabelName,self.gClient,tempFileDir)
-                print(cnnTestDataSet.labels)
-            else:
-                cnnTrainDataSet = CNNSequence(self.dataCSVFile, cnnTrainIndexes, self.batch_size, toolLabelName,self.gClient,tempFileDir)
-                print(cnnTrainDataSet.labels)
-                cnnValDataSet = CNNSequence(self.dataCSVFile, cnnValIndexes, self.batch_size, toolLabelName, self.gClient,tempFileDir)
-                print(cnnValDataSet.labels)
-                cnnTestDataSet = CNNSequence(self.dataCSVFile, cnnTestIndexes, self.batch_size, toolLabelName, self.gClient,tempFileDir)
-                print(cnnTestDataSet.labels)
 
             cnnLabelValues = numpy.array(sorted(self.dataCSVFile[toolLabelName].unique()))
             numpy.savetxt(os.path.join(foldDir,"cnn_labels.txt"),cnnLabelValues,fmt='%s',delimiter=',')
@@ -326,25 +311,28 @@ class Train_CNN_LSTM:
             trueLabels = numpy.argmax(cnnTestDataSet.targets, axis=-1)
             self.confMat = sklearn.metrics.confusion_matrix(trueLabels, predictions)
             print(self.confMat)
-            self.saveTrainingInfo(fold, foldDir, history.history, results,"CNN",balanceCNNData)
+            self.saveTrainingInfo(fold, foldDir, history.history, results,"CNN")
             self.saveTrainingPlot(foldDir, history.history, "loss", "CNN")
             for metric in self.metrics:
                 self.saveTrainingPlot(foldDir,history.history,metric,"CNN")
-            lstmTrainIndexes = self.loadData(fold,"Train",self.dataCSVFile)
+            #self.dataCSVFile = pandas.read_csv("D:/Datasets/Central_Line_Std_kit/TBME_2021_louo.csv")            lstmTrainIndexes = self.loadData(fold,"Train",self.dataCSVFile)
             lstmValIndexes = self.loadData(fold,"Validation",self.dataCSVFile)
             lstmTestIndexes = self.loadData(fold, "Test",self.dataCSVFile)
+            
             lstmTrainSequences = self.splitDatasetIntoSequences(fold,"Train",sequenceLength=self.sequenceLength,downsampling=self.downsampling)
             lstmValSequences = self.splitDatasetIntoSequences(fold,"Validation",sequenceLength=self.sequenceLength,downsampling=self.downsampling)
             lstmTestSequences = self.splitDatasetIntoSequences(fold,"Test",sequenceLength=self.sequenceLength,downsampling=self.downsampling)
 
             self.lstmLabelValues = numpy.array(sorted(self.dataCSVFile[taskLabelName].unique()))
             numpy.savetxt(os.path.join(foldDir, "lstm_labels.txt"), self.lstmLabelValues, fmt='%s', delimiter=',')
+            
             if balanceLSTMData:
                 lstmTrainSequences = self.getBalancedSequences(lstmTrainSequences)
                 lstmValSequences = self.getBalancedSequences(lstmValSequences)
             self.batch_size = 8
             lstmTrainDataSet = LSTMSequence(self.dataCSVFile, lstmTrainIndexes, lstmTrainSequences, cnnModel, self.batch_size, taskLabelName,tempFileDir)
             print("Training images loaded")
+ 
             lstmValDataSet = LSTMSequence(self.dataCSVFile, lstmValIndexes, lstmValSequences, cnnModel, self.batch_size, taskLabelName,tempFileDir)
             print("Validation images loaded")
             lstmTestDataSet = LSTMSequence(self.dataCSVFile, lstmTestIndexes, lstmTestSequences, cnnModel, self.batch_size, taskLabelName,tempFileDir)
@@ -357,6 +345,7 @@ class Train_CNN_LSTM:
                                                       save_best_only=True)
             #earlyStoppingCallback = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=3)
             #self.lstmClassWeights = self.getClassWeights(lstmTrainDataSet.targets)
+
             self.lstmClassWeights = {0:1,1:1,2:1,3:1,4:1,5:1,6:1,7:1}
 
             lstmModel = network.createLSTMModel(self.sequenceLength, numClasses=len(self.lstmLabelValues))
@@ -371,13 +360,14 @@ class Train_CNN_LSTM:
             trueLabels = numpy.argmax(lstmTestDataSet.targets, axis=-1)
             self.confMat = sklearn.metrics.confusion_matrix(trueLabels, predictions)
             print(self.confMat)
-            self.saveTrainingInfo(fold, foldDir, history.history, results, "LSTM",balanceLSTMData)
+            self.saveTrainingInfo(fold, foldDir, history.history, results, "LSTM")
             self.saveTrainingPlot(foldDir, history.history, "loss","LSTM")
             for metric in self.metrics:
                 self.saveTrainingPlot(foldDir, history.history, metric, "LSTM")
 
 
             network.saveModel(cnnModel,lstmModel,foldDir)
+
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
