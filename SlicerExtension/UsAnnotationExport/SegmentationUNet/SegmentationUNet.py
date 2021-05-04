@@ -7,10 +7,10 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
+import sys
+if not hasattr(sys, 'argv'):
+  sys.argv  = ['']
 import tensorflow as tf
-from tensorflow.keras.models import load_model
-
-import cProfile, pstats, io
 
 #
 # SegmentationUNet
@@ -58,11 +58,6 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.outputImageNode = None
     self.slicer_to_model_scaling = 1.0
     self.model_to_slicer_scaling = 1.0
-
-    # Set to True for profiling
-    self.profiling = False
-    if self.profiling:
-      self.profiler = cProfile.Profile()
 
     self.apply_logarithmic_transformation = True
     self.logarithmic_transformation_decimals = 4
@@ -220,23 +215,11 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.model_to_slicer_scaling = input_array.shape[1] / self.unet_model.layers[0].input_shape[0][1]
       if self.predicting == False:
         logging.info("Staring live segmentation")
-        if self.profiling:
-          self.profiler.enable()  # todo: remove
         self.inputModifiedObserver = self.inputImageNode.AddObserver(
           slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onInputNodeModified)
         self.predicting = True
       else:
         logging.info("Stopping live segmentation")
-
-        # todo: remove
-        if self.profiling:
-          self.profiler.disable()
-          s = io.StringIO()
-          ps = pstats.Stats(self.profiler, stream=s)
-          ps.strip_dirs().sort_stats('cumulative').print_stats(40)
-          # ps.print_stats()
-          print(s.getvalue())
-
         if self.inputModifiedObserver is not None:
           self.inputImageNode.RemoveObserver(self.inputModifiedObserver)
           self.inputModifiedObserver = None
