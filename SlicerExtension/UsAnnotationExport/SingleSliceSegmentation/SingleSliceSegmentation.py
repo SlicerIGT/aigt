@@ -448,10 +448,10 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     logging.debug('Entered SingleSliceSegmentation module widget')
 
     # Prevent segmentation master volume to be created in the wrong position.
-    # Todo: Instead of this, the input image shoudl be kept transformed, and the segmentation also transformed
+    # Todo: Instead of this, the input image should be kept transformed, and the segmentation also transformed
 
     inputImageNode = slicer.util.getFirstNodeByName(DEFAULT_INPUT_IMAGE_NAME)
-    if inputImageNode is not None:
+    if inputImageNode is not None and inputImageNode.GetClassName() == 'vtkMRMLScalarVolumeNode':
       inputImageNode.SetAndObserveTransformNodeID(None)
 
     if self.ui.editor.turnOffLightboxes():
