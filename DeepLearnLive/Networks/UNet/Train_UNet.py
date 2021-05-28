@@ -160,7 +160,7 @@ class Train_UNet:
         self.metrics = ['IoU','accuracy']
         self.numFolds = self.dataCSVFile["Fold"].max() + 1
         self.gClient = None
-        network = Vessel_UNet.Vessel_UNet()
+        network = UNet.UNet()
         for fold in range(0,1): #changed from range(0,self.numFolds)
             foldDir = self.saveLocation+"_Fold_"+str(fold)
             os.mkdir(foldDir)
@@ -259,5 +259,5 @@ if __name__ == '__main__':
       help='Metrics used to evaluate model.'
   )
 FLAGS, unparsed = parser.parse_known_args()
-tm = Train_Vessel_UNet()
+tm = Train_UNet()
 tm.train()
