@@ -10,7 +10,7 @@ from tensorflow.keras.models import model_from_json
 
 sys.path.append('C:\\repos\\aigt')
 
-import segmentation_unet as unet
+from Models import segmentation_unet as unet
 
 ''' 
 Sample Model file for defining a neural network for use within the DeepLearnLive extension
