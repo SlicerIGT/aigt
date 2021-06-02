@@ -52,7 +52,6 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = None
     self._parameterNode = None
     self.unet_model = None
-    self.predicting = False
     self.inputModifiedObserver = None
     self.inputImageNode = None
     self.outputImageNode = None
@@ -89,10 +88,8 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.modelPathLineEdit.connect("currentPathChanged(QString)", self.onModelSelected)
     self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
 
-    self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
+    self.ui.applyButton.connect('toggled(bool)', self.onApplyButton)
 
     # Initial GUI update
     self.updateGUIFromParameterNode()
@@ -140,7 +137,7 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Disable all sections if no parameter node is selected
     self.ui.basicCollapsibleButton.enabled = self._parameterNode is not None
-    self.ui.advancedCollapsibleButton.enabled = self._parameterNode is not None
+
     if self._parameterNode is None:
       return
 
@@ -153,14 +150,6 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     wasBlocked = self.ui.outputSelector.blockSignals(True)
     self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
     self.ui.outputSelector.blockSignals(wasBlocked)
-
-    wasBlocked = self.ui.imageThresholdSliderWidget.blockSignals(True)
-    self.ui.imageThresholdSliderWidget.value = float(self._parameterNode.GetParameter("Threshold"))
-    self.ui.imageThresholdSliderWidget.blockSignals(wasBlocked)
-
-    wasBlocked = self.ui.invertOutputCheckBox.blockSignals(True)
-    self.ui.invertOutputCheckBox.checked = (self._parameterNode.GetParameter("Invert") == "true")
-    self.ui.invertOutputCheckBox.blockSignals(wasBlocked)
 
     # Update buttons states and tooltips
     if self._parameterNode.GetNodeReference("InputVolume") and self._parameterNode.GetNodeReference("OutputVolume"):
@@ -179,10 +168,8 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
     self._parameterNode.SetNodeReferenceID("OutputVolume", self.ui.outputSelector.currentNodeID)
-    self._parameterNode.SetParameter("Threshold", str(self.ui.imageThresholdSliderWidget.value))
-    self._parameterNode.SetParameter("Invert", "true" if self.ui.invertOutputCheckBox.checked else "false")
 
-  def onApplyButton(self):
+  def onApplyButton(self, toggled):
     """
     Run processing when user clicks "Apply" button.
     """
@@ -213,20 +200,17 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       input_array = slicer.util.array(self.inputImageNode.GetID())
       self.slicer_to_model_scaling = self.unet_model.layers[0].input_shape[0][1] / input_array.shape[1]
       self.model_to_slicer_scaling = input_array.shape[1] / self.unet_model.layers[0].input_shape[0][1]
-      if self.predicting == False:
+      if toggled == True:
         logging.info("Staring live segmentation")
         self.inputModifiedObserver = self.inputImageNode.AddObserver(
           slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onInputNodeModified)
-        self.predicting = True
       else:
         logging.info("Stopping live segmentation")
         if self.inputModifiedObserver is not None:
           self.inputImageNode.RemoveObserver(self.inputModifiedObserver)
           self.inputModifiedObserver = None
-        self.predicting = False
     except Exception as e:
-      self.predicting = False
-      slicer.util.errorDisplay("Failed to compute results: "+str(e))
+      slicer.util.errorDisplay("Failed to start live segmentation: "+str(e))
       import traceback
       traceback.print_exc()
 
@@ -271,28 +255,6 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic):
       parameterNode.SetParameter("Threshold", "50.0")
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
-
-  def run(self, inputVolume, outputVolume, imageThreshold, invert=False):
-    """
-    Run the processing algorithm.
-    Can be used without GUI widget.
-    """
-
-    if not inputVolume or not outputVolume:
-      raise ValueError("Input or output volume is invalid")
-
-    logging.info('Processing started')
-
-    # Compute the thresholded output volume using the Threshold Scalar Volume CLI module
-    cliParams = {
-      'InputVolume': inputVolume.GetID(),
-      'OutputVolume': outputVolume.GetID(),
-      'ThresholdValue' : imageThreshold,
-      'ThresholdType' : 'Below' if invert else 'Above'
-      }
-    cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True)
-
-    logging.info('Processing completed')
 
 
 #
@@ -344,24 +306,5 @@ class SegmentationUNetTest(ScriptedLoadableModuleTest):
     inputScalarRange = inputVolume.GetImageData().GetScalarRange()
     self.assertEqual(inputScalarRange[0], 0)
     self.assertEqual(inputScalarRange[1], 279)
-
-    outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode")
-    threshold = 50
-
-    # Test the module logic
-
-    logic = SegmentationUNetLogic()
-
-    # Test algorithm with non-inverted threshold
-    logic.run(inputVolume, outputVolume, threshold, False)
-    outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-    self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-    self.assertEqual(outputScalarRange[1], threshold)
-
-    # Test algorithm with inverted threshold
-    logic.run(inputVolume, outputVolume, threshold, True)
-    outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-    self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-    self.assertEqual(outputScalarRange[1], inputScalarRange[1])
 
     self.delayDisplay('Test passed')
