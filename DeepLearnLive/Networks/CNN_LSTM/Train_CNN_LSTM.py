@@ -105,7 +105,7 @@ class Train_CNN_LSTM:
         plt.plot([x for x in range(numEpochs)], history["val_" + metric], 'b', label='Validation '+metric)
         plt.title(networkType+' Training and Validation ' + metric)
         plt.xlabel('Epochs')
-        plt.ylabel('Loss')
+        plt.ylabel(metric.capitalize())
         plt.legend()
         plt.savefig(os.path.join(saveLocation, networkType+'_'+metric + '.png'))
         plt.close(fig)
@@ -292,14 +292,14 @@ class Train_CNN_LSTM:
                 print(cnnTrainDataSet.labels)
                 cnnValDataSet = CNNSequence(balancedDataset, cnnValIndexes, self.batch_size, toolLabelName,self.gClient,tempFileDir)
                 print(cnnValDataSet.labels)
-                cnnTestDataSet = CNNSequence(balancedDataset, cnnTestIndexes, self.batch_size, toolLabelName,self.gClient,tempFileDir)
+                cnnTestDataSet = CNNSequence(balancedDataset, cnnTestIndexes, self.batch_size, toolLabelName,self.gClient,tempFileDir,augmentations = False)
                 print(cnnTestDataSet.labels)
             else:
                 cnnTrainDataSet = CNNSequence(self.dataCSVFile, cnnTrainIndexes, self.batch_size, toolLabelName,self.gClient,tempFileDir)
                 print(cnnTrainDataSet.labels)
                 cnnValDataSet = CNNSequence(self.dataCSVFile, cnnValIndexes, self.batch_size, toolLabelName, self.gClient,tempFileDir)
                 print(cnnValDataSet.labels)
-                cnnTestDataSet = CNNSequence(self.dataCSVFile, cnnTestIndexes, self.batch_size, toolLabelName, self.gClient,tempFileDir)
+                cnnTestDataSet = CNNSequence(self.dataCSVFile, cnnTestIndexes, self.batch_size, toolLabelName, self.gClient,tempFileDir,augmentations = False)
                 print(cnnTestDataSet.labels)
 
             cnnLabelValues = numpy.array(sorted(self.dataCSVFile[toolLabelName].unique()))
@@ -309,7 +309,7 @@ class Train_CNN_LSTM:
             cnnModel = network.createCNNModel((224,224,3),num_classes=len(cnnLabelValues))
             cnnModel.compile(optimizer = self.cnn_optimizer, loss = self.loss_Function, metrics = self.metrics)
 
-            earlyStoppingCallback = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=30)
+            earlyStoppingCallback = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=5)
             modelCheckPointCallback = ModelCheckpoint(os.path.join(foldDir,'resnet50.h5'), verbose=1,monitor='val_accuracy', mode='max', save_weights_only = True,save_best_only=True)
             #self.cnnClassWeights = self.getClassWeights(cnnTrainDataSet.targets)
 
@@ -317,7 +317,7 @@ class Train_CNN_LSTM:
 
             history = cnnModel.fit(x=cnnTrainDataSet,
                                    validation_data=cnnValDataSet,
-                                   epochs=self.numEpochs,callbacks=[modelCheckPointCallback])
+                                   epochs=self.numEpochs,callbacks=[modelCheckPointCallback,earlyStoppingCallback])
             cnnModel.load_weights(os.path.join(foldDir, 'resnet50.h5'))
 
             results = cnnModel.evaluate(x=cnnTestDataSet)
@@ -355,7 +355,7 @@ class Train_CNN_LSTM:
             modelCheckPointCallback = ModelCheckpoint(os.path.join(foldDir, 'parallel_LSTM.h5'), verbose=1,
                                                       monitor='val_accuracy', mode='max', save_weights_only=True,
                                                       save_best_only=True)
-            #earlyStoppingCallback = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=3)
+            earlyStoppingCallback = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=5)
             #self.lstmClassWeights = self.getClassWeights(lstmTrainDataSet.targets)
             self.lstmClassWeights = {0:1,1:1,2:1,3:1,4:1,5:1,6:1,7:1}
 
@@ -363,7 +363,7 @@ class Train_CNN_LSTM:
             lstmModel.compile(optimizer=self.lstm_optimizer, loss=self.loss_Function, metrics=self.metrics)
             history = lstmModel.fit(x=lstmTrainDataSet,
                                    validation_data=lstmValDataSet,
-                                   epochs=self.numLSTMEpochs,callbacks=[modelCheckPointCallback],class_weight=self.lstmClassWeights)
+                                   epochs=self.numLSTMEpochs,callbacks=[modelCheckPointCallback,earlyStoppingCallback],class_weight=self.lstmClassWeights)
             lstmModel.load_weights(os.path.join(foldDir, 'parallel_LSTM.h5'))
             results = lstmModel.evaluate(x=lstmTestDataSet)
             predictions = lstmModel.predict(lstmTestDataSet)
@@ -396,13 +396,13 @@ if __name__ == '__main__':
   parser.add_argument(
       '--num_epochs_cnn',
       type=int,
-      default=20,
+      default=30,
       help='number of epochs used in training'
   )
   parser.add_argument(
       '--num_epochs_lstm',
       type=int,
-      default=20,
+      default=30,
       help='number of epochs used in training'
   )
   parser.add_argument(
@@ -414,7 +414,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--downsampling_rate',
       type=int,
-      default=4,
+      default=6,
       help='number of epochs used in training'
   )
   parser.add_argument(
@@ -447,6 +447,9 @@ if __name__ == '__main__':
       default='accuracy',
       help='Metrics used to evaluate model.'
   )
+print("Defined all functions")
 FLAGS, unparsed = parser.parse_known_args()
+print("Parsed arguments")
 tm = Train_CNN_LSTM()
+print("Beginning training")
 tm.train()
