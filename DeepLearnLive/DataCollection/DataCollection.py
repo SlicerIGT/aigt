@@ -1255,6 +1255,14 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
   def exportImagesFromSequence(self):
     sequenceName = self.recordingVolumeNode.GetName().split(sep="_")
     sequenceNode = slicer.util.getFirstNodeByName(sequenceName[0])
+    if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
+      sequenceNodeID = sequenceNode.GetID()
+      IDNumbers = [x for x in sequenceNodeID if x.isnumeric()]
+      sequenceID = 'vtkMRMLSequenceNode'
+      for i in IDNumbers:
+        sequenceID += str(i)
+      sequenceNode = slicer.util.getNode(sequenceID)
+
     numDataNodes = sequenceNode.GetNumberOfDataNodes()
     addingToExisting = False
     labels = self.getLabelsFromSequence()
