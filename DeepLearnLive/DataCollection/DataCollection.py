@@ -201,6 +201,11 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.setupWebcamResliceDriver()
 
   def setupLabelSequenceLayout(self,layout):
+    """
+    lays out the module to label a sequence, user chooses image node and problem type
+    :param layout: the interface layout depending on specified problem type
+    :return:
+    """
     self.selectSequenceBox = slicer.qMRMLNodeComboBox()
     self.selectSequenceBox.selectNodeUponCreation = True
     self.selectSequenceBox.nodeTypes = ["vtkMRMLSequenceBrowserNode"]
@@ -276,6 +281,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.logic.setLabelNode(self.selectLabelTypeCombobox.currentNode())
 
   def onlabelProblemTypeSelected(self):
+    """
+    adjusts module layout based on the specified problem
+    :return:
+    """
     if self.labelproblemTypeComboBox.currentText == "Classification":
       self.labelTableWidget.visible = True
       self.addRowButton.visible = True
@@ -301,11 +310,19 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       print(self.labelproblemTypeComboBox.currentText)
 
   def onSequenceBrowserSelected(self):
+    """
+    gets the sequence browser nodes
+    :return:
+    """
     self.sequenceBrowserNode = self.selectSequenceBox.currentNode()
     self.logic.setSequenceBrowserNode(self.selectSequenceBox.currentNode())
     self.addImageNodeNamesToComboBox()
 
   def addImageNodeNamesToComboBox(self):
+    """
+    retrieves all images nodes from the selected sequence
+    :return:
+    """
     imageNodeNames = []
     proxyNodes = vtk.vtkCollection()
     try:
@@ -323,13 +340,18 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       pass
 
   def onImageNodeSelected(self):
+    """
+    reads the user's selected image node
+    :return:
+    """
     if self.selectImageNodeBox.currentText != "Select Image Node":
       self.logic.setImageNode(self.selectImageNodeBox.currentText)
       self.sequenceNode = self.selectSequenceBox.currentNode().GetSequenceNode(slicer.util.getNode(self.selectImageNodeBox.currentText))
       self.numDataNodes = self.sequenceNode.GetNumberOfDataNodes()
 
   def onLabelNodeSelected(self):
-    for i in range(self.labelTableWidget.rowCount, -1, -1):
+    # 
+    for i in range(self.labelTableWidget.rowCount, -1, -1): # QUESTION: why -1
       self.labelTableWidget.removeRow(i)
     if self.selectLabelTypeCombobox.currentNode() != None:
       self.logic.setLabelNode(self.selectLabelTypeCombobox.currentNode())
@@ -354,6 +376,12 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
             maxLabels[i].setValue(maxValues[i])
 
   def onAddRowClicked(self,minValue=None,label=None):
+    """
+    add a slider row to the labelling interface
+    :param minValue: minimum numerical value for slider
+    :param label: the label with which to create the row
+    :return:
+    """
     numRows = self.labelTableWidget.rowCount
     self.labelTableWidget.insertRow(numRows)
     labelNameLineEdit = qt.QLineEdit()
@@ -409,6 +437,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       widget.blockSignals(True)
 
   def onSliderReleased(self):
+    # 
     maxLabels = [x for x in self.labelTableWidget.findChildren('QDoubleSpinBox')]
     for widget in maxLabels:
       widget.blockSignals(False)
@@ -428,6 +457,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       widget.blockSignals(False)
 
   def onSliderPositionChanged(self):
+    """
+    change min or max val of label whose slider changed
+    :return:
+    """
     rangeSliders = self.labelTableWidget.findChildren('ctkRangeSlider')
     minLabels = [x for x in self.labelTableWidget.findChildren('QLabel') if "minLabel" in x.name]
     maxLabels = [x for x in self.labelTableWidget.findChildren('QDoubleSpinBox')]
@@ -442,6 +475,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
 
   def onRemoveRowClicked(self):
+    """
+    deletes a row from the interface
+    :return:
+    """
     numRows = self.labelTableWidget.rowCount
     rowsToRemove = []
     for i in range(numRows):
@@ -465,9 +502,18 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
 
   def onLabelSequenceClicked(self):
+    """
+    labels sequence
+    :return:
+    """
     self.logic.labelSequence(self.labelTableWidget)
 
   def setupReviewLayout(self,layout):
+    """
+    sets up the interface to review labels
+    :param layout: the GUI layout
+    :return:
+    """
     self.reviewNodeSelector = slicer.qMRMLNodeComboBox()
     self.reviewNodeSelector.selectNodeUponCreation = True
     self.reviewNodeSelector.nodeTypes = (
@@ -514,6 +560,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.reviewImageNode = self.reviewNodeSelector.currentNode()
 
   def onReviewDatasetSelected(self):
+
     self.reviewDataset = self.reviewDatasetSelector.directory
     self.reviewVideoIDComboBox.currentIndex = 0
     self.reviewImageSubtypeBox.currentIndex = 0
@@ -597,6 +644,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         self.selectRecordingNodeComboBox.removeItem(i)
 
   def classificationLayout(self):
+    """
+    sets up the module interface for classification
+    :return:
+    """
     classificationFormLayout = qt.QFormLayout(self.classificationFrame)
     self.classificationLabellingMethodComboBox = qt.QComboBox()
     self.classificationLabellingMethodComboBox.addItems(["Unlabelled", "Single Label"])
@@ -638,6 +689,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.classificationSequenceSelector.connect('currentNodeChanged(vtkMRMLNode*)',self.onClassificationLabelNodeSelected)
 
   def detectionLayout(self):
+    """
+    sets up the module interface for detection (not yet supported)
+    :return:
+    """
     self.detectionFrame = qt.QFrame()
     detectionFormLayout = qt.QFormLayout(self.detectionFrame)
     self.detectionLabel = qt.QLabel()
@@ -645,6 +700,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     detectionFormLayout.addWidget(self.detectionLabel)
 
   def segmentationLayout(self):
+    """
+    sets up the module interface for segmentation
+    :return:
+    """
     self.segmentationFrame = qt.QFrame()
     segmentationFormLayout = qt.QFormLayout(self.segmentationFrame)
     self.segmentationLabellingMethodComboBox = qt.QComboBox()
@@ -670,6 +729,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
 
   def createWebcamPlusConnector(self):
+    """
+    creates the webcam connection with slicer through Plus server
+    :return: webcam connector node
+    """
     try:
       webcamConnectorNode = slicer.util.getNode('WebcamPlusConnector')
     except slicer.util.MRMLNodeNotFoundException:
@@ -683,7 +746,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     return webcamConnectorNode
 
   def setupWebcamResliceDriver(self):
-    # Setup the volume reslice driver for the webcam.
+    """
+    Setup the volume reslice driver for the webcam.
+    :return:
+    """
     self.webcamReference = slicer.util.getNode('Live_Webcam_Reference')
 
     layoutManager = slicer.app.layoutManager()
@@ -705,6 +771,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     pass
 
   def openCreateNewDatasetWindow(self):
+    """
+    opens a window to create a new dataset
+    :return:
+    """
     self.createNewDatasetWidget = qt.QDialog()
     self.createNewDatasetWidget.setModal(True)
     self.createNewDatasetFrame = qt.QFrame(self.createNewDatasetWidget)
@@ -746,6 +816,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.createNewDatasetFrame.setLayout(self.createNewDatasetLayout)
 
   def openCreateNewVideoIDWindow(self):
+    """
+    creates new popup window through which user can specify a new video ID
+    :return:
+    """
     self.createNewVideoIDWidget = qt.QDialog()
     self.createNewVideoIDWidget.setModal(True)
     self.createNewVideoIDFrame = qt.QFrame(self.createNewVideoIDWidget)
@@ -787,6 +861,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.createNewVideoIDFrame.setLayout(self.createNewVideoIDLayout)
 
   def openCreateNewImageSubtypeWindow(self):
+    """
+    opens popup window through which user can specify a new image subtype
+    :return:
+    """
     self.createNewImageSubtypeWidget = qt.QDialog()
     self.createNewImageSubtypeWidget.setModal(True)
     self.createNewImageSubtypeFrame = qt.QFrame(self.createNewImageSubtypeWidget)
@@ -828,6 +906,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.createNewImageSubtypeFrame.setLayout(self.createNewImageSubtypeLayout)
 
   def onRecordingNodeSelected(self):
+    """
+    sets recording node based on user choice from combo box
+    :return:
+    """
     if self.selectRecordingNodeComboBox.currentText != "Select Image Node":
       self.recordingNode = self.selectRecordingNodeComboBox.currentText
 
@@ -841,6 +923,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
 
   def addVideoIDsToComboBox(self):
+    """
+    when a new video ID is created, add it to the combo box
+    :return:
+    """
     for i in range(2,self.videoIDComboBox.count + 1):
       self.videoIDComboBox.removeItem(i)
     videoIDList = os.listdir(self.videoPath)
@@ -848,6 +934,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.videoIDComboBox.addItems(self.videoIDList)
 
   def addImageSubtypesToComboBox(self):
+    """
+    when a new image subtype is created, add it to the combo box
+    :return:
+    """
     for i in range(2,self.imageSubtypeComboBox.count + 1):
       self.imageSubtypeComboBox.removeItem(i)
     if self.videoIDComboBox.currentText != "Select video ID":
@@ -873,6 +963,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
 
   def onNewVideoIDAdded(self):
+    """
+    prompts user to add a new video ID throught the popup window
+    :return:
+    """
     self.currentVideoID = self.videoIDLineEdit.text
     try:
       videoIDPath = os.path.join(self.datasetSelector.directory,self.currentVideoID)
@@ -888,6 +982,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.videoIDErrorLabel.setText("A video with ID " + self.currentVideoID + " already exists")
 
   def onNewImageSubtypeAdded(self):
+    """
+    prompts user to add a new image subtype throught the popup window
+    :return:
+    """
     self.currentImageSubtypeName = self.ImageSubtypeNameLineEdit.text
     try:
       imageSubtypePath = os.path.join(self.datasetSelector.directory,self.currentVideoID,self.currentImageSubtypeName)
@@ -903,6 +1001,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.errorLabel.setText("An image subtype with the name " + self.currentImageSubtypeName + " already exists")
 
   def onImageSubtypeSelected(self):
+    """
+    when image subtype is selected, create/open the window for user to input the subtype and make the csv file's path match the subtype
+    :return:
+    """
     self.currentImageSubtypeName = self.imageSubtypeComboBox.currentText
     if self.currentImageSubtypeName == "Create new image subtype":
       try:
@@ -917,6 +1019,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.logic.setImageSubtype("")
 
   def onVideoIDSelected(self):
+    """
+    when image subtype is selected, create/open the window for user to input the ID and make the csv file's path match the ID
+    :return:
+    """
     if self.videoIDComboBox.currentText == "Create new video ID":
       try:
         self.createNewVideoIDWidget.show()
@@ -932,6 +1038,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
 
   def onProblemTypeSelected(self):
+    """
+    setup combo boxes to match choices that correspond to the selected problem type
+    :return:
+    """
     self.problemType = self.problemTypeComboBox.currentText
     if self.problemType == "Classification":
       if self.collectFromSequenceCheckBox.checked:
@@ -958,6 +1068,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.segmentationFrame.visible = True
 
   def onAutoLabelFileChanged(self):
+    """
+    update the path to auto label file
+    :return:
+    """
     self.autoLabelPath = os.path.join(self.autoLabelFilePathSelector.currentPath)
     self.logic.setAutolabelPath(self.autoLabelPath)
 
@@ -966,6 +1080,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
 
   def onStartStopCollectingImagesButton(self):
+    """
+    stops/starts collecting images and updates the button text accordingly
+    :return:
+    """
     self.logic.setRecordingNode(self.recordingNode)
     self.logic.setDatasetNameAndPath(self.videoPath,self.currentDatasetName)
     self.logic.setVideoIDAndPath(self.currentVideoID, self.currentVideoIDFilePath)
@@ -994,6 +1112,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.logic.startImageCollection (self.collectingImages, self.imageLabels,self.csvFilePath)
 
   def onLabellingMethodSelected(self):
+    """
+    updates the interface choices based on which labeling method and problem type
+    :return:
+    """
     if self.problemType == "Classification":
       self.labellingMethod = self.classificationLabellingMethodComboBox.currentText
       if self.labellingMethod == "Single Label":
@@ -1027,6 +1149,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.logic.setLabellingMethod(self.labellingMethod)
 
   def onFileTypeSelected(self):
+    """
+    sets file type for output images i.e jpg, png
+    :return:
+    """
     self.fileType = self.fileTypeComboBox.currentText
     self.logic.setFileType(self.fileType)
 
@@ -1036,6 +1162,10 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.logic.setInputSegmentationNode(self.inputSegmentation)
 
   def onCollectFromSequenceChecked(self):
+    """
+    collects training images from sequence
+    :return:
+    """
     if self.collectFromSequenceCheckBox.checked:
       if self.problemTypeComboBox.currentText == "Classification":
         self.classificationLabellingMethodComboBox.addItems(["Auto from file","From Sequence"])
@@ -1069,6 +1199,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.labelSequenceNode = None
 
   def labelSequence(self,labelTable):
+    """
+    creates a new label data node with the set labels
+    :param labelTable: the table used for labelling the sequence
+    :return:
+    """
     self.labelTable = labelTable
     self.labels = self.getLabels(self.labelTable)
     self.sequenceNode = self.sequenceBrowserNode.GetSequenceNode(self.imageNode)
@@ -1098,6 +1233,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     #self.sequenceBrowserNode.AddSynchronizedSequenceNodeID(self.labelSequenceNode.GetID())
 
   def getLabels(self,labelTable):
+    """
+    retrives the labels from the slider rows
+    :param labelTable: labels from GUI
+    :return: labels for the sequence in a pandas dataframe
+    """
     labels = pandas.DataFrame(columns=[self.labelNode.GetName(),"Start","End"])
     lineEdits = [x for x in labelTable.findChildren("QLineEdit") if "labelEdit" in x.name]
     minLabels = [x for x in labelTable.findChildren('QLabel') if "minLabel" in x.name]
@@ -1115,15 +1255,37 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
 
   def setSequenceBrowserNode(self,sequenceBrowser):
+    """
+    sets sequence browser node
+    :param sequenceBrowser:
+    :return:
+    """
     self.sequenceBrowserNode = sequenceBrowser
 
   def setImageNode(self,imageNodeName):
+    """
+    sets image node
+    :param imageNodeName: name of the image node
+    :return:
+    """
     self.imageNode = slicer.util.getNode(imageNodeName)
 
   def setLabelNode(self,labelNode):
+    """
+    set label node
+    :param labelNode:
+    :return:
+    """
     self.labelNode = labelNode
 
   def startImageCollection(self, imageCollectionStarted, imageLabels, labelFilePath):
+    """
+     begins to separate sequence into individual frames
+    :param imageCollectionStarted: bool, denotes if the image collection has started
+    :param imageLabels: the labels in a pandas dataframe
+    :param labelFilePath: the directory of the label file
+    :return:
+    """
     self.collectingImages = imageCollectionStarted
     self.continueRecording = not(self.collectingImages)
     self.imageLabels = imageLabels
@@ -1177,6 +1339,12 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           playWidgetButtons[2].click()'''
 
   def onStartCollectingImages(self,caller,eventID):
+    """
+
+    :param caller:
+    :param eventID:
+    :return:
+    """
     if self.fromSequence:
       seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
       seekWidget = seekWidget[0]
@@ -1253,6 +1421,10 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       self.finishedVideo = True
 
   def exportImagesFromSequence(self):
+    """
+    export the sequence frames as individual frames
+    :return:
+    """
     sequenceName = self.recordingVolumeNode.GetName().split(sep="_")
     sequenceNode = slicer.util.getFirstNodeByName(sequenceName[0])
     if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
@@ -1302,6 +1474,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.imageLabels.to_csv(self.labelFilePath)
 
   def getLabelsFromSequence(self,labelSequenceNode=None):
+    """
+    retrieves label data from a sequence node
+    :param labelSequenceNode: QUESTION: why default to None?
+    :return: retrieved labels
+    """
     if labelSequenceNode != None:
       self.labelSequenceNode = labelSequenceNode
       self.labelType = labelSequenceNode.GetName().replace("-Sequence","")
@@ -1323,6 +1500,12 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     return labels
 
   def labelExistingEntries(self,imageLabels,autolabels):
+    """
+    labels a frame that already has a label
+    :param imageLabels: the existing image labels in pandas dataframe
+    :param autolabels: the autolabels in a pandas dataframe
+    :return: the updates image labels
+    """
     imageLabels[self.labelType] = ['None' for i in range(len(imageLabels.index))]
     for i in range(0,len(autolabels.index)):
       entriesToLabel = imageLabels.loc[(imageLabels["Time Recorded"] >= autolabels["Start"][i]) & (imageLabels["Time Recorded"] < autolabels["End"][i])]
@@ -1331,6 +1514,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     return imageLabels
 
   def setImageSubtype(self,subtypeName):
+    """
+    sets the image subtype
+    :param subtypeName: name of image subtype i.e RGB, depth, etc.
+    :return:
+    """
     self.imageSubtype = subtypeName
     self.finishedVideo = False
 
@@ -1338,6 +1526,10 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.labelSequenceNode = sequenceNode
 
   def getClassificationLabelFromFile(self):
+    """
+    retrieves the labels from label file
+    :return: label names in dataframe
+    """
     seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
     seekWidget = seekWidget[0]
     timeStamp = seekWidget.findChildren("QLabel")
@@ -1347,6 +1539,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     return labelName
 
   def getSegmentationLabel(self,fileName):
+    """
+    retrieves the segmentation labels
+    :param fileName: the name of the label file that will be outputted
+    :return: the filename with _segmentation appended, label map node array
+    """
     segmentationNode = slicer.util.getNode(self.segmentationNodeName)
     labelMapNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
     imageNode = slicer.util.getNode(self.recordingVolumeNode.GetName())
@@ -1369,6 +1566,12 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     return (output_array,labelFileName)
 
   def generateMergedLabelmapInReferenceGeometry(self,segmentationNode, referenceVolumeNode):
+    """
+
+    :param segmentationNode:
+    :param referenceVolumeNode:
+    :return:
+    """
     if segmentationNode is None:
       logging.error("Invalid segmentation node")
       return None
@@ -1418,6 +1621,12 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     return mergedLabelmap_Reference
 
   def getVtkImageDataAsOpenCVMat(self, volumeNodeName,NodeGiven=False):
+    """
+    converts vtk image data to an openCV matrix
+    :param volumeNodeName: name volume node to be converted
+    :param NodeGiven: bool, volumeNodeName defaults to current volume node if set to False
+    :return: openCV matrix
+    """
     import cv2
     if not NodeGiven:
       cameraVolume = slicer.util.getNode(volumeNodeName)
@@ -1436,6 +1645,12 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     return imageMat
 
   def setDatasetNameAndPath(self,videoPath,datasetName):
+    """
+    sets name and path of dataset
+    :param videoPath: path to the video
+    :param datasetName: name of the dataset
+    :return: path and dataset name
+    """
     if datasetName != self.dataSetName:
       self.finishedVideo = False
     self.videoPath = videoPath
@@ -1443,11 +1658,21 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
 
   def setRecordingNode(self,recordingNodeName):
+    """
+    sets the recording node
+    :param recordingNodeName: the name of the node that will be set to the recording node
+    :return:
+    """
     if self.recordingVolumeNode!= None and recordingNodeName != self.recordingVolumeNode.GetName():
       self.finishedVideo = False
     self.recordingVolumeNode = slicer.util.getNode(recordingNodeName)
 
   def setFileType(self,fileType):
+    """
+    sets image extension for output files
+    :param fileType: jpg, png, etc.
+    :return:
+    """
     if fileType != self.fileType:
       self.finishedVideo = False
     self.fileType = fileType
@@ -1483,6 +1708,13 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.segmentationNodeName = segmentationNodeName
 
   def StartReview(self,labelCSV,labelType,reviewImageNode):
+    """
+    puts the time and label in the bottom corner of the image node so sequence labels can be reviewed.
+    :param labelCSV: the CSV with the labels
+    :param labelType: the problem type, i.e segmentation, object detection, etc
+    :param reviewImageNode:
+    :return:
+    """
     self.labelCSV = labelCSV
     self.labelCSV = self.labelCSV.astype({'Time Recorded': 'float64'})
     self.labelType = labelType
@@ -1504,10 +1736,20 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       self.reviewImageNodeObserver = self.reviewImageNode.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onStartReview)
 
   def StopReview(self):
+    """
+    once reviewing is over, remove the observer
+    :return:
+    """
     self.reviewImageNode.RemoveObserver(self.reviewImageNodeObserver)
     self.reviewImageNodeObserver = None
 
   def onStartReview(self,caller,eventid):
+    """
+    begins the review of the labels
+    :param caller:
+    :param eventid:
+    :return:
+    """
     recordingTime = float(self.timeLabel.text)
     if time.time() - self.lastDisplayedTime > 0.1:
       labelIndex = self.labelCSV.iloc[(self.labelCSV["Time Recorded"]-recordingTime).abs().argsort()[:1]]
@@ -1520,6 +1762,11 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
 
   def getSliceView(self,reviewImageNodeID):
+    """
+    changes layout of the scene to slice view
+    :param reviewImageNodeID: the image node that is being reviewed
+    :return: slice view
+    """
     layoutManager = slicer.app.layoutManager()
     sliceNodes = ["Red","Green","Yellow"]
     activeSliceWidget = None
