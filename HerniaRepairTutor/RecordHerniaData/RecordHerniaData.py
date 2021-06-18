@@ -117,11 +117,13 @@ class RecordHerniaDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       print(cmd)
       startupEnv = slicer.util.startupEnvironment()
       p = subprocess.Popen(cmd, env=startupEnv)
+      self.ui.startCamerasButton.text = "Stop Cameras"
       self.camerasStarted = True
     else:
       cmd = str(self.moduleDir + "\Scripts\StopPlus.bat")
       startupEnv = slicer.util.startupEnvironment()
       p = subprocess.Popen(cmd, env=startupEnv)
+      self.ui.startCamerasButton.text="Start Cameras"
       self.camerasStarted = False
 
 
@@ -194,7 +196,7 @@ class RecordHerniaDataLogic(ScriptedLoadableModuleLogic):
     self.secondDepthConnectorNode.Start()
 
   def setupScene(self):
-    self.saveScenesDirectory = os.path.join(os.path.dirname(slicer.modules.recordherniadata.path), "SavedScenes")
+    self.saveScenesDirectory = os.path.join(os.path.dirname(slicer.modules.recordherniadata.path), "Resources\SavedScenes")
     self.setupOpenIGTLinkConnectors(18944,18945,18946,18947)
 
     try:
