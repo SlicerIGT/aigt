@@ -1,1 +1,1 @@
-START /MIN C:\Users\perklab\PlusApp-2.9.0.20201217-Win32\bin\PlusServerLauncher.exe --connect --device-set-configuration-dir=c:\Users\perklab\Documents\HerniaRepairTutor\RecordHerniaData\Config  --config-file=PlusDeviceSet_Server_IntelRealSenseVideo.xml
+START /MIN C:\Users\hisey\PlusApp-2.9.0.20201217-Win32\bin\PlusServerLauncher.exe --connect --device-set-configuration-dir=d:\HerniaRepairTutor\RecordHerniaData\Config  --config-file=PlusDeviceSet_Server_IntelRealSenseVideo.xml
