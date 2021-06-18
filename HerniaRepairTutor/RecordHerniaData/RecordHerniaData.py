@@ -209,7 +209,6 @@ class RecordHerniaDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.logic.StopRecording()
         self.recordingStarted = False
         self.ui.StartStopRecordingButton.setText("Start Recording")
-        self.logic.setupScene()
 
     except ValueError:
       logging.info("Ports must have numeric values")
@@ -347,7 +346,7 @@ class RecordHerniaDataLogic(ScriptedLoadableModuleLogic):
       resliceLogic.SetModeForSlice(6, sliceNode)
       resliceLogic.SetFlipForSlice(False, sliceNode)
       # resliceLogic.SetRotationForSlice(180, yellowNode)
-      sliceLogic.FitSliceToAll()
+      #sliceLogic.FitSliceToAll()
 
   def StartRecording(self,fileName):
     self.fileName = fileName + "-" + time.strftime("%Y%m%d-%H%M%S")
@@ -358,7 +357,7 @@ class RecordHerniaDataLogic(ScriptedLoadableModuleLogic):
   def StopRecording(self):
     self.stopSequenceBrowserRecording(self.herniaSequenceBrowserNode)
     self.saveRecording()
-    self.removeRecordingFromScene()
+    #self.removeRecordingFromScene()
 
   def startSequenceBrowserRecording(self, browserNode):
     if (browserNode is None):
@@ -389,6 +388,57 @@ class RecordHerniaDataLogic(ScriptedLoadableModuleLogic):
 
     #self.StartRecordingSeekWidget.setMRMLSequenceBrowserNode(browserNode)
 
+  def updateAllBrowserNodes(self):
+    # Two things to take care of:
+    # Set the sequences' virtual output nodes to be correct
+    # Restore the appropriate active volume node
+    sequenceSyncDict = {
+      "ImageRGB": self.rgbCamera2, # If the sequence name contains the key, make the virtual node same the value node
+      "Image1RGB": self.rgbCamera2,
+      "ImageDEPTH": self.depthCamera1,
+      "Image1DEPTH":self.depthCamera2
+    }
+
+    browserCollection = slicer.mrmlScene.GetNodesByClass( "vtkMRMLSequenceBrowserNode" )
+    for browserIndex in range( browserCollection.GetNumberOfItems() ):
+      browserNode = browserCollection.GetItemAsObject( browserIndex )
+      if ( browserNode.GetAttribute( "Recorded" ) is not None ):
+        continue
+
+      browserNode.SetOverwriteTargetNodeName(False)
+      browserNode.SetDeepCopyVirtualNodes(True)
+
+      sequenceCollection = vtk.vtkCollection()
+      browserNode.GetSynchronizedSequenceNodes( sequenceCollection, True )
+      for sequenceIndex in range( sequenceCollection.GetNumberOfItems() ):
+        sequenceNode = sequenceCollection.GetItemAsObject( sequenceIndex )
+        virtualNode = browserNode.GetVirtualOutputDataNode( sequenceNode )
+        if ( virtualNode == None ):
+          continue
+
+        # Check if the virtual node is already one of the acceptable output nodes
+        virtualNodeAcceptable = False
+        for key, value in sequenceSyncDict.iteritems():
+          if ( virtualNode.GetID() == value.GetID() ):
+            virtualNodeAcceptable = True
+        if ( virtualNodeAcceptable ):
+          continue
+
+        # Otherwise, replace it with an acceptable virtual node
+        for key, value in sequenceSyncDict.iteritems():
+          if ( key in virtualNode.GetName() ):
+            browserNode.RemoveSynchronizedSequenceNode( sequenceNode.GetID() ) # Need to fully remove the virtual node from the scene
+
+            originalProxyNodeName = value.GetName()
+
+            sequenceBrowserLogic = slicer.modules.sequencebrowser.logic()
+            sequenceBrowserLogic.AddSynchronizedNode( sequenceNode, value, browserNode ) #Re-add the sequence with the correct virtual node
+            browserNode.SetOverwriteProxyName( sequenceNode, False ) # Must set this after re-adding the sequence node (the setting is dropped when the sequence node is removed)
+
+            value.SetName( originalProxyNodeName )
+
+            slicer.mrmlScene.RemoveNode( virtualNode )
+
   def stopSequenceBrowserRecording(self, browserNode):
     if (browserNode is None):
       return
@@ -398,13 +448,22 @@ class RecordHerniaDataLogic(ScriptedLoadableModuleLogic):
 
   def saveRecording(self):
     savedScenesDirectory = self.parameterNode.GetParameter('SavedScenesDirectory')
+   
 
     recordingCollection = slicer.mrmlScene.GetNodesByClass( "vtkMRMLSequenceBrowserNode" )
     for nodeNumber in range( recordingCollection.GetNumberOfItems() ):
       browserNode = recordingCollection.GetItemAsObject( nodeNumber )
+      dataNodeNames = ["Image1RGB_Image1RGB","ImageRGB_ImageRGB","Image1DEPTH_Image1DE","ImageDEPTH_ImageDEPT"]
+      for dataNode in dataNodeNames:
+        proxyNode = slicer.util.getNode(dataNode)
+        sequenceNode = browserNode.GetSequenceNode(proxyNode)
+        if not sequenceNode.GetStorageNode() or not sequenceNode.GetStorageNode().IsA("vtkMRMLStreamingVolumeSequenceStorageNode"):
+          sequenceStorageNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLStreamingVolumeSequenceStorageNode")
+          sequenceNode.SetAndObserveStorageNodeID(sequenceStorageNode.GetID())
       filename = self.fileName + os.extsep + "sqbr"
       filename = os.path.join( savedScenesDirectory, filename )
       slicer.util.saveNode(browserNode, filename)
+      
 
   def removeRecordingFromScene(self):
     slicer.mrmlScene.Clear()

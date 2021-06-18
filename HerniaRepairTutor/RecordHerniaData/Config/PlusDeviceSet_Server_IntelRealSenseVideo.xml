@@ -15,7 +15,7 @@
         <DataSource
           Type="Video"
           Id="VideoRGB"
-          DeviceSerialNumber="025522060972"
+          DeviceSerialNumber="024122061054"
           FrameType="RGB"
           FrameSize="640 480"
           FrameRate="15"
@@ -25,19 +25,19 @@
         <DataSource
           Type="Video"
           Id="VideoDEPTH"
-          DeviceSerialNumber="025522060972"
+          DeviceSerialNumber="024122061054"
           FrameType="DEPTH"
           FrameSize="640 480"
           FrameRate="15"
           AlignDepthStream="TRUE"
-          UseRealSenseColorizer="TRUE"
+          UseRealSenseColorizer="FALSE"
           PortUsImageOrientation="UN"
         />
 
         <DataSource
           Type="Video"
           Id="Video1RGB"
-          DeviceSerialNumber="025522060168"
+          DeviceSerialNumber="045522061140"
           FrameType="RGB"
           FrameSize="640 480"
           FrameRate="15"
@@ -47,12 +47,12 @@
         <DataSource
           Type="Video"
           Id="Video1DEPTH"
-          DeviceSerialNumber="025522060168"
+          DeviceSerialNumber="045522061140"
           FrameType="DEPTH"
           FrameSize="640 480"
           FrameRate="15"
           AlignDepthStream="TRUE"
-          UseRealSenseColorizer="TRUE"
+          UseRealSenseColorizer="FALSE"
           PortUsImageOrientation="UN"
         />  
       </DataSources>
@@ -65,7 +65,7 @@
     </Device>
   </DataCollection>
   
-  <PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18945" SendValidTransformsOnly="true" OutputChannelId="VideoStreamRGB">
+  <PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18944" SendValidTransformsOnly="true" OutputChannelId="VideoStreamRGB">
         <DefaultClientInfo>
             <MessageTypes>
                 <Message Type="VIDEO" />
@@ -83,7 +83,7 @@
         </DefaultClientInfo>
     </PlusOpenIGTLinkServer>
 	
-	<PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18948" SendValidTransformsOnly="true" OutputChannelId="VideoStreamDEPTH">
+	<PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18945" SendValidTransformsOnly="true" OutputChannelId="VideoStreamDEPTH">
         <DefaultClientInfo>
             <MessageTypes>
                 <Message Type="VIDEO" />
@@ -101,7 +101,7 @@
         </DefaultClientInfo>
     </PlusOpenIGTLinkServer> 
 	
-	<PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18949" SendValidTransformsOnly="true" OutputChannelId="VideoStream1RGB">
+	<PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18946" SendValidTransformsOnly="true" OutputChannelId="VideoStream1RGB">
         <DefaultClientInfo>
             <MessageTypes>
                 <Message Type="VIDEO" />
@@ -119,7 +119,7 @@
         </DefaultClientInfo>
     </PlusOpenIGTLinkServer>
 	
-	<PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18950" SendValidTransformsOnly="true" OutputChannelId="VideoStream1DEPTH">
+	<PlusOpenIGTLinkServer MaxNumberOfIgtlMessagesToSend="1" MaxTimeSpentWithProcessingMs="50" ListeningPort="18947" SendValidTransformsOnly="true" OutputChannelId="VideoStream1DEPTH">
         <DefaultClientInfo>
             <MessageTypes>
                 <Message Type="VIDEO" />
