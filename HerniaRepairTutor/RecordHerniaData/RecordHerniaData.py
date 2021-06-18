@@ -104,7 +104,6 @@ class RecordHerniaDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.recordingStarted = True
       else:
         self.logic.StopRecording()
-        self.logic.StopRecording()
         self.recordingStarted = False
         self.ui.StartStopRecordingButton.setText("Start Recording")
 
@@ -344,7 +343,6 @@ class RecordHerniaDataLogic(ScriptedLoadableModuleLogic):
       return
     browserNode.SetRecordingActive(False)
     browserNode.SetRecording( None, False )
-    self.saveRecording()
 
   def saveRecording(self):
     savedScenesDirectory = self.saveScenesDirectory
