@@ -55,8 +55,10 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.inputModifiedObserver = None
     self.inputImageNode = None
     self.outputImageNode = None
-    self.slicer_to_model_scaling = 1.0
-    self.model_to_slicer_scaling = 1.0
+    self.slicer_to_model_scaling_x = 1.0
+    self.slicer_to_model_scaling_y = 1.0
+    self.model_to_slicer_scaling_x = 1.0
+    self.model_to_slicer_scaling_y = 1.0
 
     self.apply_logarithmic_transformation = True
     self.logarithmic_transformation_decimals = 4
@@ -97,6 +99,7 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onModelSelected(self, modelFullname):
     try:
       self.unet_model = tf.keras.models.load_model(modelFullname, compile=False)
+      self.unet_model.call = tf.function(self.unet_model.call)
       logging.info("Model loaded from file: {}".format(modelFullname))
     except Exception as e:
       logging.error("Could not load model from file: {}".format(modelFullname))
@@ -198,41 +201,56 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     try:
       input_array = slicer.util.array(self.inputImageNode.GetID())
-      self.slicer_to_model_scaling = self.unet_model.layers[0].input_shape[0][1] / input_array.shape[1]
-      self.model_to_slicer_scaling = input_array.shape[1] / self.unet_model.layers[0].input_shape[0][1]
+      self.slicer_to_model_scaling_x = self.unet_model.layers[0].input_shape[0][1] / input_array.shape[1]
+      self.slicer_to_model_scaling_y = self.unet_model.layers[0].input_shape[0][2] / input_array.shape[2]
+      self.model_to_slicer_scaling_x = input_array.shape[1] / self.unet_model.layers[0].input_shape[0][1]
+      self.model_to_slicer_scaling_y = input_array.shape[2] / self.unet_model.layers[0].input_shape[0][2]
       if toggled == True:
         logging.info("Staring live segmentation")
         self.inputModifiedObserver = self.inputImageNode.AddObserver(
           slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onInputNodeModified)
+
       else:
         logging.info("Stopping live segmentation")
         if self.inputModifiedObserver is not None:
           self.inputImageNode.RemoveObserver(self.inputModifiedObserver)
           self.inputModifiedObserver = None
+
     except Exception as e:
       slicer.util.errorDisplay("Failed to start live segmentation: "+str(e))
       import traceback
       traceback.print_exc()
 
+
   def onInputNodeModified(self, caller, event):
+    """
+    Callback function for input image modified event.
+    :returns: None
+    """
+
     input_array = slicer.util.array(self.inputImageNode.GetID())
 
     resized_input_array = scipy.ndimage.zoom(input_array[0, :, :],
-                                             self.slicer_to_model_scaling, prefilter=False, order=1)
-    resized_input_array = np.flip(resized_input_array, axis=0)
-    resized_input_array = resized_input_array / resized_input_array.max()  # Scaling intensity to 0-1
+                                             (self.slicer_to_model_scaling_x, self.slicer_to_model_scaling_y),
+                                             prefilter=False, order=1)
+    resized_input_array = np.flip(resized_input_array, axis=1)
+    # resized_input_array = resized_input_array / resized_input_array.max()  # Scaling intensity to 0-1
+    resized_input_array = resized_input_array / 256.0
     resized_input_array = np.expand_dims(resized_input_array, axis=0)
     resized_input_array = np.expand_dims(resized_input_array, axis=3)
+
     y = self.unet_model.predict(resized_input_array)
+    y = y[:, :, :, 1]
     if self.apply_logarithmic_transformation:
       e = self.logarithmic_transformation_decimals
       y = np.log10(np.clip(y, 10 ** (-e), 1.0) * (10 ** e)) / e
-    y[0, :, :, :] = np.flip(y[0, :, :, :], axis=0)
+    y = np.flip(y, axis=2)
+    y = y * 255
 
-    upscaled_output_array = scipy.ndimage.zoom(y[0, :, :, 1], self.model_to_slicer_scaling,
+    upscaled_output_array = scipy.ndimage.zoom(y[0, :, :],
+                                               (self.model_to_slicer_scaling_x, self.model_to_slicer_scaling_y),
                                                prefilter=False, order=1)
-    upscaled_output_array = upscaled_output_array * 255
-    upscaled_output_array = np.clip(upscaled_output_array, 0, 255)
+    upscaled_output_array = np.clip(upscaled_output_array, 0, 255).astype(np.uint8)
 
     slicer.util.updateVolumeFromArray(self.outputImageNode, upscaled_output_array.astype(np.uint8)[np.newaxis, ...])
 
@@ -240,7 +258,7 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 # SegmentationUNetLogic
 #
 
-class SegmentationUNetLogic(ScriptedLoadableModuleLogic):
+class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   """This class should implement all the actual
   computation done by your module.  The interface
   should be such that other python code can import
@@ -308,3 +326,5 @@ class SegmentationUNetTest(ScriptedLoadableModuleTest):
     self.assertEqual(inputScalarRange[1], 279)
 
     self.delayDisplay('Test passed')
+
+
