@@ -12,9 +12,8 @@ set EnvironmentPath=%1
 
 call conda create -y -p %EnvironmentPath%
 call activate %EnvironmentPath%
-call conda install -y tensorflow-gpu=2.5
-call conda install -y pandas jupyter scikit-learn scikit-image matplotlib
-call pip install girder-client pyigtl imutils opencv-python
+call conda install -y tensorflow-gpu pandas scikit-learn scikit-image matplotlib jupyter opencv
+call pip install girder-client pyigtl imutils
 
 :: Exiting install script
 
