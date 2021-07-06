@@ -8,14 +8,13 @@ set EnvironmentPath=%1
 
 :: Create the environment with modules and activate it
 :: This environment does not require previous CUDA and CuDNN installations
-:: You may optionally upgrade TensorFlow with this command
-:: call pip install tensorflow-gpu==2.3.1
+:: Preferably, keep TensorFlow version in synch with 3D Slicer's Python environment
 
 call conda create -y -p %EnvironmentPath%
 call activate %EnvironmentPath%
-call conda install -y tensorflow-gpu=2.1
-call conda install -y pandas opencv jupyter scikit-learn scikit-image matplotlib
-call pip install girder-client pyigtl
+call conda install -y tensorflow-gpu=2.5
+call conda install -y pandas jupyter scikit-learn scikit-image matplotlib
+call pip install girder-client pyigtl imutils opencv-python
 
 :: Exiting install script
 
