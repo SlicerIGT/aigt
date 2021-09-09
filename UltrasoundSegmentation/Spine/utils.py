@@ -44,7 +44,7 @@ def create_standard_project_folders(local_data_folder):
     return data_arrays_fullpath, notebooks_save_fullpath, results_save_fullpath, models_save_fullpath, val_data_fullpath
 
 
-def load_girder_data(csv_fullname, data_arrays_fullpath, girder_url, girder_key=None, overwrite_existing_files=False):
+def load_girder_data(csv_fullname, data_arrays_fullpath, girder_url, girder_key=None, overwrite_existing_files=False, get_transforms=False):
     """
     Download numpy array files from a Girder server to a local folder. Then load them from the local folder to the
     memory as numpy arrays and return them. Optionally, files can be overwritten.
@@ -77,10 +77,13 @@ def load_girder_data(csv_fullname, data_arrays_fullpath, girder_url, girder_key=
             print("Downloading {}...".format(segmentation_fullname))
             gclient.downloadFile(csv_df.iloc[i]['segmentation_id'], segmentation_fullname)
 
+        # TODO: Add transforms to server, and add IDs downloading here `if (get_transforms)`
+
     # Load arrays from local files
 
     ultrasound_arrays = []
     segmentation_arrays = []
+    transform_arrays = []
 
     for i in range(n_arrays):
         ultrasound_fullname = os.path.join(data_arrays_fullpath, csv_df.iloc[i]['ultrasound_filename'])
@@ -92,15 +95,23 @@ def load_girder_data(csv_fullname, data_arrays_fullpath, girder_url, girder_key=
         ultrasound_arrays.append(ultrasound_data)
         segmentation_arrays.append(segmentation_data)
 
+        if get_transforms:
+            transform_fullname = os.path.join(data_arrays_fullpath, csv_df.iloc[i]['transform_filename'])
+            transform_data = np.load(transform_fullname)
+            transform_arrays.append(transform_data)
+
     # Concatenate arrays by subjects (e.g. patients)
 
     ultrasound_arrays_by_subjects = []
     segmentation_arrays_by_subjects = []
+    transform_arrays_by_subjects = []
 
     subject_ids = groupby_subjects.groups.keys()
 
     ultrasound_pixel_type = ultrasound_arrays[0].dtype
     segmentation_pixel_type = segmentation_arrays[0].dtype
+    if get_transforms:
+        transform_type = transform_arrays[0].dtype
 
     for subject_id in subject_ids:
         subject_ultrasound_array = np.zeros([0, ultrasound_arrays[0].shape[1], ultrasound_arrays[0].shape[2], 1],
@@ -109,13 +120,24 @@ def load_girder_data(csv_fullname, data_arrays_fullpath, girder_url, girder_key=
         subject_segmentation_array = np.zeros([0, segmentation_arrays[0].shape[1], segmentation_arrays[0].shape[2], 1],
                                               dtype=segmentation_pixel_type)
 
+        if get_transforms:
+            subject_transform_array = np.zeros([0, transform_arrays[0].shape[1], transform_arrays[0].shape[2]],
+                                            dtype=transform_type)
+
         for i in range(len(groupby_subjects.groups[subject_id])):
             array_index = groupby_subjects.groups[subject_id][i]
             subject_ultrasound_array = np.concatenate([subject_ultrasound_array, ultrasound_arrays[array_index]])
             subject_segmentation_array = np.concatenate([subject_segmentation_array, segmentation_arrays[array_index]])
+            if get_transforms:
+                subject_transform_array = np.concatenate([subject_transform_array, transform_arrays[array_index]])
 
         ultrasound_arrays_by_subjects.append(subject_ultrasound_array)
         segmentation_arrays_by_subjects.append(subject_segmentation_array)
+        if get_transforms:
+            transform_arrays_by_subjects.append(subject_transform_array)
+    
+    if get_transforms:
+        return ultrasound_arrays_by_subjects, transform_arrays_by_subjects, segmentation_arrays_by_subjects
 
     return ultrasound_arrays_by_subjects, segmentation_arrays_by_subjects
 

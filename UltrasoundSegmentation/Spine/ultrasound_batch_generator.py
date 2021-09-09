@@ -99,9 +99,25 @@ def generate_weight_maps(image, label):
     
     return image, label
 
+def generate_transform(image, transform, label):
+
+    return (image, transform), label
+
 def train_preprocess_with_maps(image, label):
 
     image, label = train_preprocess(image, label)
     image, label = generate_weight_maps(image, label)
     
     return image, label
+
+def train_preprocess_with_transforms(image, transform, label):
+
+    image, label = train_preprocess(image, label)
+
+    return (image, transform), label
+
+def train_preprocess_with_transforms_with_maps(image, transform, label):
+
+    image, label = train_preprocess_with_maps(image, label)
+
+    return (image, transform), label
