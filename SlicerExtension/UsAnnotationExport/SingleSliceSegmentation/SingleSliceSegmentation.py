@@ -357,8 +357,16 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     currentLayout = layoutManager.layout
 
     # place skeleton model in first 3d view
-    skeleton_volume = slicer.util.getFirstNodeByName("SkeletonModel")
-    viewNode = layoutManager.threeDWidget(0).mrmlViewNode()
+    skeleton_volume = slicer.util.getFirstNodeByName("ArticulatedSkeletonModel")
+
+    if layoutManager.threeDWidget(1) is not None:
+      viewNode = layoutManager.threeDWidget(1).mrmlViewNode()
+    else:
+      newView = slicer.vtkMRMLViewNode()
+      newView = slicer.mrmlScene.AddNode(newView)
+      newWidget = slicer.qMRMLThreeDWidget()
+      newWidget.setMRMLScene(slicer.mrmlScene)
+      newWidget.setMRMLViewNode(newView)
 
     if skeleton_volume is not None:
       displayNode = skeleton_volume.GetDisplayNode()
@@ -382,14 +390,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     if browser is not None:
       spine_volume = slicer.util.getFirstNodeByName(browser.GetName() + 'ReconstructionResults')
-      if layoutManager.threeDWidget(1) is not None:
-        viewNode = layoutManager.threeDWidget(1).mrmlViewNode()
-      else:
-        newView = slicer.vtkMRMLViewNode()
-        newView = slicer.mrmlScene.AddNode(newView)
-        newWidget = slicer.qMRMLThreeDWidget()
-        newWidget.setMRMLScene(slicer.mrmlScene)
-        newWidget.setMRMLViewNode(newView)
+
+      viewNode = layoutManager.threeDWidget(0).mrmlViewNode()
 
       if spine_volume is not None:
         displayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(spine_volume)
