@@ -71,7 +71,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.parameterSetNode = None
     self.editor = None
     self.ui = None
-    
+
     # Shortcuts
 
     self.shortcutS = qt.QShortcut(slicer.util.mainWindow())
@@ -115,7 +115,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.layoutSelectButton.connect('clicked(bool)', self.onLayoutSelectButton)
 
     self.ui.editor.setMRMLScene(slicer.mrmlScene)
-    
+
     import qSlicerSegmentationsEditorEffectsPythonQt
     # TODO: For some reason the instance() function cannot be called as a class function although it's static
     factory = qSlicerSegmentationsEditorEffectsPythonQt.qSlicerSegmentEditorEffectFactory()
@@ -204,14 +204,14 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
 
     currentNode.SetAttribute(self.INPUT_BROWSER, "True")
-    
+
     savedSkip = currentNode.GetAttribute(self.INPUT_SKIP_NUMBER)
     if savedSkip is not None:
       slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value = int(savedSkip)
     else:
       numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
       currentNode.SetAttribute(self.INPUT_SKIP_NUMBER, str(numSkip))
-    
+
     logging.debug("onSequenceBrowserSelected: {}".format(currentNode.GetName()))
 
 
@@ -253,12 +253,12 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     if inputImageIndex is not None:
       inputBrowserNode.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
-  
+
   def onSkipImagesNumChanged(self, value):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
     if inputBrowserNode is not None:
       inputBrowserNode.SetAttribute(self.INPUT_SKIP_NUMBER, str(value))
-  
+
 
   def onCaptureButton(self):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
@@ -278,7 +278,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
 
     inputImageIndex = inputBrowserNode.GetSelectedItemNumber()
-    
+
     original_index_str = selectedSegmentation.GetAttribute(self.ORIGINAL_IMAGE_INDEX)
     if original_index_str is None or original_index_str == "None" or original_index_str == "":
       selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
@@ -297,8 +297,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
     self.logic.eraseCurrentSegmentation(selectedSegmentation)
     selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
-  
-  
+
+
   def onSkipButton(self):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
@@ -311,8 +311,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
     self.logic.eraseCurrentSegmentation(selectedSegmentation)
     inputBrowserNode.SelectNextItem(numSkip)
-  
-  
+
+
   def onExportButton(self):
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
@@ -356,23 +356,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     layoutManager = slicer.app.layoutManager()
     currentLayout = layoutManager.layout
 
-    # place skeleton model in first 3d view
-    skeleton_volume = slicer.util.getFirstNodeByName("ArticulatedSkeletonModel")
-
-    if layoutManager.threeDWidget(1) is not None:
-      viewNode = layoutManager.threeDWidget(1).mrmlViewNode()
-    else:
-      newView = slicer.vtkMRMLViewNode()
-      newView = slicer.mrmlScene.AddNode(newView)
-      newWidget = slicer.qMRMLThreeDWidget()
-      newWidget.setMRMLScene(slicer.mrmlScene)
-      newWidget.setMRMLViewNode(newView)
-
-    if skeleton_volume is not None:
-      displayNode = skeleton_volume.GetDisplayNode()
-      displayNode.SetViewNodeIDs([viewNode.GetID()])
-
-    # place reconstructed volume in second 3d view
+    # place reconstructed volume in first 3d view
 
     # hacky but necessary way to ensure that we grab the correct browser node
     i = 1
@@ -390,13 +374,32 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     if browser is not None:
       spine_volume = slicer.util.getFirstNodeByName(browser.GetName() + 'ReconstructionResults')
-
-      viewNode = layoutManager.threeDWidget(0).mrmlViewNode()
+      if layoutManager.threeDWidget(0) is None:
+        newView = slicer.vtkMRMLViewNode()
+        newView = slicer.mrmlScene.AddNode(newView)
+        newWidget = slicer.qMRMLThreeDWidget()
+        newWidget.setMRMLScene(slicer.mrmlScene)
+        newWidget.setMRMLViewNode(newView)
+      viewNode = layoutManager.threeDWidget(0).mrmlViewNode()  
 
       if spine_volume is not None:
         displayNode = slicer.modules.volumerendering.logic().GetFirstVolumeRenderingDisplayNode(spine_volume)
         displayNode.SetViewNodeIDs([viewNode.GetID()])
         spine_volume.SetDisplayVisibility(1)
+
+    # place skeleton model in second 3d view
+    skeleton_volume = slicer.util.getFirstNodeByName("ArticulatedSkeletonModel")
+    if layoutManager.threeDWidget(1) is None:
+      newView = slicer.vtkMRMLViewNode()
+      newView = slicer.mrmlScene.AddNode(newView)
+      newWidget = slicer.qMRMLThreeDWidget()
+      newWidget.setMRMLScene(slicer.mrmlScene)
+      newWidget.setMRMLViewNode(newView)
+    viewNode = layoutManager.threeDWidget(1).mrmlViewNode()
+
+    if skeleton_volume is not None:
+      displayNode = skeleton_volume.GetDisplayNode()
+      displayNode.SetViewNodeIDs([viewNode.GetID()])
 
 
     if currentLayout == 501:
@@ -476,7 +479,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # Set parameter set node if absent
     self.selectParameterNode()
     self.ui.editor.updateWidgetFromMRML()
-    
+
     # Update UI
     slicer.modules.sequences.setToolBarVisible(True)
     self.updateSelections()
@@ -508,14 +511,14 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     redController = slicer.app.layoutManager().sliceWidget('Red').sliceController()
     redController.fitSliceToBackground()
-  
-  
+
+
   def connectKeyboardShortcuts(self):
     self.shortcutS.connect('activated()', self.onSkipButton)
     self.shortcutD.connect('activated()', self.onClearButton)
     self.shortcutC.connect('activated()', self.onCaptureButton)
-  
-  
+
+
   def disconnectKeyboardShortcuts(self):
     self.shortcutS.activated.disconnect()
     self.shortcutD.activated.disconnect()
@@ -526,7 +529,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.editor.setActiveEffect(None)
     self.ui.editor.uninstallKeyboardShortcuts()
     self.ui.editor.removeViewObservations()
-    
+
     self.disconnectKeyboardShortcuts()
 
 
@@ -794,7 +797,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       transformToWorld = vtk.vtkMatrix4x4()
       imageToTrans.GetMatrixTransformToWorld(transformToWorld)
       transformToWorld_numpy = slicer.util.arrayFromVTKMatrix(transformToWorld)
-      
+
       if i == 0:
         transforms_seq_numpy = transformToWorld_numpy[np.newaxis, :]
       else:
@@ -802,7 +805,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
       selectedSegmentationSequence.SelectNextItem()
       slicer.app.processEvents()
-    
+
     # Save stacked transforms as output numpy array.
     transformFileName = baseName + "_transform.npy"
     transformFullname = os.path.join(outputFolder, transformFileName)
@@ -811,23 +814,23 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
   def captureSlice(self, selectedSegmentationSequence, selectedSegmentation, inputImage):
     originalIndex = selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
-    
+
     #todo overwrite existing segmentation of the same image
-    
+
     # Figure out which sequence of the selected browser has the proxy node inputImage and selectedSegmentation
-    
+
     segmentedImageSequenceNode = selectedSegmentationSequence.GetSequenceNode(selectedSegmentation)
     if segmentedImageSequenceNode is None:
       logging.error("Sequence not found for input image: {}".format(inputImage.GetName()))
       return
-    
+
     segmentationSequenceNode = selectedSegmentationSequence.GetSequenceNode(selectedSegmentation)
     if segmentationSequenceNode is None:
       logging.error("Sequence not found for segmentation: {}".format(selectedSegmentation.GetName()))
       return
-    
+
     # Check all nodes saved in sequence if anyone has the same attribute (this image already recorded)
-    
+
     numDataNodes = segmentedImageSequenceNode.GetNumberOfDataNodes()
     recordedOriginalIndex = None
     for i in range(numDataNodes):
@@ -836,14 +839,14 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       if originalIndex == savedIndex:
         recordedOriginalIndex = i
         break
-    
+
     # If this image has been saved previously, overwrite instead of add new
-    
+
     try:
       recordedOriginalIndex = int(recordedOriginalIndex)
     except:
       recordedOriginalIndex = None
-    
+
     if recordedOriginalIndex is None:
       selectedSegmentationSequence.SaveProxyNodesState()
     else:
