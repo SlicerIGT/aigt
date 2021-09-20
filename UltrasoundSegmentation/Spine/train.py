@@ -9,7 +9,7 @@ import pandas as pd
 import tensorflow as tf
 import numpy as np
 
-from ultrasound_batch_generator import train_preprocess, train_preprocess_with_maps, generate_weight_maps
+from ultrasound_batch_generator import train_preprocess, train_preprocess_with_transforms, train_preprocess_with_maps, train_preprocess_with_transforms_with_maps, generate_weight_maps, generate_transform
 import evaluation_metrics
 
 from models import (
@@ -34,6 +34,7 @@ def train(
     num_layers=5,
     filters=16,
     use_batch_norm=True,
+    use_transforms=False,
     load_from_save=False,
 ):
 
@@ -46,10 +47,10 @@ def train(
     run_str += 'WAttention_' if use_attention else ''
     run_str += 'WBatchNorm_' if use_batch_norm else ''
     run_str += str(filters) + '-InitialFilters_' 
-    run_str += str(num_layers) + '-Layers' 
+    run_str += str(num_layers) + '-Layers'     
+    run_str += '_WTransforms' if use_transforms else ''
 
-
-    local_data_folder = "/home/zbaum/Baum/aigt/data"
+    local_data_folder = "/home/zbaum/Baum/aigt/UltrasoundSegmentation/Spine"
 
     data_arrays_folder = "DataArrays"
     results_save_folder = "SavedResults"
@@ -80,9 +81,13 @@ def train(
     if with_maps:
         loss_func = weighted_categorical_crossentropy_with_maps(class_weights)
         preprocess_func = train_preprocess_with_maps
+        if use_transforms:
+            preprocess_func = train_preprocess_with_transforms_with_maps
     else:
         loss_func = weighted_categorical_crossentropy(class_weights)
         preprocess_func = train_preprocess
+        if use_transforms:
+            preprocess_func = train_preprocess_with_transforms
 
     # Evaluation parameters
 
@@ -139,51 +144,99 @@ def train(
     girder_url = "https://pocus.cs.queensu.ca/api/v1"
     girder_key = "nwv5qqqrDYn9DVakp1XnYDqjrNsowxaXisawPNRR"
 
-    queens_sagittal_csv = "QueensSagittal.csv"
-    verdure_axial_csv = "VerdureAxial.csv"
-    verdure_sagittal_csv = "VerdureSagittal.csv"
-    childrens_axial_csv = "Childrens1Axial.csv"
+    if not use_transforms:
+        verdure_axial_csv = "VerdureAxial-Transforms.csv"
+        verdure_sagittal_csv = "VerdureSagittal-Transforms.csv"
 
-    queens_ultrasound_arrays, queens_segmentation_arrays = utils.load_girder_data(
-        queens_sagittal_csv, data_arrays_fullpath, girder_url, girder_key=girder_key
-    )
-
-    verdure_axial_ultrasound_arrays, verdure_axial_segmentation_arrays = utils.load_girder_data(
-        verdure_axial_csv, data_arrays_fullpath, girder_url, girder_key=girder_key
-    )
-
-    verdure_sagittal_ultrasound_arrays, verdure_sagittal_segmentation_arrays = utils.load_girder_data(
-        verdure_sagittal_csv, data_arrays_fullpath, girder_url, girder_key=girder_key
-    )
-
-    childrens_ultrasound_arrays, childrens_segmentation_arrays = utils.load_girder_data(
-        childrens_axial_csv, data_arrays_fullpath, girder_url, girder_key=girder_key
-    )
-
-    if not sagittal_only:
-        ultrasound_arrays_by_patients = (
-            queens_ultrasound_arrays
-            + verdure_axial_ultrasound_arrays
-            + verdure_sagittal_ultrasound_arrays
-            + childrens_ultrasound_arrays
+        verdure_axial_ultrasound_arrays, verdure_axial_segmentation_arrays = utils.load_girder_data(
+            verdure_axial_csv, data_arrays_fullpath, girder_url, girder_key=girder_key
         )
 
-        segmentation_arrays_by_patients = (
-            queens_segmentation_arrays
-            + verdure_axial_segmentation_arrays
-            + verdure_sagittal_segmentation_arrays
-            + childrens_segmentation_arrays
+        verdure_sagittal_ultrasound_arrays, verdure_sagittal_segmentation_arrays = utils.load_girder_data(
+            verdure_sagittal_csv, data_arrays_fullpath, girder_url, girder_key=girder_key
         )
+
+
+        if not sagittal_only:
+            ultrasound_arrays_by_patients = (
+                verdure_axial_ultrasound_arrays
+                + verdure_sagittal_ultrasound_arrays
+            )
+
+            segmentation_arrays_by_patients = (
+                verdure_axial_segmentation_arrays
+                + verdure_sagittal_segmentation_arrays
+            )
+
+        else:
+            ultrasound_arrays_by_patients = (
+                verdure_sagittal_ultrasound_arrays
+            )
+
+            segmentation_arrays_by_patients = (
+                verdure_sagittal_segmentation_arrays
+            )
 
     else:
-        ultrasound_arrays_by_patients = (
-            queens_ultrasound_arrays + verdure_sagittal_ultrasound_arrays
+        verdure_axial_csv = "VerdureAxial-Transforms.csv"
+        verdure_sagittal_csv = "VerdureSagittal-Transforms.csv"
+
+        verdure_axial_ultrasound_arrays, verdure_axial_transform_arrays, verdure_axial_segmentation_arrays = utils.load_girder_data(
+            verdure_axial_csv, data_arrays_fullpath, girder_url, girder_key=girder_key, get_transforms=True
         )
 
-        segmentation_arrays_by_patients = (
-            queens_segmentation_arrays + verdure_sagittal_segmentation_arrays
+        verdure_sagittal_ultrasound_arrays, verdure_sagittal_transform_arrays, verdure_sagittal_segmentation_arrays = utils.load_girder_data(
+            verdure_sagittal_csv, data_arrays_fullpath, girder_url, girder_key=girder_key, get_transforms=True
         )
 
+        if not sagittal_only:
+            ultrasound_arrays_by_patients = (
+                verdure_axial_ultrasound_arrays + verdure_sagittal_ultrasound_arrays
+            )
+
+            transform_arrays_by_patients = (
+                verdure_axial_transform_arrays + verdure_sagittal_transform_arrays
+            )
+
+            segmentation_arrays_by_patients = (
+                verdure_axial_segmentation_arrays + verdure_sagittal_segmentation_arrays
+            )
+
+        else:
+            ultrasound_arrays_by_patients = (
+                verdure_sagittal_ultrasound_arrays
+            )
+
+            transform_arrays_by_patients = (
+                verdure_sagittal_transform_arrays
+            )
+
+            segmentation_arrays_by_patients = (
+                verdure_sagittal_segmentation_arrays
+            )
+
+        # Normalize the transform matrices between scale of the patient
+        for i in range(len(transform_arrays_by_patients)):
+
+            # find mean center per scan
+            mean_val = np.mean(transform_arrays_by_patients[i], axis=0)
+            mean_subtract = np.zeros(mean_val.shape)
+            mean_subtract[0:3, 3] = mean_val[0:3, 3]
+
+            # subtract mean
+            for j in range(len(transform_arrays_by_patients[i])):
+                transform_arrays_by_patients[i][j] -= mean_subtract
+
+            # find max/min values
+            min_z = (np.min(transform_arrays_by_patients[i], axis=0))[2, 3]
+            max_z = (np.max(transform_arrays_by_patients[i], axis=0))[2, 3]
+            diff = max_z - min_z
+
+            # normalize
+            for j in range(len(transform_arrays_by_patients[i])):
+                transform_arrays_by_patients[i][j][0, 3] = (2 * (transform_arrays_by_patients[i][j][0, 3] - min_z) / diff) - 1
+                transform_arrays_by_patients[i][j][1, 3] = (2 * (transform_arrays_by_patients[i][j][1, 3] - min_z) / diff) - 1
+                transform_arrays_by_patients[i][j][2, 3] = (2 * (transform_arrays_by_patients[i][j][2, 3] - min_z) / diff) - 1
 
     if num_frames > 1:
         multiframe_ultrasound_arrays_by_patients = []
@@ -226,14 +279,24 @@ def train(
     n_patients = len(ultrasound_arrays_by_patients)
 
     for i in range(n_patients):
-        print(
-            "Patient {} has {} ultrasounds and {} segmentations".format(
-                i,
-                ultrasound_arrays_by_patients[i].shape[0],
-                segmentation_arrays_by_patients[i].shape[0],
+        if use_transforms:
+            print(
+                "Patient {} has {} ultrasounds, {} segmentations and {} transforms".format(
+                    i,
+                    ultrasound_arrays_by_patients[i].shape[0],
+                    segmentation_arrays_by_patients[i].shape[0],
+                    transform_arrays_by_patients[i].shape[0],
+                )
             )
-        )
-
+        else:
+            print(
+                "Patient {} has {} ultrasounds and {} segmentations".format(
+                    i,
+                    ultrasound_arrays_by_patients[i].shape[0],
+                    segmentation_arrays_by_patients[i].shape[0],
+                )
+            )
+    
     # Prepare validation rounds
 
     if np.max(validation_schedule_patient) > (n_patients - 1):
@@ -264,9 +327,8 @@ def train(
     print("BatchNorm:           {}".format(use_batch_norm))
     print("Filters (Start):     {}".format(filters))
     print("Layers:              {}".format(num_layers))
-
-    print("")
-    print("Saving models in:                 {}".format(models_save_fullpath))
+    print("Transforms:          {}".format(use_transforms))
+    print("\nSaving models in:  {}".format(models_save_fullpath))
 
     # ROC data will be saved in these containers
 
@@ -290,6 +352,15 @@ def train(
             ]
         )
 
+        if use_transforms:
+            train_transform_data = np.zeros(
+                [
+                    0,
+                    transform_arrays_by_patients[0].shape[1],
+                    transform_arrays_by_patients[0].shape[2],
+                ]
+            )
+
         train_segmentation_data = np.zeros(
             [
                 0,
@@ -308,6 +379,15 @@ def train(
             ]
         )
 
+        if use_transforms:
+            val_transform_data = np.zeros(
+                [
+                    0,
+                    transform_arrays_by_patients[0].shape[1],
+                    transform_arrays_by_patients[0].shape[2],
+                ]
+            )
+
         val_segmentation_data = np.zeros(
             [
                 0,
@@ -322,16 +402,21 @@ def train(
                 train_ultrasound_data = np.concatenate(
                     (train_ultrasound_data, ultrasound_arrays_by_patients[patient_index])
                 )
-                train_segmentation_data = np.concatenate(
-                    (
-                        train_segmentation_data,
-                        segmentation_arrays_by_patients[patient_index],
+                if use_transforms:
+                    train_transform_data = np.concatenate(
+                        (train_transform_data, transform_arrays_by_patients[patient_index])
                     )
+                train_segmentation_data = np.concatenate(
+                    (train_segmentation_data, segmentation_arrays_by_patients[patient_index])
                 )
             else:
                 val_ultrasound_data = np.concatenate(
                     (val_ultrasound_data, ultrasound_arrays_by_patients[patient_index])
                 )
+                if use_transforms:
+                    val_transform_data = np.concatenate(
+                        (val_transform_data, transform_arrays_by_patients[patient_index])
+                    )
                 val_segmentation_data = np.concatenate(
                     (val_segmentation_data, segmentation_arrays_by_patients[patient_index])
                 )
@@ -363,6 +448,7 @@ def train(
             use_attention=use_attention,
             filters=filters,
             num_layers=num_layers,
+            use_transforms=use_transforms,
             output_activation="softmax",
         )
 
@@ -371,21 +457,27 @@ def train(
                 lr=learning_rate, decay=learning_rate_decay
             ),
             loss=loss_func,
-            metrics=["accuracy", evaluation_metrics.jaccard_coef, evaluation_metrics.dice_coef],
+            metrics=["accuracy", evaluation_metrics.dice_coef],
         )
 
-        dataset = tf.data.Dataset.from_tensor_slices(
-            ((train_ultrasound_data, train_segmentation_data_onehot))
-        )
+        d = (train_ultrasound_data, train_segmentation_data_onehot)
+        if use_transforms:
+            d = (train_ultrasound_data, train_transform_data, train_segmentation_data_onehot)
+        dataset = tf.data.Dataset.from_tensor_slices(d)
+
         dataset = dataset.map(preprocess_func, num_parallel_calls=4)
         dataset = dataset.shuffle(buffer_size=1024).batch(batch_size)
         dataset = dataset.prefetch(1)
 
-        val_dataset = tf.data.Dataset.from_tensor_slices(
-            ((val_ultrasound_data, val_segmentation_data_onehot))
-        )
+        vd = (val_ultrasound_data, val_segmentation_data_onehot)
+        if use_transforms:
+            vd = (val_ultrasound_data, val_transform_data, val_segmentation_data_onehot)
+        val_dataset = tf.data.Dataset.from_tensor_slices(vd)
+        
         if with_maps:
             val_dataset = val_dataset.map(generate_weight_maps, num_parallel_calls=4)
+        if use_transforms:
+            val_dataset = val_dataset.map(generate_transform, num_parallel_calls=4)
         val_dataset = val_dataset.batch(batch_size)
         val_dataset = val_dataset.prefetch(1)
         
@@ -437,8 +529,9 @@ def train(
                     validation_data=val_dataset,
                     epochs=num_epochs,
                     verbose=2,
-                    callbacks=[tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=100),
-                               tf.keras.callbacks.ModelCheckpoint(model_best_fullname, save_best_only=True)],
+                    callbacks=[tf.keras.callbacks.ModelCheckpoint(model_best_fullname, save_best_only=True)],
+                    #callbacks=[tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=100),
+                    #           tf.keras.callbacks.ModelCheckpoint(model_best_fullname, save_best_only=True)],
                 )
 
             else:
@@ -479,17 +572,18 @@ def train(
             plt.savefig(run_str + "_val-round_" + str(val_round_index) + ".png")
 
         # Archive trained model with unique filename based on params
-        
         if load_from_save:
             model.load_weights(model_fullname)
         else:
             model.save(model_fullname)
 
         # Predict on validation data
-
         if n_val > 0:
-            y_pred_val = model.predict(val_ultrasound_data)
-            
+            if use_transforms:
+                y_pred_val = model.predict([val_ultrasound_data, val_transform_data])
+            else:
+                y_pred_val = model.predict(val_ultrasound_data)
+
             # Validation results
             vali_metrics_dicts, vali_best_threshold_index, vali_area = evaluation_metrics.compute_roc(
                 roc_thresholds, y_pred_val, val_segmentation_data, acceptable_margin_mm, mm_per_pixel)
@@ -502,9 +596,8 @@ def train(
             val_best_thresholds[val_round_index] = roc_thresholds[vali_best_threshold_index]
 
         # Display sample results
-
         num_vali = val_ultrasound_data.shape[0]
-        num_show = 10
+        num_show = 20
         if num_vali < num_show:
             num_show = 0
         num_col = 4
@@ -515,7 +608,7 @@ def train(
         threshold = 0.5
 
         # Uncomment for comparing the same images
-        sample_indices = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+        sample_indices = list(range(0, 200, 10))
 
         fig = plt.figure(figsize=(18, num_show * 5))
         for i in range(num_show):
@@ -553,7 +646,6 @@ def train(
         )
 
         # Printing total time of this validation round
-
         if not load_from_save:
             print(
                 "\nTotal round time:  {}".format(datetime.datetime.now() - training_time_start)
@@ -565,7 +657,6 @@ def train(
     print("\nTotal training time:   {}".format(time_sequence_stop - time_sequence_start))
 
     # Arrange results in tables
-
     metric_labels = [
         "AUROC",
         "best thresh",
@@ -600,10 +691,17 @@ def train(
             ]
 
     # Save results table
-
     csv_filename = run_str + ".csv"
     csv_fullname = os.path.join(results_save_fullpath, csv_filename)
     results_df.to_csv(csv_fullname)
 
     print("Results saved to: {}".format(csv_fullname))
 
+
+#train(batch_size=128, num_epochs=500, sagittal_only=False, num_frames=3, num_layers=5, dropout=0.5, use_transforms=True)
+#train(batch_size=128, num_epochs=500, sagittal_only=False, num_frames=3, num_layers=4, dropout=0.5, use_transforms=True)
+#train(batch_size=128, num_epochs=500, sagittal_only=False, num_frames=3, num_layers=3, dropout=0.5, use_transforms=True)
+
+train(batch_size=128, num_epochs=500, sagittal_only=False, num_frames=3, num_layers=5, dropout=0.5)
+train(batch_size=128, num_epochs=500, sagittal_only=False, num_frames=3, num_layers=4, dropout=0.5)
+train(batch_size=128, num_epochs=500, sagittal_only=False, num_frames=3, num_layers=3, dropout=0.5)

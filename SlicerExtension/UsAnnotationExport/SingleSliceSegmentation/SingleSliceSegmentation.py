@@ -341,6 +341,16 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
                                  outputFolder,
                                  baseName)
 
+    if self.ui.exportTransformCheckBox.checked:
+      self.logic.exportNumpySlice(selectedImage,
+                                  selectedSegmentation,
+                                  selectedSegmentationSequence,
+                                  outputFolder)
+      self.logic.exportTransformToWorldSequence(selectedSegmentation,
+                                                selectedSegmentationSequence,
+                                                outputFolder,
+                                                baseName)
+
 
   def onLayoutSelectButton(self):
     layoutManager = slicer.app.layoutManager()
@@ -744,6 +754,57 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
       selectedSegmentationSequence.SelectNextItem()
       slicer.modules.sequences.logic().UpdateAllProxyNodes()
+
+
+  def exportTransformToWorldSequence(self,
+                                     selectedSegmentation,
+                                     selectedSegmentationSequence,
+                                     outputFolder,
+                                     baseName):
+    if not os.path.exists(outputFolder):
+      logging.error("Export folder does not exist {}".format(outputFolder))
+      return
+
+    # Grab the Landmarking Scan Sequence - we will get transforms from here.
+    landmarkingScanSequence = None
+    sequenceBrowserNodesList = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
+    for sequenceBrowserNode in sequenceBrowserNodesList:
+      if 'LandmarkingScan' in sequenceBrowserNode.GetName():
+        landmarkingScanSequence = sequenceBrowserNode
+    if landmarkingScanSequence is None:
+      logging.error("Landmarking Scan sequence does not exist.")
+      return
+
+    imageToTrans = slicer.util.getFirstNodeByName("ImageToTransd*")
+    if imageToTrans is None:
+      logging.error("ImageToTransducer transform does not exist.")
+      return
+
+    num_items = selectedSegmentationSequence.GetNumberOfItems()
+    selectedSegmentationSequence.SelectFirstItem()
+    landmarkingScanSequence.SelectFirstItem()
+
+    for i in range(num_items):
+
+      # Get landmarking scan transform index, set it, get TransformToWorld
+      transformIndex = int(selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX))
+      landmarkingScanSequence.SetSelectedItemNumber(transformIndex)
+      transformToWorld = vtk.vtkMatrix4x4()
+      imageToTrans.GetMatrixTransformToWorld(transformToWorld)
+      transformToWorld_numpy = slicer.util.arrayFromVTKMatrix(transformToWorld)
+      
+      if i == 0:
+        transforms_seq_numpy = transformToWorld_numpy[np.newaxis, :]
+      else:
+        transforms_seq_numpy = np.concatenate((transforms_seq_numpy, transformToWorld_numpy[np.newaxis, :]), axis=0)
+
+      selectedSegmentationSequence.SelectNextItem()
+      slicer.app.processEvents()
+    
+    # Save stacked transforms as output numpy array.
+    transformFileName = baseName + "_transform.npy"
+    transformFullname = os.path.join(outputFolder, transformFileName)
+    np.save(transformFullname, transforms_seq_numpy)
 
 
   def captureSlice(self, selectedSegmentationSequence, selectedSegmentation, inputImage):

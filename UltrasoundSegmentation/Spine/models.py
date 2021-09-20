@@ -209,6 +209,7 @@ def new_unet(
     use_attention=False,
     filters=16,
     num_layers=4,
+    use_transforms=False,
     output_activation="sigmoid",
 ):  # 'sigmoid' or 'softmax'
 
@@ -240,6 +241,8 @@ def new_unet(
 
     num_layers (int): Number of total layers in the encoder not including the bottleneck layer
 
+    use_transforms (bool): Whether or not to use the input encoding of a 4x4 transforma matrix as a 2nd input
+
     output_activation (str): A keras.activations.Activation to use. Sigmoid by default for binary segmentation
 
     Returns:
@@ -262,7 +265,19 @@ def new_unet(
 
     # Build U-Net model
     input_shape = (input_size, input_size, num_channels)
-    inputs = Input(input_shape)
+    im_input = Input(input_shape)
+
+    if use_transforms:
+        transform_input = Input((4, 4))
+        t = Flatten()(transform_input)
+        t = Dense(input_size, activation=activation)(t)
+        t = Dense(input_size * input_size, activation=activation)(t)
+        t = Reshape((input_size, input_size, 1))(t)
+        inputs = Concatenate(axis=-1)([im_input, t])
+
+    else:
+        inputs = im_input
+
     x = inputs
 
     down_layers = []
@@ -312,5 +327,9 @@ def new_unet(
 
     outputs = Conv2D(num_classes, (1, 1), activation=output_activation)(x)
 
-    model = Model(inputs=[inputs], outputs=[outputs])
+    if use_transforms:
+        model = Model(inputs=[im_input, transform_input], outputs=[outputs])
+    else:
+        model = Model(inputs=[im_input], outputs=[outputs])
+    
     return model

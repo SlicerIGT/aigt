@@ -269,7 +269,7 @@
       <string>Export</string>
      </property>
      <property name="collapsed">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
       <item row="0" column="0">
@@ -282,17 +282,7 @@
       <item row="0" column="1">
        <widget class="QLineEdit" name="filenamePrefixEdit"/>
       </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="label_6">
-        <property name="text">
-         <string>Output folder: </string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="ctkDirectoryButton" name="outputDirectoryButton"/>
-      </item>
-      <item row="2" column="1">
+      <item row="3" column="1">
        <widget class="QPushButton" name="exportButton">
         <property name="minimumSize">
          <size>
@@ -308,6 +298,30 @@
         </property>
         <property name="text">
          <string>Export segmentation sequence</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="ctkDirectoryButton" name="outputDirectoryButton"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_6">
+        <property name="text">
+         <string>Output folder: </string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_8">
+        <property name="text">
+         <string>Export additional data:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QCheckBox" name="exportTransformCheckBox">
+        <property name="text">
+         <string>Image to World Transform</string>
         </property>
        </widget>
       </item>
