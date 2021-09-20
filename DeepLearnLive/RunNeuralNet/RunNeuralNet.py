@@ -338,7 +338,7 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
       startupEnv = slicer.util.startupEnvironment()
       info = subprocess.STARTUPINFO()
       info.dwFlags = subprocess.CREATE_NEW_CONSOLE
-      p = subprocess.Popen(cmd,env=startupEnv)
+      p = subprocess.Popen(cmd,creationflags=subprocess.CREATE_NEW_CONSOLE,env=startupEnv)
     startTime = time.time()
     while self.incomingConnectorNode.GetState() != 2 and self.outgoingConnectorNode.GetState() != 2 and time.time()-startTime<15:
       time.sleep(0.25)

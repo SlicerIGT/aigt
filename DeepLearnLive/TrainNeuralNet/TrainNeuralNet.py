@@ -841,7 +841,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       #p = slicer.util.launchConsoleProcess(strCMD, useStartupEnvironment=True)
       #slicer.util.logProcessOutput(p)
       startupEnv = slicer.util.startupEnvironment()
-      p = subprocess.Popen(cmd, env=startupEnv)
+      p = subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE,env=startupEnv)
       logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath), self.trainingRunName)))
 
   def openWarningWidget(self,trainingRunName):
@@ -864,10 +864,10 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.warningWidget.hide()
     DirsToRemove = [dir for dir in os.listdir(os.path.dirname(self.trainingScriptPath)) if self.trainingRunName+'_Fold' in dir]
     baseDir = os.path.dirname(self.trainingScriptPath)
-    for dir in DirsToRemove:
+    '''for dir in DirsToRemove:
       for file in os.listdir(os.path.join(baseDir,dir)):
         os.remove(os.path.join(baseDir,dir,file))
-      os.removedirs(os.path.join(baseDir,dir))
+      os.removedirs(os.path.join(baseDir,dir))'''
     cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
            str(self.moduleDir),
            str(self.condaPath),
