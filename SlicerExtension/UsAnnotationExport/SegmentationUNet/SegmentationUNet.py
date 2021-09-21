@@ -202,24 +202,11 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       logging.info("Using UNet")
 
     try:
-      if toggled == True:
-        logging.info("Staring live segmentation")
-        useProcess = self.logic.getUseProcess()
-        if useProcess:
-          logging.info("Starting separate process for prediction")
-          self.logic.setupProcess()
+      if toggled:
         self.ui.processCheckBox.enabled = False
-        # self.inputModifiedObserverTag = self.inputImageNode.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent,
-        #                                                                 self.logic.onInputNodeModified)
-
       else:
-        logging.info("Stopping live segmentation")
-        if self.inputModifiedObserverTag is not None:
-          self.inputImageNode.RemoveObserver(self.inputModifiedObserverTag)
-          self.inputModifiedObserverTag = None
-        self.logic.stopLiveSegmentation()
         self.ui.processCheckBox.enabled = True
-
+      self.logic.setRealTimePrediction(toggled)
     except Exception as e:
       slicer.util.errorDisplay("Failed to start live segmentation: "+str(e))
       import traceback
@@ -235,16 +222,15 @@ class LivePredictionProcess(Process):
     self.active = bytes([1]) if active else bytes([0])  # Used to stop the process by enabling/disabling the script.
     self.name = f"LivePrediction-{os.path.basename(model_path)}"
     self.output = None
-
-    logging.info("  Process script:   {}".format(scriptPath))
-    logging.info("  AI model file:    {}".format(model_path))
-    logging.info("  Input dimensions: {}".format(volume.shape))
+    logging.info("Process created: {}".format(self.name))
+    logging.info("Script path: {}".format(scriptPath))
 
   def setActive(self, active=True):
+    logging.info("LivePredictionProcess.setActive")
     self.active = bytes([1]) if active else bytes([0])
 
   def onStarted(self):
-    logging.info("LivePredictionProcess.onStarted")
+    # logging.info("LivePredictionProcess.onStarted")
     input = self.prepareProcessInput()
     input_len = len(input).to_bytes(8, byteorder='big')
     self.write(self.active)  # Write if the predictions are still running
@@ -252,7 +238,7 @@ class LivePredictionProcess(Process):
     self.write(input)  # Write the pickled inputs for the model
 
   def prepareProcessInput(self):
-    logging.info("LivePredictionProcess.prepareProcessInput")
+    # logging.info("LivePredictionProcess.prepareProcessInput")
     input = {}
     input['model_path'] = self.model_path
     input['volume'] = self.volume
@@ -262,12 +248,12 @@ class LivePredictionProcess(Process):
     logging.info("LivePredictionProcess.useProcessOutput")
     try:
       output = pickle.loads(processOutput)
-      logging.info("  output shape: {}".format(output['prediction'].shape))
+      logging.info("  Prediction shape: {}".format(output['prediction'].shape))
       self.output = output
     except EOFError:
+      print(processOutput)
       logging.info("  EOF error")
       self.output = None
-
 
 
 #
@@ -302,6 +288,7 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.unet_model = None
 
     self.livePredictionProcess = None
+    self.inputModifiedObserverTag = None
 
   def setDefaultParameters(self, parameterNode):
     if not parameterNode.GetParameter("Threshold"):
@@ -370,7 +357,7 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   def setupProcess(self):
     parameterNode = self.getParameterNode()
     scriptFolder = slicer.modules.segmentationunet.path.replace("SegmentationUNet.py", "")
-    scriptPath = os.path.join(scriptFolder, "Resources", "ProcessScripts")
+    scriptPath = os.path.join(scriptFolder, "Resources", "ProcessScripts", "LivePredictions.slicer.py")
 
     inputImageNode = parameterNode.GetNodeReference(self.INPUT_IMAGE)
     if inputImageNode is None:
@@ -381,16 +368,33 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     self.stopLiveSegmentation()
     self.livePredictionProcess = LivePredictionProcess(scriptPath, imageArray, modelPath)
-    self.livePredictionProcess.connect('readyReadStandardOutput()', self.imageToPredictReady)
+    self.livePredictionProcess.connect('readyReadStandardOutput()', self.processOutputReady)
 
     def onLivePredictProcessCompleted():
       logging.info('Live Prediction: Process Finished')
-      self.livePredictionProcess.disconnect('readyReadStandardOutput()', self.imageToPredictReady)
+      self.livePredictionProcess.disconnect('readyReadStandardOutput()', self.processOutputReady)
 
-    logic = ProcessesLogic(completedCallback=lambda: onLivePredictProcessCompleted())
-    logic.addProcess(self.livePredictionProcess)
-    logic.run()
+    processLogic = ProcessesLogic(completedCallback=lambda: onLivePredictProcessCompleted())
+    processLogic.addProcess(self.livePredictionProcess)
+    processLogic.run()
     logging.info('Live Prediction: Process Started')
+
+  def setRealTimePrediction(self, toggled):
+    inputImageNode = self.getParameterNode().GetNodeReference(self.INPUT_IMAGE)
+    if toggled == True:
+      logging.info("Staring live segmentation")
+      useProcess = self.getUseProcess()
+      if useProcess:
+        logging.info("Starting separate process for prediction")
+        self.setupProcess()
+      self.inputModifiedObserverTag = inputImageNode.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent,
+                                                                 self.onInputNodeModified)
+    else:
+      logging.info("Stopping live segmentation")
+      if self.inputModifiedObserverTag is not None:
+        inputImageNode.RemoveObserver(self.inputModifiedObserverTag)
+        self.inputModifiedObserverTag = None
+      self.stopLiveSegmentation()
 
   def stopLiveSegmentation(self):
     """
@@ -402,17 +406,17 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       self.livePredictionProcess.close()
       self.livePredictionProcess = None
 
-  def imageToPredictReady(self):
+  def processOutputReady(self):
     """
     Callback to receive prediction and update volume in Slicer.
     :return: None
     """
-    logging.info("imageToPredictReady()")
     parameterNode = self.getParameterNode()
     stdout = self.livePredictionProcess.readAllStandardOutput().data()
     self.livePredictionProcess.useProcessOutput(stdout)
     output_array = self.livePredictionProcess.output['prediction']
     predictionVolumeNode = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
+    # logging.info("Received array of shape: {}".format(output_array.shape))
     slicer.util.updateVolumeFromArray(predictionVolumeNode, output_array.astype(np.uint8)[np.newaxis, ...])
 
   def getUseProcess(self):
@@ -431,6 +435,7 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     Callback function for input image modified event.
     :returns: None
     """
+    logging.info("logic.onInputNodeModified")
     useProcesses = self.getUseProcess()
     if useProcesses:
       self.updatePreditionOnProcess()
@@ -438,6 +443,7 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       self.updatePrecitionOnMain()
 
   def updatePreditionOnProcess(self):
+    logging.info("logic.updatePreditionOnProcess")
     parameterNode = self.getParameterNode()
     inputImageNode = parameterNode.GetNodeReference(self.INPUT_IMAGE)
     input_array = slicer.util.array(inputImageNode.GetID())
