@@ -115,6 +115,7 @@ try:
 
     input_data = pickle.loads(input_data)
     input_array = input_data['volume']
+    input_transform = input_data['transform']
     if input_array.shape[0] == 1:
       input_array = input_array[0, :, :]
     input_array = resizeInputArray(input_array)
@@ -125,6 +126,7 @@ try:
 
     output = {}
     output['prediction'] = output_array
+    output['transform'] = np.array(input_transform)  # Make a copy of the input transform, because it has already lapsed in Slicer
     pickled_output = pickle.dumps(output)
 
     sys.stdout.buffer.write(pickled_output)
