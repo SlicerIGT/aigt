@@ -89,6 +89,7 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.modelPathLineEdit.setCurrentPath(lastModelPath)
     self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputImageSelected)
     self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputImageSelected)
+    self.ui.outputTransformComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputTransformSelected)
     self.ui.processCheckBox.connect("toggled(bool)", self.onProcessToggled)
 
     self.ui.applyButton.connect('toggled(bool)', self.onApplyButton)
@@ -108,6 +109,9 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onOutputImageSelected(self, selectedNode):
     self.logic.setOutputImage(selectedNode)
+
+  def onOutputTransformSelected(self, selectedNode):
+    self.logic.setOutputTransform(selectedNode)
 
   def onProcessToggled(self, checked):
     self._parameterNode.SetParameter(self.logic.USE_SEPARATE_PROCESS, "True" if checked else "False")
@@ -215,6 +219,8 @@ class LivePredictionProcess(Process):
   def __init__(self, scriptPath, volume, model_path, active=True):
     Process.__init__(self, scriptPath)
     self.volume = volume  # Numpy array, to use as input for the model.
+    self.input_transform = np.identity(4)  # This will be updated from logic when the volume is updated
+    self.output_transform = np.identity(4)  # This will be updated from the process and read along with prediction
     self.model_path = model_path  # Path to the TF model you'd like to load, as TF Models are not picklable.
     self.active = bytes([1]) if active else bytes([0])  # Used to stop the process by enabling/disabling the script.
     self.name = f"LivePrediction-{os.path.basename(model_path)}"
@@ -239,13 +245,13 @@ class LivePredictionProcess(Process):
     input = {}
     input['model_path'] = self.model_path
     input['volume'] = self.volume
+    input['transform'] = self.input_transform
     return pickle.dumps(input)
 
   def useProcessOutput(self, processOutput):
     logging.info("LivePredictionProcess.useProcessOutput")
     try:
       output = pickle.loads(processOutput)
-      logging.info("  Prediction shape: {}".format(output['prediction'].shape))
       self.output = output
     except EOFError:
       print(processOutput)
@@ -269,6 +275,7 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   INPUT_IMAGE = "InputImage"
   OUTPUT_IMAGE = "OutputImage"
+  OUTPUT_TRANSFORM = "OutputTransform"
   AI_MODEL_FULLPATH = "AiModelFullpath"
   LAST_AI_MODEL_PATH_SETTING = "SegmentationUNet/LastAiModelPath"
   USE_SEPARATE_PROCESS = "UseSeparateProcess"
@@ -325,8 +332,14 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if outputImageNode is None:
       paramterNode.SetNodeReferenceID(self.OUTPUT_IMAGE, None)
       return
-
     paramterNode.SetNodeReferenceID(self.OUTPUT_IMAGE, outputImageNode.GetID())
+
+  def setOutputTransform(self, selectedNode):
+    parameterNode = self.getParameterNode()
+    if selectedNode is None:
+      parameterNode.SetNodeReferenceID(self.OUTPUT_TRANSFORM, None)
+      return
+    parameterNode.SetNodeReferenceID(self.OUTPUT_TRANSFORM, selectedNode.GetID())
 
   def setModelPath(self, modelFullpath):
     """
@@ -335,11 +348,9 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     :return: None
     """
     parameterNode = self.getParameterNode()
-
     if modelFullpath == "" or modelFullpath is None:
       parameterNode.SetParameter(self.AI_MODEL_FULLPATH, "")
       return
-
     parameterNode.SetParameter(self.AI_MODEL_FULLPATH, modelFullpath)
 
     try:
@@ -415,8 +426,10 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.livePredictionProcess.useProcessOutput(stdout)
     output_array = self.livePredictionProcess.output['prediction']
     predictionVolumeNode = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
-    # logging.info("Received array of shape: {}".format(output_array.shape))
     slicer.util.updateVolumeFromArray(predictionVolumeNode, output_array.astype(np.uint8)[np.newaxis, ...])
+    outputTransformNode = parameterNode.GetNodeReference(self.OUTPUT_TRANSFORM)
+    if outputTransformNode is not None:
+      slicer.util.updateTransformMatrixFromArray(outputTransformNode, self.livePredictionProcess.output['transform'])
 
   def getUseProcess(self):
     parameterNode = self.getParameterNode()
@@ -437,16 +450,25 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     logging.info("logic.onInputNodeModified")
     useProcesses = self.getUseProcess()
     if useProcesses:
-      self.updatePreditionOnProcess()
+      self.updatePredictionOnProcess()
     else:
       self.updatePrecitionOnMain()
 
-  def updatePreditionOnProcess(self):
+  def updatePredictionOnProcess(self):
     logging.info("logic.updatePreditionOnProcess")
     parameterNode = self.getParameterNode()
     inputImageNode = parameterNode.GetNodeReference(self.INPUT_IMAGE)
     input_array = slicer.util.array(inputImageNode.GetID())
     self.livePredictionProcess.volume = input_array
+
+    imageTransformNode = inputImageNode.GetParentTransformNode()
+    if imageTransformNode is not None:
+      inputTransformMatrix = vtk.vtkMatrix4x4()
+      imageTransformNode.GetMatrixTransformToWorld(inputTransformMatrix)
+      self.livePredictionProcess.input_transform = slicer.util.arrayFromVTKMatrix(inputTransformMatrix)
+    else:
+      self.livePredictionProcess.input_transform = np.identity(4)
+
     self.livePredictionProcess.onStarted()
 
   def updatePrecitionOnMain(self):
