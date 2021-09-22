@@ -56,9 +56,6 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.inputModifiedObserverTag = None
 
-    self.apply_logarithmic_transformation = True
-    self.logarithmic_transformation_decimals = 4
-
     self._updatingGUIFromParameterNode = False
 
   def setup(self):
@@ -286,6 +283,8 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.model_to_slicer_scaling_y = 1.0
 
     self.unet_model = None
+    self.apply_logarithmic_transformation = True
+    self.logarithmic_transformation_decimals = 4
 
     self.livePredictionProcess = None
     self.inputModifiedObserverTag = None
@@ -477,7 +476,8 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                                                prefilter=False, order=1)
     upscaled_output_array = np.clip(upscaled_output_array, 0, 255).astype(np.uint8)
 
-    slicer.util.updateVolumeFromArray(self.outputImageNode, upscaled_output_array.astype(np.uint8)[np.newaxis, ...])
+    outputImageNode = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
+    slicer.util.updateVolumeFromArray(outputImageNode, upscaled_output_array.astype(np.uint8)[np.newaxis, ...])
 
 
 #
