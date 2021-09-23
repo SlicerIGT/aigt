@@ -6,43 +6,55 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>294</width>
-    <height>304</height>
+    <width>372</width>
+    <height>469</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="qMRMLNodeComboBox" name="parameterNodeSelector">
-     <property name="toolTip">
-      <string>Pick node to store parameter set</string>
-     </property>
-     <property name="nodeTypes">
-      <stringlist>
-       <string>vtkMRMLScriptedModuleNode</string>
-      </stringlist>
-     </property>
-     <property name="showHidden">
-      <bool>true</bool>
-     </property>
-     <property name="baseName">
-      <string>SegmentationUNet</string>
-     </property>
-     <property name="renameEnabled">
-      <bool>true</bool>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QLabel" name="parameterSetLabel">
+    <widget class="ctkCollapsibleButton" name="CollapsibleButton">
      <property name="text">
-      <string>Paremeter set: </string>
+      <string>Module node</string>
      </property>
+     <property name="checked">
+      <bool>false</bool>
+     </property>
+     <layout class="QFormLayout" name="formLayout_3">
+      <item row="0" column="0">
+       <widget class="QLabel" name="parameterSetLabel">
+        <property name="text">
+         <string>Paremeter set: </string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="qMRMLNodeComboBox" name="parameterNodeSelector">
+        <property name="toolTip">
+         <string>Pick node to store parameter set</string>
+        </property>
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLScriptedModuleNode</string>
+         </stringlist>
+        </property>
+        <property name="showHidden">
+         <bool>true</bool>
+        </property>
+        <property name="baseName">
+         <string>SegmentationUNet</string>
+        </property>
+        <property name="renameEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
     <widget class="ctkCollapsibleButton" name="basicCollapsibleButton">
      <property name="text">
-      <string>Thresholding</string>
+      <string>Input/output</string>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
       <item row="0" column="0">
@@ -56,6 +68,12 @@
        <widget class="ctkPathLineEdit" name="modelPathLineEdit">
         <property name="filters">
          <set>ctkPathLineEdit::Files|ctkPathLineEdit::NoDot|ctkPathLineEdit::NoDotDot|ctkPathLineEdit::Readable</set>
+        </property>
+        <property name="sizeAdjustPolicy">
+         <enum>ctkPathLineEdit::AdjustToMinimumContentsLength</enum>
+        </property>
+        <property name="minimumContentsLength">
+         <number>32</number>
         </property>
        </widget>
       </item>
@@ -121,22 +139,62 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="0">
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="optionalCollapsibleButton">
+     <property name="text">
+      <string>Optional parameters</string>
+     </property>
+     <layout class="QFormLayout" name="formLayout">
+      <item row="0" column="0">
        <widget class="QLabel" name="label_3">
         <property name="text">
          <string>Prediction transform:</string>
         </property>
        </widget>
       </item>
-      <item row="3" column="1">
+      <item row="0" column="1">
        <widget class="qMRMLNodeComboBox" name="outputTransformComboBox">
         <property name="nodeTypes">
          <stringlist>
           <string>vtkMRMLLinearTransformNode</string>
          </stringlist>
         </property>
+        <property name="noneEnabled">
+         <bool>true</bool>
+        </property>
         <property name="renameEnabled">
          <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>Wait for node to update:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="qMRMLNodeComboBox" name="waitForNodeComboBox">
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLNode</string>
+         </stringlist>
+        </property>
+        <property name="noneEnabled">
+         <bool>true</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="selectNodeUponCreation">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -146,7 +204,7 @@
    <item>
     <widget class="QCheckBox" name="processCheckBox">
      <property name="text">
-      <string>Use separate process</string>
+      <string>Use separate process for prediction</string>
      </property>
     </widget>
    </item>
@@ -275,6 +333,22 @@
     <hint type="destinationlabel">
      <x>200</x>
      <y>154</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>SegmentationUNet</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>waitForNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>185</x>
+     <y>234</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>248</x>
+     <y>240</y>
     </hint>
    </hints>
   </connection>

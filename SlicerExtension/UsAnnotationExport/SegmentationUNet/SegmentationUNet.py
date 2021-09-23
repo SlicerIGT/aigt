@@ -25,10 +25,10 @@ class SegmentationUNet(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "SegmentationUNet"  # TODO: make this more human readable by adding spaces
-    self.parent.categories = ["Ultrasound"]  # TODO: set categories (folders where the module shows up in the module selector)
+    self.parent.title = "Segmentation UNet"
+    self.parent.categories = ["Ultrasound"]
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Tamas Ungi (Queen's University)"]
     self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
 It performs a simple thresholding on the input volume and optionally captures a screenshot.
@@ -37,7 +37,7 @@ It performs a simple thresholding on the input volume and optionally captures a 
     self.parent.acknowledgementText = """
 This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc.
 and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
-"""  # TODO: replace with organization, grant and thanks.
+"""
 
 #
 # SegmentationUNetWidget
@@ -89,6 +89,7 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.modelPathLineEdit.setCurrentPath(lastModelPath)
     self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputImageSelected)
     self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputImageSelected)
+    self.ui.waitForNodeComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.onWaitForNodeSelected)
     self.ui.outputTransformComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputTransformSelected)
     self.ui.processCheckBox.connect("toggled(bool)", self.onProcessToggled)
 
@@ -112,6 +113,9 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onOutputTransformSelected(self, selectedNode):
     self.logic.setOutputTransform(selectedNode)
+
+  def onWaitForNodeSelected(self, selectedNode):
+    self.logic.setWaitForNode(selectedNode)
 
   def onProcessToggled(self, checked):
     self._parameterNode.SetParameter(self.logic.USE_SEPARATE_PROCESS, "True" if checked else "False")
@@ -276,6 +280,7 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   INPUT_IMAGE = "InputImage"
   OUTPUT_IMAGE = "OutputImage"
   OUTPUT_TRANSFORM = "OutputTransform"
+  WAIT_FOR_NODE = "WaitForNode"
   AI_MODEL_FULLPATH = "AiModelFullpath"
   LAST_AI_MODEL_PATH_SETTING = "SegmentationUNet/LastAiModelPath"
   USE_SEPARATE_PROCESS = "UseSeparateProcess"
@@ -296,6 +301,8 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.livePredictionProcess = None
     self.inputModifiedObserverTag = None
 
+    self.waitForNodeLastMTime = 0
+
   def setDefaultParameters(self, parameterNode):
     if not parameterNode.GetParameter("Threshold"):
       parameterNode.SetParameter("Threshold", "50.0")
@@ -303,6 +310,14 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetParameter("Invert", "false")
     if not parameterNode.GetParameter(self.USE_SEPARATE_PROCESS):
       parameterNode.SetParameter(self.USE_SEPARATE_PROCESS, "True")
+
+  def setWaitForNode(self, selectedNode):
+    parameterNode = self.getParameterNode()
+    if selectedNode is None:
+      parameterNode.SetNodeReferenceID(self.WAIT_FOR_NODE, None)
+    else:
+      parameterNode.SetNodeReferenceID(self.WAIT_FOR_NODE, selectedNode.GetID())
+    self.waitForNodeLastMTime = 0  # Use output in first round
 
   def setInputImage(self, inputImageNode):
     """
@@ -424,6 +439,17 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     stdout = self.livePredictionProcess.readAllStandardOutput().data()
     self.livePredictionProcess.useProcessOutput(stdout)
+
+    # Check if we need to wait for node to be updated
+    waitForNode = parameterNode.GetNodeReference(self.WAIT_FOR_NODE)
+    if waitForNode is not None:
+      currentMTime = waitForNode.GetMTime()
+      if currentMTime <= self.waitForNodeLastMTime:
+        logging.info("Skipping prediction, waiting for node to update")
+        return
+      else:
+        self.waitForNodeLastMTime = currentMTime
+
     output_array = self.livePredictionProcess.output['prediction']
     predictionVolumeNode = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
     slicer.util.updateVolumeFromArray(predictionVolumeNode, output_array.astype(np.uint8)[np.newaxis, ...])
@@ -500,6 +526,16 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
     outputImageNode = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
     slicer.util.updateVolumeFromArray(outputImageNode, upscaled_output_array.astype(np.uint8)[np.newaxis, ...])
+
+    # Update output transform, just to be compatible with running separate process
+
+    inputImageNode = parameterNode.GetNodeReference(self.INPUT_IMAGE)
+    imageTransformNode = inputImageNode.GetParentTransformNode()
+    outputTransformNode = parameterNode.GetNodeReference(self.OUTPUT_TRANSFORM)
+    if imageTransformNode is not None and outputTransformNode is not None:
+      inputTransformMatrix = vtk.vtkMatrix4x4()
+      imageTransformNode.GetMatrixTransformToWorld(inputTransformMatrix)
+      outputTransformNode.SetMatrixTransformToParent(inputTransformMatrix)
 
 
 #
