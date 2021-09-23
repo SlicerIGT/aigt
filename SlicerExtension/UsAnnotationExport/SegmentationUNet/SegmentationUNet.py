@@ -80,11 +80,11 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # Create a new parameterNode (it stores user's node and parameter values choices in the scene)
     self.logic = SegmentationUNetLogic()
 
-    self.ui.parameterNodeSelector.addAttribute("vtkMRMLScriptedModuleNode", "ModuleName", self.moduleName)
     self.setParameterNode(self.logic.getParameterNode())
 
     # Connections
-    self.ui.parameterNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.setParameterNode)
+
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndImportEvent, self.onSceneImportEnd)
 
     self.ui.modelPathLineEdit.connect("currentPathChanged(QString)", self.onModelSelected)
     lastModelPath = self.logic.getLastModelPath()
@@ -99,6 +99,10 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Initial GUI update
     self.updateGUIFromParameterNode()
+
+  def onSceneImportEnd(self, caller, event):
+    parameterNode = self.logic.getParameterNode()
+    parameterNode.Modified()
 
   def enter(self):
     slicer.util.setApplicationLogoVisible(False)
@@ -136,9 +140,9 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     if inputParameterNode:
       self.logic.setDefaultParameters(inputParameterNode)
-    wasBlocked = self.ui.parameterNodeSelector.blockSignals(True)
-    self.ui.parameterNodeSelector.setCurrentNode(inputParameterNode)
-    self.ui.parameterNodeSelector.blockSignals(wasBlocked)
+    # wasBlocked = self.ui.parameterNodeSelector.blockSignals(True)
+    # self.ui.parameterNodeSelector.setCurrentNode(inputParameterNode)
+    # self.ui.parameterNodeSelector.blockSignals(wasBlocked)
     if inputParameterNode == self._parameterNode:
       return
     if self._parameterNode is not None:
@@ -165,7 +169,9 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Update each widget from parameter node
 
-    self.ui.parameterNodeSelector.setCurrentNode(self._parameterNode)
+    # wasBlocked = self.ui.parameterNodeSelector.blockSignals(True)
+    # self.ui.parameterNodeSelector.setCurrentNode(self._parameterNode)
+    # self.ui.parameterNodeSelector.blockSignals(wasBlocked)
 
     self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.INPUT_IMAGE))
     self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.OUTPUT_IMAGE))

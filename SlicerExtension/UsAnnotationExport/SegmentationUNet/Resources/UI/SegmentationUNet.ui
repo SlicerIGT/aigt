@@ -12,46 +12,6 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="ctkCollapsibleButton" name="CollapsibleButton">
-     <property name="text">
-      <string>Module node</string>
-     </property>
-     <property name="checked">
-      <bool>false</bool>
-     </property>
-     <layout class="QFormLayout" name="formLayout_3">
-      <item row="0" column="0">
-       <widget class="QLabel" name="parameterSetLabel">
-        <property name="text">
-         <string>Paremeter set: </string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="qMRMLNodeComboBox" name="parameterNodeSelector">
-        <property name="toolTip">
-         <string>Pick node to store parameter set</string>
-        </property>
-        <property name="nodeTypes">
-         <stringlist>
-          <string>vtkMRMLScriptedModuleNode</string>
-         </stringlist>
-        </property>
-        <property name="showHidden">
-         <bool>true</bool>
-        </property>
-        <property name="baseName">
-         <string>SegmentationUNet</string>
-        </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
     <widget class="ctkCollapsibleButton" name="basicCollapsibleButton">
      <property name="text">
       <string>Input/output</string>
@@ -273,22 +233,6 @@
     <hint type="destinationlabel">
      <x>93</x>
      <y>89</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>SegmentationUNet</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>parameterNodeSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>28</x>
-     <y>267</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>192</x>
-     <y>18</y>
     </hint>
    </hints>
   </connection>
