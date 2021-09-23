@@ -30,7 +30,7 @@ class SegmentationUNet(ScriptedLoadableModule):
     self.parent.title = "Segmentation UNet"
     self.parent.categories = ["Ultrasound"]
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["Tamas Ungi (Queen's University)"]
+    self.parent.contributors = ["Tamas Ungi (Queen's University), Zac Baum (UCL)"]
     self.parent.helpText = """Computes ultrasound segmentation prediction using UNet in real time."""
     self.parent.helpText += self.getDefaultModuleDocumentationLink()  # TODO: verify that the default URL is correct or change it to the actual documentation
     self.parent.acknowledgementText = """
@@ -515,12 +515,16 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       else:
         self.waitForNodeLastMTime = currentMTime
 
-    output_array = self.livePredictionProcess.output['prediction']
-    predictionVolumeNode = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
-    slicer.util.updateVolumeFromArray(predictionVolumeNode, output_array.astype(np.uint8)[np.newaxis, ...])
-    outputTransformNode = parameterNode.GetNodeReference(self.OUTPUT_TRANSFORM)
-    if outputTransformNode is not None:
-      slicer.util.updateTransformMatrixFromArray(outputTransformNode, self.livePredictionProcess.output['transform'])
+    try:
+      slicer.app.pauseRender()
+      output_array = self.livePredictionProcess.output['prediction']
+      predictionVolumeNode = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
+      slicer.util.updateVolumeFromArray(predictionVolumeNode, output_array.astype(np.uint8)[np.newaxis, ...])
+      outputTransformNode = parameterNode.GetNodeReference(self.OUTPUT_TRANSFORM)
+      if outputTransformNode is not None:
+        slicer.util.updateTransformMatrixFromArray(outputTransformNode, self.livePredictionProcess.output['transform'])
+    finally:
+      slicer.app.resumeRender()
 
   def getPredictionActive(self):
     """
