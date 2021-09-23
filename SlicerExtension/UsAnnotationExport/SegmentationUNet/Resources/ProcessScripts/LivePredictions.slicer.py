@@ -26,7 +26,7 @@ def resizeInputArray(input_array):
         int(input_array.width * slicer_to_model_scaling[0]),
         int(input_array.height * slicer_to_model_scaling[1]),
       ),
-      resample=Image.BICUBIC
+      resample=Image.BILINEAR
     )
   )
   resized_input_array = np.flip(resized_input_array, axis=0)
@@ -51,7 +51,7 @@ def resizeOutputArray(y):
         int(output_array.width * model_to_slicer_scaling[0]),
         int(output_array.height * model_to_slicer_scaling[1]),
       ),
-      resample=Image.BICUBIC,
+      resample=Image.BILINEAR,
     )
   )
   upscaled_output_array = upscaled_output_array * 255
