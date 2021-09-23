@@ -3,6 +3,8 @@ import unittest
 import logging
 import numpy as np
 import scipy.ndimage
+import time
+from PIL import Image
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -29,10 +31,7 @@ class SegmentationUNet(ScriptedLoadableModule):
     self.parent.categories = ["Ultrasound"]
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
     self.parent.contributors = ["Tamas Ungi (Queen's University)"]
-    self.parent.helpText = """
-This is an example of scripted loadable module bundled in an extension.
-It performs a simple thresholding on the input volume and optionally captures a screenshot.
-"""  # TODO: update with short description of the module
+    self.parent.helpText = """Computes ultrasound segmentation prediction using UNet in real time."""
     self.parent.helpText += self.getDefaultModuleDocumentationLink()  # TODO: verify that the default URL is correct or change it to the actual documentation
     self.parent.acknowledgementText = """
 This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc.
@@ -55,6 +54,10 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self._parameterNode = None
 
     self.inputModifiedObserverTag = None
+
+    self.outputImageNode = None  # For observation
+    self.lastFpsUpdateTime = 0  # To prevent too fast (hard to see) label update on GUI
+    self.fpsLabelCooldown_s = 0.5
 
     self._updatingGUIFromParameterNode = False
 
@@ -89,7 +92,6 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.modelPathLineEdit.setCurrentPath(lastModelPath)
     self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputImageSelected)
     self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputImageSelected)
-    self.ui.waitForNodeComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.onWaitForNodeSelected)
     self.ui.outputTransformComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputTransformSelected)
     self.ui.processCheckBox.connect("toggled(bool)", self.onProcessToggled)
 
@@ -113,9 +115,6 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onOutputTransformSelected(self, selectedNode):
     self.logic.setOutputTransform(selectedNode)
-
-  def onWaitForNodeSelected(self, selectedNode):
-    self.logic.setWaitForNode(selectedNode)
 
   def onProcessToggled(self, checked):
     self._parameterNode.SetParameter(self.logic.USE_SEPARATE_PROCESS, "True" if checked else "False")
@@ -166,9 +165,14 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # Update each widget from parameter node
 
+    self.ui.parameterNodeSelector.setCurrentNode(self._parameterNode)
+
     self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.INPUT_IMAGE))
     self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.OUTPUT_IMAGE))
+    self.ui.outputTransformComboBox.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.OUTPUT_TRANSFORM))
+
     self.ui.processCheckBox.checked = (self._parameterNode.GetParameter(self.logic.USE_SEPARATE_PROCESS).lower() == "true")
+    self.ui.applyButton.checked = self.logic.getPredictionActive()
 
     # Update buttons states and tooltips
 
@@ -178,6 +182,20 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.applyButton.toolTip = "Select input and output volume nodes"
 
     self._updatingGUIFromParameterNode = False
+
+  def onOutputModified(self, caller, event):
+    """
+    Updates status label text.
+    :param caller:
+    :param event:
+    :return: None
+    """
+    if self.ui.applyButton.checked == True:
+      if (time.time() - self.lastFpsUpdateTime) >= self.fpsLabelCooldown_s:
+        self.ui.feedbackLabel.text = "Prediction running at {:.1f} FPS".format(self.logic.getFps())
+        self.lastFpsUpdateTime = time.time()
+    else:
+      self.ui.feedbackLabel.text = "Prediction stopped"
 
   def onApplyButton(self, toggled):
     """
@@ -209,8 +227,19 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     try:
       if toggled:
         self.ui.processCheckBox.enabled = False
+        self.ui.inputSelector.enabled = False
+        self.ui.outputSelector.enabled = False
+        self.ui.outputTransformComboBox.enabled = False
+        self.addObserver(self.outputImageNode, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onOutputModified)
+        self.ui.feedbackLabel.text = "Prediction starting"
       else:
+        self.removeObserver(self.outputImageNode, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onOutputModified)
         self.ui.processCheckBox.enabled = True
+        self.ui.inputSelector.enabled = True
+        self.ui.outputSelector.enabled = True
+        self.ui.outputTransformComboBox.enabled = True
+        self.ui.feedbackLabel.text = "Prediction stopped"
+
       self.logic.setRealTimePrediction(toggled)
     except Exception as e:
       slicer.util.errorDisplay("Failed to start live segmentation: "+str(e))
@@ -245,7 +274,6 @@ class LivePredictionProcess(Process):
     self.write(input)  # Write the pickled inputs for the model
 
   def prepareProcessInput(self):
-    # logging.info("LivePredictionProcess.prepareProcessInput")
     input = {}
     input['model_path'] = self.model_path
     input['volume'] = self.volume
@@ -253,7 +281,6 @@ class LivePredictionProcess(Process):
     return pickle.dumps(input)
 
   def useProcessOutput(self, processOutput):
-    logging.info("LivePredictionProcess.useProcessOutput")
     try:
       output = pickle.loads(processOutput)
       self.output = output
@@ -280,7 +307,9 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
   INPUT_IMAGE = "InputImage"
   OUTPUT_IMAGE = "OutputImage"
   OUTPUT_TRANSFORM = "OutputTransform"
-  WAIT_FOR_NODE = "WaitForNode"
+  OUTPUT_FPS = "OutputFps"
+  PREDICTION_ACTIVE = "PredictionActive"
+  WAIT_FOR_NODE = "WaitForNode"  # Experimental idea: drop predictions until e.g. volume reconstruction output is updated
   AI_MODEL_FULLPATH = "AiModelFullpath"
   LAST_AI_MODEL_PATH_SETTING = "SegmentationUNet/LastAiModelPath"
   USE_SEPARATE_PROCESS = "UseSeparateProcess"
@@ -289,10 +318,8 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     ScriptedLoadableModuleLogic.__init__(self)
     VTKObservationMixin.__init__(self)
 
-    self.slicer_to_model_scaling_x = 1.0
-    self.slicer_to_model_scaling_y = 1.0
-    self.model_to_slicer_scaling_x = 1.0
-    self.model_to_slicer_scaling_y = 1.0
+    self.slicer_to_model_scaling = None
+    self.model_to_slicer_scaling = None
 
     self.unet_model = None
     self.apply_logarithmic_transformation = True
@@ -301,15 +328,17 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.livePredictionProcess = None
     self.inputModifiedObserverTag = None
 
+    self.outputLastTime_s = 0
+    self.fpsBuffer = np.zeros(5)
     self.waitForNodeLastMTime = 0
 
   def setDefaultParameters(self, parameterNode):
-    if not parameterNode.GetParameter("Threshold"):
-      parameterNode.SetParameter("Threshold", "50.0")
-    if not parameterNode.GetParameter("Invert"):
-      parameterNode.SetParameter("Invert", "false")
     if not parameterNode.GetParameter(self.USE_SEPARATE_PROCESS):
       parameterNode.SetParameter(self.USE_SEPARATE_PROCESS, "True")
+    if not parameterNode.GetParameter(self.OUTPUT_FPS):
+      parameterNode.SetParameter(self.OUTPUT_FPS, "0.0")
+    if not parameterNode.GetParameter(self.PREDICTION_ACTIVE):
+      parameterNode.SetParameter(self.PREDICTION_ACTIVE, "False")
 
   def setWaitForNode(self, selectedNode):
     parameterNode = self.getParameterNode()
@@ -331,11 +360,6 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       return
 
     parameterNode.SetNodeReferenceID(self.INPUT_IMAGE, inputImageNode.GetID())
-    input_array = slicer.util.array(inputImageNode.GetID())
-    self.slicer_to_model_scaling_x = self.unet_model.layers[0].input_shape[0][1] / input_array.shape[1]
-    self.slicer_to_model_scaling_y = self.unet_model.layers[0].input_shape[0][2] / input_array.shape[2]
-    self.model_to_slicer_scaling_x = input_array.shape[1] / self.unet_model.layers[0].input_shape[0][1]
-    self.model_to_slicer_scaling_y = input_array.shape[2] / self.unet_model.layers[0].input_shape[0][2]
 
   def setOutputImage(self, outputImageNode):
     """
@@ -406,8 +430,36 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
   def setRealTimePrediction(self, toggled):
     inputImageNode = self.getParameterNode().GetNodeReference(self.INPUT_IMAGE)
+    if inputImageNode is None:
+      logging.error("Cannot start live prediction, input image not specified")
+      return
+
+    if self.unet_model is None:
+      logging.error("Cannot start live prediction, AI model is missing")
+      return
+
     if toggled == True:
-      logging.info("Staring live segmentation")
+
+      # Determine resize factors
+
+      input_array = slicer.util.array(inputImageNode.GetID())
+      input_array = input_array[0, :, :]
+
+      for layer in self.unet_model.layers:
+        if 'input' in layer.name:
+          model_input_shape = layer.input_shape[0]
+
+      self.slicer_to_model_scaling = (
+        model_input_shape[1] / input_array.shape[0],  # skip batch for input, get 0th for image
+        model_input_shape[2] / input_array.shape[1],  # skip batch for input, get 1st for image
+      )
+      self.model_to_slicer_scaling = (
+        input_array.shape[0] / model_input_shape[1],
+        input_array.shape[1] / model_input_shape[2],
+      )
+
+      # Start observing input image
+
       useProcess = self.getUseProcess()
       if useProcess:
         logging.info("Starting separate process for prediction")
@@ -431,6 +483,16 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       self.livePredictionProcess.close()
       self.livePredictionProcess = None
 
+  def updateOutputFps(self):
+    """Call this function exactly once per every output prediction generated."""
+    currentTime_s = time.time()
+    lapsedTime_s = currentTime_s - self.outputLastTime_s
+    if self.outputLastTime_s != 0 and lapsedTime_s != 0:
+      currentFps = 1.0 / lapsedTime_s
+      self.fpsBuffer = np.roll(self.fpsBuffer, 1)
+      self.fpsBuffer[0] = currentFps
+    self.outputLastTime_s = currentTime_s
+
   def processOutputReady(self):
     """
     Callback to receive prediction and update volume in Slicer.
@@ -440,7 +502,10 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     stdout = self.livePredictionProcess.readAllStandardOutput().data()
     self.livePredictionProcess.useProcessOutput(stdout)
 
-    # Check if we need to wait for node to be updated
+    self.updateOutputFps()  # Update FPS data
+
+    # Experimental: Check if we need to wait for node to be updated
+
     waitForNode = parameterNode.GetNodeReference(self.WAIT_FOR_NODE)
     if waitForNode is not None:
       currentMTime = waitForNode.GetMTime()
@@ -457,6 +522,17 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     if outputTransformNode is not None:
       slicer.util.updateTransformMatrixFromArray(outputTransformNode, self.livePredictionProcess.output['transform'])
 
+  def getPredictionActive(self):
+    """
+    Returns the state of prediction.
+    :return: bool, True for live prediction, False for paused state
+    """
+    parameterNode = self.getParameterNode()
+    if parameterNode.GetParameter(self.PREDICTION_ACTIVE).lower() == "true":
+      return True
+    else:
+      return False
+
   def getUseProcess(self):
     parameterNode = self.getParameterNode()
     useProcessStr = parameterNode.GetParameter(self.USE_SEPARATE_PROCESS)
@@ -464,6 +540,13 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       return False
     else:
       return True
+
+  def getFps(self):
+    """
+    Returns the average FPS across the last three outputs.
+    :return: float, FPS frame/seconds
+    """
+    return np.mean(self.fpsBuffer)
 
   def getLastModelPath(self):
     return slicer.util.settingsValue(self.LAST_AI_MODEL_PATH_SETTING, None)
@@ -473,7 +556,6 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     Callback function for input image modified event.
     :returns: None
     """
-    logging.info("logic.onInputNodeModified")
     useProcesses = self.getUseProcess()
     if useProcesses:
       self.updatePredictionOnProcess()
@@ -481,7 +563,6 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       self.updatePrecitionOnMain()
 
   def updatePredictionOnProcess(self):
-    logging.info("logic.updatePreditionOnProcess")
     parameterNode = self.getParameterNode()
     inputImageNode = parameterNode.GetNodeReference(self.INPUT_IMAGE)
     input_array = slicer.util.array(inputImageNode.GetID())
@@ -501,28 +582,45 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     inputImageNode = parameterNode.GetNodeReference(self.INPUT_IMAGE)
     input_array = slicer.util.array(inputImageNode.GetID())
+    logging.info("Input array shape: {}".format(input_array.shape))
 
-    resized_input_array = scipy.ndimage.zoom(input_array[0, :, :],
-                                             (self.slicer_to_model_scaling_x, self.slicer_to_model_scaling_y),
-                                             prefilter=False, order=1)
-    resized_input_array = np.flip(resized_input_array, axis=1)
-    # resized_input_array = resized_input_array / resized_input_array.max()  # Scaling intensity to 0-1
-    resized_input_array = resized_input_array / 256.0
-    resized_input_array = np.expand_dims(resized_input_array, axis=0)
+    input_array = Image.fromarray(input_array[0, :, :])
+    resized_input_array = np.array(
+      input_array.resize(
+        (
+          int(input_array.width * self.slicer_to_model_scaling[0]),
+          int(input_array.height * self.slicer_to_model_scaling[1]),
+        ),
+        resample=Image.BILINEAR
+      )
+    )
+    resized_input_array = np.flip(resized_input_array, axis=0)
+    resized_input_array = resized_input_array / resized_input_array.max()  # Scaling intensity to 0-1
+    resized_input_array = np.expand_dims(resized_input_array, axis=0)  # Add Batch dimension
     resized_input_array = np.expand_dims(resized_input_array, axis=3)
 
     y = self.unet_model.predict(resized_input_array)
-    y = y[:, :, :, 1]
-    if self.apply_logarithmic_transformation:
-      e = self.logarithmic_transformation_decimals
-      y = np.log10(np.clip(y, 10 ** (-e), 1.0) * (10 ** e)) / e
-    y = np.flip(y, axis=2)
-    y = y * 255
 
-    upscaled_output_array = scipy.ndimage.zoom(y[0, :, :],
-                                               (self.model_to_slicer_scaling_x, self.model_to_slicer_scaling_y),
-                                               prefilter=False, order=1)
-    upscaled_output_array = np.clip(upscaled_output_array, 0, 255).astype(np.uint8)
+    output_array = y[0, :, :, 1]
+    output_array = np.flip(output_array, axis=0)
+
+    apply_logarithmic_transformation = True
+    logarithmic_transformation_decimals = 4
+    if apply_logarithmic_transformation:
+      e = logarithmic_transformation_decimals
+      output_array = np.log10(np.clip(output_array, 10 ** (-e), 1.0) * (10 ** e)) / e
+    output_array = Image.fromarray(output_array)
+    upscaled_output_array = np.array(
+      output_array.resize(
+        (
+          int(output_array.width * self.model_to_slicer_scaling[0]),
+          int(output_array.height * self.model_to_slicer_scaling[1]),
+        ),
+        resample=Image.BILINEAR,
+      )
+    )
+    upscaled_output_array = upscaled_output_array * 255
+    upscaled_output_array = np.clip(upscaled_output_array, 0, 255)
 
     outputImageNode = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
     slicer.util.updateVolumeFromArray(outputImageNode, upscaled_output_array.astype(np.uint8)[np.newaxis, ...])
@@ -536,6 +634,8 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       inputTransformMatrix = vtk.vtkMatrix4x4()
       imageTransformNode.GetMatrixTransformToWorld(inputTransformMatrix)
       outputTransformNode.SetMatrixTransformToParent(inputTransformMatrix)
+
+    self.updateOutputFps()  # Update FPS data
 
 
 #
