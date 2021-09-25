@@ -10,7 +10,12 @@ from tensorflow.keras.models import load_model
 ACTIVE = bytes([1])
 NOT_ACTIVE = bytes([0])
 
-f = open(r"c:\Data\LivePredictionsLog.txt", "a")
+# While debigging this script, you may add a convenient full path to the log file name to find it easily.
+# Otherwise, find the log file in your Slicer binaries installation folder.
+# Here is an example how to print debug info in the log file:
+# f.write("resizeInputArray, input_array shape: {}\n".format(input_array.shape))
+
+f = open(r"LivePredictionsLog.txt", "a") 
 
 def resizeInputArray(input_array):
   """
@@ -18,17 +23,17 @@ def resizeInputArray(input_array):
   :param input_array: np.array
   :return: np.array resized and rescaled for AI model
   """
-  # f.write("resizeInputArray, input_array shape: {}\n".format(input_array.shape))
   input_array = Image.fromarray(input_array)
   resized_input_array = np.array(
     input_array.resize(
       (
-        int(input_array.width * slicer_to_model_scaling[0]),
-        int(input_array.height * slicer_to_model_scaling[1]),
+        int(input_array.height * slicer_to_model_scaling[0]),
+        int(input_array.width * slicer_to_model_scaling[1]),
       ),
       resample=Image.BILINEAR
     )
   )
+
   resized_input_array = np.flip(resized_input_array, axis=0)
   resized_input_array = resized_input_array / resized_input_array.max()  # Scaling intensity to 0-1
   resized_input_array = np.expand_dims(resized_input_array, axis=0)  # Add Batch dimension
@@ -38,7 +43,6 @@ def resizeInputArray(input_array):
 def resizeOutputArray(y):
   output_array = y[0, :, :, 1]
   output_array = np.flip(output_array, axis=0)
-  # f.write("Output array shape: {}\n".format(output_array.shape))
   apply_logarithmic_transformation = True
   logarithmic_transformation_decimals = 4
   if apply_logarithmic_transformation:
@@ -85,6 +89,9 @@ try:
   for layer in model.layers:
     if 'input' in layer.name:
       model_input_shape = layer.input_shape[0]
+
+  # f.write("model_input_shape:  {}\n".format(str(model_input_shape)))
+  # f.write("input volume shape: {}\n".format(str(input_data['volume'].shape)))
 
   slicer_to_model_scaling = (
       model_input_shape[1] / input_data['volume'].shape[0], # skip batch for input, get 0th for image
