@@ -15,50 +15,50 @@ NOT_ACTIVE = bytes([0])
 # Here is an example how to print debug info in the log file:
 # f.write("resizeInputArray, input_array shape: {}\n".format(input_array.shape))
 
-f = open(r"LivePredictionsLog.txt", "a") 
+f = open(r"LivePredictionsLog.txt", "a")
 
 def resizeInputArray(input_array):
   """
   Resize the image and add it to the current buffer
-  :param input_array: np.array
+  :param input_image: np.array
   :return: np.array resized and rescaled for AI model
   """
-  input_array = Image.fromarray(input_array)
+  input_image = Image.fromarray(input_array)  # PIL.Image knows np.array reverses axes: M -> image.width, F -> image.height
   resized_input_array = np.array(
-    input_array.resize(
+    input_image.resize(
       (
-        int(input_array.height * slicer_to_model_scaling[0]),
-        int(input_array.width * slicer_to_model_scaling[1]),
+        int(input_image.width * slicer_to_model_scaling[1]),  # M direction (width on US machine)
+        int(input_image.height * slicer_to_model_scaling[0]),  # F direction (height on US machine)
       ),
       resample=Image.BILINEAR
     )
   )
 
-  resized_input_array = np.flip(resized_input_array, axis=0)
+  resized_input_array = np.flip(resized_input_array, axis=0)  # We trained on images with opposite sound direction
   resized_input_array = resized_input_array / resized_input_array.max()  # Scaling intensity to 0-1
   resized_input_array = np.expand_dims(resized_input_array, axis=0)  # Add Batch dimension
   resized_input_array = np.expand_dims(resized_input_array, axis=3)  # Add channels last dimension
   return resized_input_array
 
 def resizeOutputArray(y):
-  output_array = y[0, :, :, 1]
-  output_array = np.flip(output_array, axis=0)
+  output_array = y[0, :, :, 1]  # (F, M)
+  output_array = np.flip(output_array, axis=0)  # This flip should match the one in the other resize function
   apply_logarithmic_transformation = True
   logarithmic_transformation_decimals = 4
   if apply_logarithmic_transformation:
     e = logarithmic_transformation_decimals
     output_array = np.log10(np.clip(output_array, 10 ** (-e), 1.0) * (10 ** e)) / e
-  output_array = Image.fromarray(output_array)
+  output_image = Image.fromarray(output_array)  # image.height -> F, image.width -> M
   upscaled_output_array = np.array(
-    output_array.resize(
+    output_image.resize(
       (
-        int(output_array.width * model_to_slicer_scaling[0]),
-        int(output_array.height * model_to_slicer_scaling[1]),
+        int(output_image.width * model_to_slicer_scaling[1]),
+        int(output_image.height * model_to_slicer_scaling[0]),
       ),
       resample=Image.BILINEAR,
     )
   )
-  upscaled_output_array = upscaled_output_array * 255
+  upscaled_output_array = upscaled_output_array * 255  # (F, M)
   upscaled_output_array = np.clip(upscaled_output_array, 0, 255)
 
   return upscaled_output_array
@@ -76,7 +76,7 @@ try:
     f.close()
     sys.exit()
 
-  input_data = pickle.loads(input_data)
+  input_data = pickle.loads(input_data)  # Axes: (F, M) because slicer.util.array reverses axis order from IJK to KJI
 
   # Load AI model
   # If you are doing Batch Size == 1 predictions, this tends to speed things up (wrapping .call in a @tf.function decorator)
@@ -91,11 +91,11 @@ try:
       model_input_shape = layer.input_shape[0]
 
   # f.write("model_input_shape:  {}\n".format(str(model_input_shape)))
-  # f.write("input volume shape: {}\n".format(str(input_data['volume'].shape)))
+  # f.write("input array (volume) shape: {}\n".format(str(input_data['volume'].shape)))
 
   slicer_to_model_scaling = (
-      model_input_shape[1] / input_data['volume'].shape[0], # skip batch for input, get 0th for image
-      model_input_shape[2] / input_data['volume'].shape[1], # skip batch for input, get 1st for image
+      model_input_shape[1] / input_data['volume'].shape[0], # F image direction
+      model_input_shape[2] / input_data['volume'].shape[1], # M image direction
   )
   model_to_slicer_scaling = (
       input_data['volume'].shape[0] / model_input_shape[1],

@@ -105,11 +105,14 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     parameterNode.Modified()
 
   def enter(self):
-    slicer.util.setApplicationLogoVisible(False)
-    slicer.util.setDataProbeVisible(False)
+    pass
+    # slicer.util.setApplicationLogoVisible(False)
+    # slicer.util.setDataProbeVisible(False)
 
   def exit(self):
-    slicer.util.setDataProbeVisible(True)
+    pass
+    # slicer.util.setApplicationLogoVisible(True)
+    # slicer.util.setDataProbeVisible(True)
 
   def onInputImageSelected(self, selectedNode):
     self.logic.setInputImage(selectedNode)
@@ -272,7 +275,6 @@ class LivePredictionProcess(Process):
     self.active = bytes([1]) if active else bytes([0])
 
   def onStarted(self):
-    # logging.info("LivePredictionProcess.onStarted")
     input = self.prepareProcessInput()
     input_len = len(input).to_bytes(8, byteorder='big')
     self.write(self.active)  # Write if the predictions are still running
@@ -292,7 +294,7 @@ class LivePredictionProcess(Process):
       self.output = output
     except EOFError:
       print(processOutput)
-      logging.info("  EOF error")
+      logging.info("EOFError: Check log text file in Slicer installation folder for error messages logged in process script")
       self.output = None
 
 
@@ -448,16 +450,16 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Determine resize factors
 
-      input_array = slicer.util.array(inputImageNode.GetID())
-      input_array = input_array[0, :, :]
+      input_array = slicer.util.array(inputImageNode.GetID())  # (Z, F, M)
+      input_array = input_array[0, :, :]  # (F, M)
 
       for layer in self.unet_model.layers:
         if 'input' in layer.name:
           model_input_shape = layer.input_shape[0]
 
       self.slicer_to_model_scaling = (
-        model_input_shape[1] / input_array.shape[0],  # skip batch for input, get 0th for image
-        model_input_shape[2] / input_array.shape[1],  # skip batch for input, get 1st for image
+        model_input_shape[1] / input_array.shape[0],  # F direction in image
+        model_input_shape[2] / input_array.shape[1],  # M direction in image
       )
       self.model_to_slicer_scaling = (
         input_array.shape[0] / model_input_shape[1],
@@ -592,39 +594,43 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     parameterNode = self.getParameterNode()
     inputImageNode = parameterNode.GetNodeReference(self.INPUT_IMAGE)
     input_array = slicer.util.array(inputImageNode.GetID())
-    logging.info("Input array shape: {}".format(input_array.shape))
 
-    input_array = Image.fromarray(input_array[0, :, :])
-    resized_input_array = np.array(
-      input_array.resize(
+    # input_array axis directions (Z, F, M):
+    # 1: out of plane = Z
+    # 2: sound direction = F
+    # 3: transducer mark direction = M
+
+    input_image = Image.fromarray(input_array[0, :, :])  # image.width is M, image.height is F
+    resized_input_array = np.array(  # np.array will be (F, M) again, but resize happens in (M, F) axis order
+      input_image.resize(
         (
-          int(input_array.width * self.slicer_to_model_scaling[0]),
-          int(input_array.height * self.slicer_to_model_scaling[1]),
+          int(input_image.width * self.slicer_to_model_scaling[1]),  # M direction (width on US machine)
+          int(input_image.height * self.slicer_to_model_scaling[0]),  # F direction (height on US machine)
         ),
         resample=Image.BILINEAR
       )
     )
-    resized_input_array = np.flip(resized_input_array, axis=0)
+    resized_input_array = np.flip(resized_input_array, axis=0)  # Flip to trained sound direction
     resized_input_array = resized_input_array / resized_input_array.max()  # Scaling intensity to 0-1
     resized_input_array = np.expand_dims(resized_input_array, axis=0)  # Add Batch dimension
     resized_input_array = np.expand_dims(resized_input_array, axis=3)
 
     y = self.unet_model.predict(resized_input_array)
 
-    output_array = y[0, :, :, 1]
-    output_array = np.flip(output_array, axis=0)
+    output_array = y[0, :, :, 1]  # Remove batch dimension (F, M)
+    output_array = np.flip(output_array, axis=0)  # Flip back to match input sound direction
 
     apply_logarithmic_transformation = True
     logarithmic_transformation_decimals = 4
     if apply_logarithmic_transformation:
       e = logarithmic_transformation_decimals
       output_array = np.log10(np.clip(output_array, 10 ** (-e), 1.0) * (10 ** e)) / e
-    output_array = Image.fromarray(output_array)
+    output_image = Image.fromarray(output_array)  # F -> height, M -> width
     upscaled_output_array = np.array(
-      output_array.resize(
+      output_image.resize(
         (
-          int(output_array.width * self.model_to_slicer_scaling[0]),
-          int(output_array.height * self.model_to_slicer_scaling[1]),
+          int(output_image.width * self.model_to_slicer_scaling[1]),
+          int(output_image.height * self.model_to_slicer_scaling[0]),
         ),
         resample=Image.BILINEAR,
       )
