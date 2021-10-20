@@ -6,43 +6,15 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>294</width>
-    <height>304</height>
+    <width>372</width>
+    <height>469</height>
    </rect>
   </property>
-  <layout class="QFormLayout" name="formLayout">
-   <item row="0" column="0">
-    <widget class="QLabel" name="parameterSetLabel">
-     <property name="text">
-      <string>Paremeter set: </string>
-     </property>
-    </widget>
-   </item>
-   <item row="0" column="1">
-    <widget class="qMRMLNodeComboBox" name="parameterNodeSelector">
-     <property name="toolTip">
-      <string>Pick node to store parameter set</string>
-     </property>
-     <property name="nodeTypes">
-      <stringlist>
-       <string>vtkMRMLScriptedModuleNode</string>
-      </stringlist>
-     </property>
-     <property name="showHidden">
-      <bool>true</bool>
-     </property>
-     <property name="baseName">
-      <string>SegmentationUNet</string>
-     </property>
-     <property name="renameEnabled">
-      <bool>true</bool>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="0" colspan="2">
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
     <widget class="ctkCollapsibleButton" name="basicCollapsibleButton">
      <property name="text">
-      <string>Thresholding</string>
+      <string>Input/output</string>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
       <item row="0" column="0">
@@ -57,12 +29,18 @@
         <property name="filters">
          <set>ctkPathLineEdit::Files|ctkPathLineEdit::NoDot|ctkPathLineEdit::NoDotDot|ctkPathLineEdit::Readable</set>
         </property>
+        <property name="sizeAdjustPolicy">
+         <enum>ctkPathLineEdit::AdjustToMinimumContentsLength</enum>
+        </property>
+        <property name="minimumContentsLength">
+         <number>32</number>
+        </property>
        </widget>
       </item>
       <item row="1" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>Input Volume:</string>
+         <string>Input volume:</string>
         </property>
        </widget>
       </item>
@@ -90,7 +68,7 @@
       <item row="2" column="0">
        <widget class="QLabel" name="label_2">
         <property name="text">
-         <string>Prediction Volume:</string>
+         <string>Prediction volume:</string>
         </property>
        </widget>
       </item>
@@ -124,7 +102,45 @@
      </layout>
     </widget>
    </item>
-   <item row="7" column="0" colspan="2">
+   <item>
+    <widget class="ctkCollapsibleButton" name="optionalCollapsibleButton">
+     <property name="text">
+      <string>Optional parameters</string>
+     </property>
+     <layout class="QFormLayout" name="formLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>Prediction transform:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="qMRMLNodeComboBox" name="outputTransformComboBox">
+        <property name="nodeTypes">
+         <stringlist>
+          <string>vtkMRMLLinearTransformNode</string>
+         </stringlist>
+        </property>
+        <property name="noneEnabled">
+         <bool>true</bool>
+        </property>
+        <property name="renameEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="processCheckBox">
+     <property name="text">
+      <string>Use separate process for prediction</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QPushButton" name="applyButton">
      <property name="enabled">
       <bool>true</bool>
@@ -140,14 +156,14 @@
      </property>
     </widget>
    </item>
-   <item row="9" column="0">
+   <item>
     <widget class="QLabel" name="feedbackLabel">
      <property name="text">
       <string/>
      </property>
     </widget>
    </item>
-   <item row="8" column="0">
+   <item>
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -159,13 +175,6 @@
       </size>
      </property>
     </spacer>
-   </item>
-   <item row="6" column="0" colspan="2">
-    <widget class="QCheckBox" name="processCheckBox">
-     <property name="text">
-      <string>Use separate process</string>
-     </property>
-    </widget>
    </item>
   </layout>
  </widget>
@@ -230,16 +239,16 @@
   <connection>
    <sender>SegmentationUNet</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>parameterNodeSelector</receiver>
+   <receiver>outputTransformComboBox</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>28</x>
-     <y>267</y>
+     <x>146</x>
+     <y>151</y>
     </hint>
     <hint type="destinationlabel">
-     <x>192</x>
-     <y>18</y>
+     <x>200</x>
+     <y>154</y>
     </hint>
    </hints>
   </connection>
