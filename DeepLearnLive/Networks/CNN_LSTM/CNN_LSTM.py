@@ -46,9 +46,13 @@ class CNN_LSTM():
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         flipped = cv2.flip(image, 0)
+        newImg = flipped[50:410, 160:640]
+        fullImg = cv2.resize(newImg, (640, 480))
+        #cv2.imshow('fullImage',fullImg)
+        #cv2.waitKey(0)
         labels = ['anesthetic', 'dilator', 'insert_catheter', 'insert_guidewire', 'insert_needle', 'nothing','remove_guidewire', 'scalpel']
         toolLabels = ['anesthetic', 'catheter', 'dilator', 'guidewire','guidewire_casing', 'nothing', 'scalpel', 'syringe']
-        resized = cv2.resize(flipped, (224, 224)) #MobileNet
+        resized = cv2.resize(fullImg, (224, 224)) #MobileNet
         #resized = cv2.resize(image, (299, 299))  #InceptionV3
         normImage = cv2.normalize(resized, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
         normImage = numpy.expand_dims(normImage, axis=0)

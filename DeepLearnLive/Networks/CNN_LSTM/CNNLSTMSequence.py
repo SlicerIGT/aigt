@@ -11,7 +11,7 @@ import random
 
 
 class CNNSequence(Sequence):
-    def __init__(self,datacsv,indexes,batchSize,labelName,gClient = None,tempFileDir = None,shuffle=True,augmentations = True):
+    def __init__(self,datacsv,indexes,batchSize,labelName,gClient = None,tempFileDir = None,shuffle=True,augmentations = False):
         # author Rebecca Hisey
         if "GirderID" in datacsv.columns:
             self.gClient = gClient
@@ -46,22 +46,35 @@ class CNNSequence(Sequence):
         label[labelIndex] = 1
         return label
 
-    def rotateImage(self,image,angle):
+    def rotateImage(self,image,angle = -1):
+        if angle < 0:
+            angle = random.randint(1, 359)
         center = tuple(numpy.array(image.shape[1::-1])/2)
         rot_mat = cv2.getRotationMatrix2D(center,angle,1.0)
         rotImage = cv2.warpAffine(image,rot_mat,image.shape[1::-1],flags=cv2.INTER_LINEAR)
         return rotImage
 
+    def flipImage(self,image,axis):
+        return cv2.flip(image, axis)
+
     def readImage(self,file):
         image = cv2.imread(file)
         try:
+            if "AN01" in file:
+                croppedImg = image[0:320, 213:640]
+                image = cv2.resize(croppedImg, (640, 480))
+            elif "AN0" in file:
+                croppedImg = image[50:410, 160:640]
+                image = cv2.resize(croppedImg, (640, 480))
             resized_image = cv2.resize(image, (224, 224))
             normImg = cv2.normalize(resized_image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
             preprocessingMethod = random.randint(0, 3)
+            del image
+            del resized_image
             if self.augmentations and preprocessingMethod == 0:
                 # flip along y axis
                 return cv2.flip(normImg, 1)
-            if self.augmentations and preprocessingMethod == 1:
+            elif self.augmentations and preprocessingMethod == 1:
                 # flip along x axis
                 return cv2.flip(normImg, 0)
             elif self.augmentations and preprocessingMethod == 2:
@@ -73,6 +86,14 @@ class CNNSequence(Sequence):
                 return normImg
         except:
             print(file)
+
+    def readExpertImage(self,file):
+        image = cv2.imread(file)
+        croppedImg = image[0:360, 160:640]
+        image = cv2.resize(croppedImg, (640, 480))
+        resized_image = cv2.resize(image, (224, 224))
+        normImg = cv2.normalize(resized_image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        return normImg
         #resized_image = cv2.resize(image, (299, 299))
 
 
@@ -96,8 +117,17 @@ class CNNSequence(Sequence):
         # author Rebecca Hisey
         startIndex = index*self.batchSize
         indexOfNextBatch = (index + 1)*self.batchSize
-        inputBatch = numpy.array([self.readImage(x) for x in self.inputs[startIndex : indexOfNextBatch]])
-        outputBatch = numpy.array([x for x in self.targets[startIndex : indexOfNextBatch]])
+        inputBatch = [self.readImage(x) for x in self.inputs[startIndex : indexOfNextBatch]]
+        #inputBatch += [img for x in self.inputs[startIndex : indexOfNextBatch] for img in [self.rotateImage(self.readExpertImage(x)),self.flipImage(self.readExpertImage(x),0),self.flipImage(self.readExpertImage(x),1)] if "AN0" in x]
+        outputBatch = [x for x in self.targets[startIndex : indexOfNextBatch]]
+        '''if startIndex < len(self.targets) and indexOfNextBatch >= len(self.targets):
+            outputBatch += [label for x in range(startIndex, len(self.targets)) for label in
+                            [self.targets[x], self.targets[x], self.targets[x]] if
+                            x < len(self.targets) and "AN0" in self.inputs[x]]
+        elif indexOfNextBatch <= len(self.targets):
+            outputBatch += [label for x in range(startIndex,indexOfNextBatch) for label in [self.targets[x], self.targets[x], self.targets[x]] if x<len(self.targets) and "AN0" in self.inputs[x]]'''
+        inputBatch = numpy.array(inputBatch)
+        outputBatch = numpy.array(outputBatch)
         return (inputBatch,outputBatch)
 
 

@@ -7,7 +7,7 @@ import argparse
 import girder_client
 import tensorflow
 import tensorflow.keras
-from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint
+from tensorflow.keras.callbacks import EarlyStopping,ModelCheckpoint,LearningRateScheduler
 from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras import layers
 from tensorflow.keras.models import model_from_json
@@ -241,6 +241,11 @@ class Train_CNN_LSTM:
         print(classWeights)
         return classWeights
 
+    def stepDecaySchedule(self,initialLR = 0.001,decay = 0.8, stepSize = 3):
+        def schedule(epoch):
+            return initialLR * (decay**numpy.floor(epoch/stepSize))
+        return LearningRateScheduler(schedule)
+
     def train(self):
         balanceCNNData = False
         balanceLSTMData = False
@@ -263,7 +268,8 @@ class Train_CNN_LSTM:
         network = CNN_LSTM.CNN_LSTM()
         for fold in range(0,self.numFolds):
             foldDir = self.saveLocation+"_Fold_"+str(fold)
-            os.mkdir(foldDir)
+            if not os.path.exists(foldDir):
+                os.mkdir(foldDir)
             taskLabelName = "Task" #This should be the label that will be used to train the network
             toolLabelName = "Tool"
             if balanceCNNData:
@@ -299,7 +305,7 @@ class Train_CNN_LSTM:
                 print(cnnTrainDataSet.labels)
                 cnnValDataSet = CNNSequence(self.dataCSVFile, cnnValIndexes, self.batch_size, toolLabelName, self.gClient,tempFileDir)
                 print(cnnValDataSet.labels)
-                cnnTestDataSet = CNNSequence(self.dataCSVFile, cnnTestIndexes, self.batch_size, toolLabelName, self.gClient,tempFileDir,augmentations = False)
+                cnnTestDataSet = CNNSequence(self.dataCSVFile, cnnTestIndexes, self.batch_size, toolLabelName, self.gClient,tempFileDir,shuffle=False,augmentations = False)
                 print(cnnTestDataSet.labels)
 
             cnnLabelValues = numpy.array(sorted(self.dataCSVFile[toolLabelName].unique()))
@@ -311,13 +317,14 @@ class Train_CNN_LSTM:
 
             earlyStoppingCallback = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=5)
             modelCheckPointCallback = ModelCheckpoint(os.path.join(foldDir,'resnet50.h5'), verbose=1,monitor='val_accuracy', mode='max', save_weights_only = True,save_best_only=True)
+            learningRateSchedule = self.stepDecaySchedule(initialLR=self.cnn_learning_rate,decay=0.7,stepSize=3)
             #self.cnnClassWeights = self.getClassWeights(cnnTrainDataSet.targets)
 
             self.cnnClassWeights = {0:1,1:1,2:1,3:1,4:1,5:1,6:1,7:1}
 
             history = cnnModel.fit(x=cnnTrainDataSet,
                                    validation_data=cnnValDataSet,
-                                   epochs=self.numEpochs,callbacks=[modelCheckPointCallback,earlyStoppingCallback])
+                                   epochs=self.numEpochs,callbacks=[modelCheckPointCallback,earlyStoppingCallback,learningRateSchedule])
             cnnModel.load_weights(os.path.join(foldDir, 'resnet50.h5'))
 
             results = cnnModel.evaluate(x=cnnTestDataSet)
@@ -326,6 +333,7 @@ class Train_CNN_LSTM:
             trueLabels = numpy.argmax(cnnTestDataSet.targets, axis=-1)
             self.confMat = sklearn.metrics.confusion_matrix(trueLabels, predictions)
             print(self.confMat)
+
             self.saveTrainingInfo(fold, foldDir, history.history, results,"CNN",balanceCNNData)
             self.saveTrainingPlot(foldDir, history.history, "loss", "CNN")
             for metric in self.metrics:
@@ -336,6 +344,10 @@ class Train_CNN_LSTM:
             lstmTrainSequences = self.splitDatasetIntoSequences(fold,"Train",sequenceLength=self.sequenceLength,downsampling=self.downsampling)
             lstmValSequences = self.splitDatasetIntoSequences(fold,"Validation",sequenceLength=self.sequenceLength,downsampling=self.downsampling)
             lstmTestSequences = self.splitDatasetIntoSequences(fold,"Test",sequenceLength=self.sequenceLength,downsampling=self.downsampling)
+            '''downSamplingRate = self.downsampling - 1
+            for downsample in range(downSamplingRate, 0, -1):
+                lstmTrainSequences += self.splitDatasetIntoSequences(fold, "Train", sequenceLength=self.sequenceLength,downsampling=downsample)
+                lstmValSequences += self.splitDatasetIntoSequences(fold, "Validation",sequenceLength=self.sequenceLength,downsampling=downsample)'''
 
             self.lstmLabelValues = numpy.array(sorted(self.dataCSVFile[taskLabelName].unique()))
             numpy.savetxt(os.path.join(foldDir, "lstm_labels.txt"), self.lstmLabelValues, fmt='%s', delimiter=',')
@@ -356,6 +368,7 @@ class Train_CNN_LSTM:
                                                       monitor='val_accuracy', mode='max', save_weights_only=True,
                                                       save_best_only=True)
             earlyStoppingCallback = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=5)
+            learningRateSchedule = self.stepDecaySchedule(initialLR=self.lstm_learning_rate, decay=0.7, stepSize=3)
             #self.lstmClassWeights = self.getClassWeights(lstmTrainDataSet.targets)
             self.lstmClassWeights = {0:1,1:1,2:1,3:1,4:1,5:1,6:1,7:1}
 
@@ -363,7 +376,7 @@ class Train_CNN_LSTM:
             lstmModel.compile(optimizer=self.lstm_optimizer, loss=self.loss_Function, metrics=self.metrics)
             history = lstmModel.fit(x=lstmTrainDataSet,
                                    validation_data=lstmValDataSet,
-                                   epochs=self.numLSTMEpochs,callbacks=[modelCheckPointCallback,earlyStoppingCallback],class_weight=self.lstmClassWeights)
+                                   epochs=self.numLSTMEpochs,callbacks=[modelCheckPointCallback,earlyStoppingCallback,learningRateSchedule])
             lstmModel.load_weights(os.path.join(foldDir, 'parallel_LSTM.h5'))
             results = lstmModel.evaluate(x=lstmTestDataSet)
             predictions = lstmModel.predict(lstmTestDataSet)
@@ -396,13 +409,13 @@ if __name__ == '__main__':
   parser.add_argument(
       '--num_epochs_cnn',
       type=int,
-      default=30,
+      default=50,
       help='number of epochs used in training'
   )
   parser.add_argument(
       '--num_epochs_lstm',
       type=int,
-      default=30,
+      default=50,
       help='number of epochs used in training'
   )
   parser.add_argument(
