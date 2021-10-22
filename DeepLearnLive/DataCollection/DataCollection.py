@@ -723,6 +723,16 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.inputSegmentationSelector.visible = False
 
     self.segmentationLabellingMethodComboBox.connect('currentIndexChanged(int)', self.onLabellingMethodSelected)
+    #slicer.mrmlScene.AddObserver(slicer.mrmlScene.NodeAddedEvent,self.updateSegmentationComboBox)
+
+  '''def updateSegmentationComboBox(self, caller, eventID):
+    for i in range(self.inputSegmentationSelector.count, 0, -1):
+      self.videoIDComboBox.removeItem(i)
+    segmentationNodes = slicer.util.getNodesByClass("vtkMRMLSegmentationNode")
+    segmentationNodeNames = []
+    for segNode in segmentationNodes:
+      segmentationNodeNames.append(segNode.GetName())
+    self.inputSegmentationSelector.addItems(segmentationNodeNames)'''
 
 
   def createWebcamPlusConnector(self):
@@ -1436,7 +1446,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     :return:
     """
     sequenceName = self.recordingVolumeNode.GetName().split(sep="_")
-    sequenceNode = slicer.util.getFirstNodeByName(sequenceName[0])
+    sequenceNode = slicer.mrmlScene.getFirstNodeByName(sequenceName[0])
     if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
       sequenceNodeID = sequenceNode.GetID()
       IDNumbers = [x for x in sequenceNodeID if x.isnumeric()]
@@ -1487,9 +1497,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
   def exportSegmentationsFromSequence(self):
     sequenceName = self.recordingVolumeNode.GetName()
-    print(sequenceName)
     sequenceNode = slicer.util.getFirstNodeByName(sequenceName)
-    print(sequenceNode.GetClassName())
     if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
       sequenceNodeID = sequenceNode.GetID()
       IDNumbers = [x for x in sequenceNodeID if x.isnumeric()]
@@ -1506,7 +1514,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     elif not self.imageLabels.empty:
       addingToExisting = True
     prevTimeRecorded = 0
-    for i in range(numDataNodes):
+    for i in range(10):
       logging.info(str(i) + " / " + str(numDataNodes) + " written")
       dataNode = sequenceNode.GetNthDataNode(i)
       timeRecorded = float(sequenceNode.GetNthIndexValue(i))
