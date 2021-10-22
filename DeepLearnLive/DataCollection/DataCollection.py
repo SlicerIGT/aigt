@@ -102,7 +102,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     for recordingNode in self.recordingNodes:
         recordingNodeNames.append(recordingNode.GetName())
     self.selectRecordingNodeComboBox.addItems(recordingNodeNames)
-    parametersFormLayout.addRow(self.selectRecordingNodeComboBox)
+    parametersFormLayout.addRow("Select Image Node: ",self.selectRecordingNodeComboBox)
 
     self.datasetSelector = ctk.ctkDirectoryButton()
     self.datasetSelector.directory = os.path.join(self.moduleDir,os.pardir,"Datasets")
@@ -111,16 +111,16 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.videoIDComboBox = qt.QComboBox()
     self.videoIDComboBox.addItems(["Select video ID","Create new video ID"])
     self.onDatasetSelected()
-    parametersFormLayout.addRow(self.videoIDComboBox)
+    parametersFormLayout.addRow("Select videoID: ",self.videoIDComboBox)
 
     self.imageSubtypeComboBox = qt.QComboBox()
     self.imageSubtypeComboBox.addItems(["Select image subtype (optional)","Create new image subtype"])
-    parametersFormLayout.addRow(self.imageSubtypeComboBox)
+    parametersFormLayout.addRow("Select subtype: ",self.imageSubtypeComboBox)
     self.logic.setImageSubtype("")
 
     self.fileTypeComboBox = qt.QComboBox()
     self.fileTypeComboBox.addItems([".jpg",".png",".bmp",".tiff"])
-    parametersFormLayout.addRow(self.fileTypeComboBox)
+    parametersFormLayout.addRow("File type: ",self.fileTypeComboBox)
     self.fileType = self.fileTypeComboBox.currentText
 
     self.collectFromSequenceCheckBox = qt.QCheckBox("Collect from Sequence")
