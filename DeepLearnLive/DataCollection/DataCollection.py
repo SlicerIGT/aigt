@@ -1497,7 +1497,12 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
   def exportSegmentationsFromSequence(self):
     sequenceName = self.recordingVolumeNode.GetName()
-    sequenceNode = slicer.mrmlScene.GetFirstNodeByName(sequenceName)
+    sequenceNode = slicer.mrmlScene.GetNodesByName(sequenceName)
+    for i in range(sequenceNode.GetNumberOfItem()):
+      node = sequenceNode.GetItemAsObject(i)
+      if node.GetClassName == "vtkMRMLScalarVolumeNode" or node.GetClassName == "vtkMRMLVectorVolumeNode":
+        break
+    sequenceNode = node
     if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
       sequenceNodeID = sequenceNode.GetID()
       IDNumbers = [x for x in sequenceNodeID if x.isnumeric()]
