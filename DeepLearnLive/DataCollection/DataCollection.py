@@ -1497,7 +1497,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
   def exportSegmentationsFromSequence(self):
     sequenceName = self.recordingVolumeNode.GetName()
-    sequenceNode = slicer.util.getFirstNodeByName(sequenceName)
+    sequenceNode = slicer.mrmlScene.getFirstNodeByName(sequenceName)
     if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
       sequenceNodeID = sequenceNode.GetID()
       IDNumbers = [x for x in sequenceNodeID if x.isnumeric()]
