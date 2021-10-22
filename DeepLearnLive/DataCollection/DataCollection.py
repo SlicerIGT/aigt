@@ -119,7 +119,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.logic.setImageSubtype("")
 
     self.fileTypeComboBox = qt.QComboBox()
-    self.fileTypeComboBox.addItems([".jpg",".png",".bmp",".tiff"])
+    self.fileTypeComboBox.addItems([".jpg",".png",".bmp",".tiff",".npy"])
     parametersFormLayout.addRow("File type: ",self.fileTypeComboBox)
     self.fileType = self.fileTypeComboBox.currentText
 
@@ -1372,14 +1372,23 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           else:
             addingtoexisting = False
             imagePath = os.path.dirname(self.labelFilePath)
-            cv2.imwrite(os.path.join(imagePath, fileName), imData)
+            if self.fileType == ".npy":
+              numpy.save(os.path.join(imagePath, fileName), imData)
+            else:
+              cv2.imwrite(os.path.join(imagePath, fileName), imData)
         else:
           addingtoexisting = False
           imagePath = os.path.dirname(self.labelFilePath)
-          cv2.imwrite(os.path.join(imagePath, fileName), imData)
+          if self.fileType == ".npy":
+            numpy.save(os.path.join(imagePath, fileName), imData)
+          else:
+            cv2.imwrite(os.path.join(imagePath, fileName), imData)
       else:
         imagePath = os.path.dirname(self.labelFilePath)
-        cv2.imwrite(os.path.join(imagePath, fileName), imData)
+        if self.fileType == ".npy":
+          numpy.save(os.path.join(imagePath, fileName), imData)
+        else:
+          cv2.imwrite(os.path.join(imagePath, fileName), imData)
       if self.labellingMethod == "Unlabelled":
         if self.fromSequence:
           recordingTime = timeLabel.text
@@ -1394,7 +1403,10 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
         elif self.labellingMethod == 'From Segmentation':
           (labelImData, self.labelName) = self.getSegmentationLabel(fileName)
           imagePath = os.path.dirname(self.labelFilePath)
-          cv2.imwrite(os.path.join(imagePath,self.labelName),labelImData)
+          if ".npy" in self.labelName:
+            numpy.save(os.path.join(imagePath, self.labelName), labelImData)
+          else:
+            cv2.imwrite(os.path.join(imagePath,self.labelName),labelImData)
         elif self.labellingMethod == "From Sequence":
           labelDataNode = self.labelSequenceNode.GetDataNodeAtValue(str(recordingTime))
           self.labelName = labelDataNode.GetText()
@@ -1465,7 +1477,10 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           else:
             fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
           imagePath = os.path.dirname(self.labelFilePath)
-          cv2.imwrite(os.path.join(imagePath, fileName), imData)
+          if self.fileType == ".npy":
+            numpy.save(os.path.join(imagePath, fileName), imData)
+          else:
+            cv2.imwrite(os.path.join(imagePath, fileName), imData)
           self.imageLabels = self.imageLabels.append({"FileName":fileName,"Time Recorded":timeRecorded,self.labelType:labelName},ignore_index=True)
       prevTimeRecorded = timeRecorded
     self.imageLabels.to_csv(self.labelFilePath)
@@ -1513,7 +1528,10 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
         else:
           imData = self.getVtkImageDataAsOpenCVMat(dataNode, True)
           imagePath = os.path.dirname(self.labelFilePath)
-          cv2.imwrite(os.path.join(imagePath, fileName), imData)
+          if self.fileType == ".npy":
+            numpy.save(os.path.join(imagePath, fileName), imData)
+          else:
+            cv2.imwrite(os.path.join(imagePath, fileName), imData)
           self.imageLabels = self.imageLabels.append(
             {"FileName": fileName, "Time Recorded": timeRecorded, self.labelType: labelName}, ignore_index=True)
       prevTimeRecorded = timeRecorded
@@ -1532,7 +1550,10 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       slicer.mrmlScene.Modified()
       segImage, labelFileName = self.getSegmentationLabel(fileName)
       imagePath = os.path.dirname(self.labelFilePath)
-      cv2.imwrite(os.path.join(imagePath, labelFileName), segImage)
+      if self.fileType == ".npy":
+        numpy.save(os.path.join(imagePath, labelFileName), segImage)
+      else:
+        cv2.imwrite(os.path.join(imagePath, labelFileName), segImage)
     return labelFileName
 
   def getClassificationLabelFromSequence(self,labels,timeRecorded):
