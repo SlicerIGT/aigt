@@ -723,16 +723,6 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.inputSegmentationSelector.visible = False
 
     self.segmentationLabellingMethodComboBox.connect('currentIndexChanged(int)', self.onLabellingMethodSelected)
-    #slicer.mrmlScene.AddObserver(slicer.mrmlScene.NodeAddedEvent,self.updateSegmentationComboBox)
-
-  '''def updateSegmentationComboBox(self, caller, eventID):
-    for i in range(self.inputSegmentationSelector.count, 0, -1):
-      self.videoIDComboBox.removeItem(i)
-    segmentationNodes = slicer.util.getNodesByClass("vtkMRMLSegmentationNode")
-    segmentationNodeNames = []
-    for segNode in segmentationNodes:
-      segmentationNodeNames.append(segNode.GetName())
-    self.inputSegmentationSelector.addItems(segmentationNodeNames)'''
 
 
   def createWebcamPlusConnector(self):
@@ -1446,7 +1436,18 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     :return:
     """
     sequenceName = self.recordingVolumeNode.GetName().split(sep="_")
-    sequenceNode = slicer.mrmlScene.GetFirstNodeByName(sequenceName[0])
+    sequenceNodes = slicer.util.getNodesByClass("vtkMRMLSequenceNode")
+    sequenceNode = None
+    currentNodeName = None
+    for i in range(len(sequenceNodes)):
+      node = sequenceNodes[i]
+      nodeName = node.GetName()
+      if sequenceName[0] in nodeName and currentNodeName == None:
+        sequenceNode = node
+        currentNodeName = nodeName
+      elif sequenceName[0] in nodeName and len(nodeName) < len(currentNodeName):
+        sequenceNode = node
+        currentNodeName = nodeName
     if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
       sequenceNodeID = sequenceNode.GetID()
       IDNumbers = [x for x in sequenceNodeID if x.isnumeric()]
@@ -1496,14 +1497,20 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     self.imageLabels.to_csv(self.labelFilePath)
 
   def exportSegmentationsFromSequence(self):
-    sequenceName = self.recordingVolumeNode.GetName()
-    sequenceNode = slicer.mrmlScene.GetNodesByName(sequenceName)
-    for i in range(sequenceNode.GetNumberOfItems()):
-      node = sequenceNode.GetItemAsObject(i)
-      if node.GetClassName == "vtkMRMLScalarVolumeNode" or node.GetClassName == "vtkMRMLVectorVolumeNode":
-        break
-    sequenceNode = node
-    if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
+    sequenceName = self.recordingVolumeNode.GetName().split(sep="_")
+    sequenceNodes = slicer.util.getNodesByClass("vtkMRMLSequenceNode")
+    sequenceNode = None
+    currentNodeName = None
+    for i in range(len(sequenceNodes)):
+      node = sequenceNodes[i]
+      nodeName = node.GetName()
+      if sequenceName[0] in nodeName and currentNodeName == None:
+        sequenceNode = node
+        currentNodeName = nodeName
+      elif sequenceName[0] in nodeName and len(nodeName) < len(currentNodeName):
+        sequenceNode = node
+        currentNodeName = nodeName
+    if sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
       sequenceNodeID = sequenceNode.GetID()
       IDNumbers = [x for x in sequenceNodeID if x.isnumeric()]
       sequenceID = 'vtkMRMLSequenceNode'
@@ -1519,7 +1526,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     elif not self.imageLabels.empty:
       addingToExisting = True
     prevTimeRecorded = 0
-    for i in range(10):
+    for i in range(numDataNodes):
       logging.info(str(i) + " / " + str(numDataNodes) + " written")
       dataNode = sequenceNode.GetNthDataNode(i)
       timeRecorded = float(sequenceNode.GetNthIndexValue(i))
