@@ -9,13 +9,11 @@ import time
 import datetime
 from sequenceSpinBox import sequenceSpinBox
 
-
 try:
   import cv2
 except ModuleNotFoundError:
   slicer.util.pip_install("opencv-python")
   import cv2
-
 
 try:
   import pandas
@@ -560,7 +558,6 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.reviewImageNode = self.reviewNodeSelector.currentNode()
 
   def onReviewDatasetSelected(self):
-
     self.reviewDataset = self.reviewDatasetSelector.directory
     self.reviewVideoIDComboBox.currentIndex = 0
     self.reviewImageSubtypeBox.currentIndex = 0
@@ -1295,6 +1292,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
     if self.labellingMethod == "From Sequence":
       self.exportImagesFromSequence()
+    elif self.labellingMethod == "From Segmentation" and self.fromSequence:
+      self.exportSegmentationsFromSequence()
     else:
       if self.labellingMethod == 'Auto from file':
         self.autoLabels = pandas.read_csv(self.autoLabelFilePath)
@@ -1340,7 +1339,6 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
   def onStartCollectingImages(self,caller,eventID):
     """
-
     :param caller:
     :param eventID:
     :return:
@@ -1437,7 +1435,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
     numDataNodes = sequenceNode.GetNumberOfDataNodes()
     addingToExisting = False
-    labels = self.getLabelsFromSequence()
+    all_labels = self.getLabelsFromSequence()
     if (not self.labelType in self.imageLabels.columns) and not self.imageLabels.empty:
       self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max() + 1)]
       addingToExisting = True
@@ -1452,12 +1450,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       if timeRecorded - prevTimeRecorded > 0.01:
         prevTimeRecorded = timeRecorded
         roundedtimeRecorded = float(roundedtimeRecorded)
-        label = labels.loc[(labels["Start"] <= timeRecorded) & (labels["End"] > timeRecorded)]
-        if label.empty:
-          maxIndex = labels.index.max()
-          labelName = labels[self.labelType][maxIndex]
-        else:
-          labelName = label.iloc[0][self.labelType]
+        if self.labellingMethod == "From Sequence":
+          labelName = self.getClassificationLabelFromSequence(all_labels,timeRecorded)
         if addingToExisting:
           entry = self.imageLabels.loc[(self.imageLabels["Time Recorded"] == roundedtimeRecorded)]
           if entry.empty:
@@ -1466,12 +1460,89 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
             self.imageLabels.loc[j, self.labelType] = labelName
         else:
           imData = self.getVtkImageDataAsOpenCVMat(dataNode,True)
-          fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
+          if self.imageSubtype == '':
+            fileName = self.videoID + "_" + str(i).zfill(5) + self.fileType
+          else:
+            fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
           imagePath = os.path.dirname(self.labelFilePath)
           cv2.imwrite(os.path.join(imagePath, fileName), imData)
           self.imageLabels = self.imageLabels.append({"FileName":fileName,"Time Recorded":timeRecorded,self.labelType:labelName},ignore_index=True)
       prevTimeRecorded = timeRecorded
     self.imageLabels.to_csv(self.labelFilePath)
+
+  def exportSegmentationsFromSequence(self):
+    sequenceName = self.recordingVolumeNode.GetName()
+    print(sequenceName)
+    sequenceNode = slicer.util.getFirstNodeByName(sequenceName)
+    print(sequenceNode.GetClassName())
+    if sequenceNode == None or sequenceNode.GetClassName() != 'vtkMRMLSequenceNode':
+      sequenceNodeID = sequenceNode.GetID()
+      IDNumbers = [x for x in sequenceNodeID if x.isnumeric()]
+      sequenceID = 'vtkMRMLSequenceNode'
+      for i in IDNumbers:
+        sequenceID += str(i)
+      sequenceNode = slicer.util.getNode(sequenceID)
+
+    numDataNodes = sequenceNode.GetNumberOfDataNodes()
+    addingToExisting = False
+    if (not self.labelType in self.imageLabels.columns) and not self.imageLabels.empty:
+      self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max() + 1)]
+      addingToExisting = True
+    elif not self.imageLabels.empty:
+      addingToExisting = True
+    prevTimeRecorded = 0
+    for i in range(numDataNodes):
+      logging.info(str(i) + " / " + str(numDataNodes) + " written")
+      dataNode = sequenceNode.GetNthDataNode(i)
+      timeRecorded = float(sequenceNode.GetNthIndexValue(i))
+      roundedtimeRecorded = "%.2f" % timeRecorded
+      if timeRecorded - prevTimeRecorded > 0.01:
+        prevTimeRecorded = timeRecorded
+        roundedtimeRecorded = float(roundedtimeRecorded)
+        if self.imageSubtype == '':
+          fileName = self.videoID + "_" + str(i).zfill(5) + self.fileType
+        else:
+          fileName = self.videoID + "_" + self.imageSubtype + "_" + str(i).zfill(5) + self.fileType
+        labelName = self.getSegmentationLabelFromSequence(timeRecorded,i,fileName)
+        if addingToExisting:
+          entry = self.imageLabels.loc[(self.imageLabels["Time Recorded"] == roundedtimeRecorded)]
+          if entry.empty:
+            entry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - roundedtimeRecorded) <= 0.05)]
+          for j in entry.index:
+            self.imageLabels.loc[j, self.labelType] = labelName
+        else:
+          imData = self.getVtkImageDataAsOpenCVMat(dataNode, True)
+          imagePath = os.path.dirname(self.labelFilePath)
+          cv2.imwrite(os.path.join(imagePath, fileName), imData)
+          self.imageLabels = self.imageLabels.append(
+            {"FileName": fileName, "Time Recorded": timeRecorded, self.labelType: labelName}, ignore_index=True)
+      prevTimeRecorded = timeRecorded
+    self.imageLabels.to_csv(self.labelFilePath)
+
+  def getSegmentationLabelFromSequence(self, timeRecorded,index,fileName):
+    seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
+    seekWidget = seekWidget[0]
+    seekSlider = seekWidget.findChildren("QSlider")
+    seekSlider = seekSlider[0]
+    timeLabel = seekWidget.findChildren("QLabel")
+    timeLabel = timeLabel[1]
+    recordingTime = float(timeLabel.text)
+    if seekSlider.value <= seekSlider.maximum and recordingTime >= self.lastRecordedTime:
+      seekSlider.setValue(index)
+      slicer.mrmlScene.Modified()
+      segImage, labelFileName = self.getSegmentationLabel(fileName)
+      imagePath = os.path.dirname(self.labelFilePath)
+      cv2.imwrite(os.path.join(imagePath, labelFileName), segImage)
+    return labelFileName
+
+  def getClassificationLabelFromSequence(self,labels,timeRecorded):
+    label = labels.loc[(labels["Start"] <= timeRecorded) & (labels["End"] > timeRecorded)]
+    if label.empty:
+      maxIndex = labels.index.max()
+      labelName = labels[self.labelType][maxIndex]
+    else:
+      labelName = label.iloc[0][self.labelType]
+    return labelName
 
   def getLabelsFromSequence(self,labelSequenceNode=None):
     """
