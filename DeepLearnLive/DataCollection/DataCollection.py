@@ -1150,9 +1150,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.logic.setLabelType(self.classificationLabelTypeLineEdit.text)
     elif self.problemType == "Transform" and self.labellingMethod == "From Sequence":
       self.logic.setLabelSequence(self.transformLabelNode)
-      labelType = self.transformLabelNode.GetName()
-      labelType = labelType.split("-")
-      self.logic.setLabelType(labelType[0])
+      self.logic.setLabelType(self.transformLabelNode.GetName())
     self.logic.startImageCollection (self.collectingImages, self.imageLabels,self.csvFilePath)
 
   def onLabellingMethodSelected(self):
