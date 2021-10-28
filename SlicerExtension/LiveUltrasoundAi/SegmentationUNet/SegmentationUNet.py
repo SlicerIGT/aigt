@@ -2,19 +2,52 @@ import os
 import unittest
 import logging
 import numpy as np
-import scipy.ndimage
+import pickle
 import time
 from PIL import Image
 import vtk, qt, ctk, slicer
+
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-from Processes import Process, ProcessesLogic
-import pickle
+
+try:
+  from Processes import Process, ProcessesLogic
+except:
+  # slicer.util.messageBox("Segmentation UNet module requires ParallelProcessing extension. Install it and restart Slicer.")
+  msg = qt.QMessageBox()
+  msg.setIcon(qt.QMessageBox.Information)
+  msg.setText("Segmentation UNet module requires ParallelProcessing extension. Please install it from the Extension Manager\
+               and restart Slicer.\n")
+  msg.setWindowTitle("Segmentation UNet module")
+  msg.setStandardButtons(qt.QMessageBox.Ok)
+  msg.setModal(True)
+  msg.exec_()
 
 import sys
-if not hasattr(sys, 'argv'):
-  sys.argv  = ['']
-import tensorflow as tf
+if not hasattr(sys, 'argv'):  # This patch was needed for a TensorFlow version. Not sure if it's needed anymore.
+  sys.argv = ['']
+
+try:
+  import tensorflow as tf
+except:
+  msg = qt.QMessageBox()
+  msg.setIcon(qt.QMessageBox.Information)
+  msg.setText("Installation of TensorFlow is needed for some modules.\nIt may take a few minutes, but it only needs to be done\
+              once. Select option below if you have installed CUDA and CuDNN.\n\nClick OK to start installation.\n")
+  msg.setWindowTitle("Installing Required Packages")
+  msg.setStandardButtons(qt.QMessageBox.Ok)
+  cb = qt.QCheckBox("Use GPU (Requires CUDA v11.3.1 and cuDNN v8.1)")
+  msg.setCheckBox(cb)
+  msg.setModal(True)
+  retval = msg.exec_()
+  if retval:
+    qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+    if cb.isChecked():
+      slicer.util.pip_install('tensorflow-gpu==2.5.0 scipy scikit-image')
+    else:
+      slicer.util.pip_install('tensorflow==2.5.0 scipy scikit-image')
+    qt.QApplication.restoreOverrideCursor()
+
 
 #
 # SegmentationUNet
@@ -67,7 +100,18 @@ class SegmentationUNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     """
     ScriptedLoadableModuleWidget.setup(self)
 
+    # Check Slicer version and module prerequisites
+
+    if int(slicer.app.revision) < 30261:
+      slicer.util.errorDisplay(f"This module requires Slicer core version\nSlicer-4.13.0-2021-09-26 or later.",
+                               detailedText="In earlier Slicer versions, ParallelProcessing extension is not available.")
+
+    if not hasattr(slicer.modules, 'processes'):
+      slicer.util.messageBox("This modules requires ParallelProcessing extension. Install it and restart Slicer.")
+      return
+
     # Load widget from .ui file (created by Qt Designer)
+
     uiWidget = slicer.util.loadUI(self.resourcePath('UI/SegmentationUNet.ui'))
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
