@@ -32,29 +32,36 @@ class UNet():
 
     def loadModel(self,modelFolder,modelName):
         #Replace the following lines with whatever needs to be done to load the model or models
-        structureFileName = 'unet.json'
-        weightsFileName = 'unet.h5'
-        modelFolder = modelFolder.replace("'","")
-        with open(os.path.join(modelFolder, structureFileName), "r") as modelStructureFile:
-            JSONModel = modelStructureFile.read()
-        self.cnnModel = model_from_json(JSONModel)
-        self.cnnModel.load_weights(os.path.join(modelFolder, weightsFileName))
-        with open(os.path.join(modelFolder,"labels.txt"),'r') as f:
-            self.labels = f.read()
-        self.labels = self.labels.split(sep="\n")
+        try:
+            weightsFileName = [x for x in os.listdir(modelFolder) if ".h5" in x]
+            if weightsFileName!=[]:
+                weightsFileName = weightsFileName[0]
+                self.unetModel = tensorflow.keras.models.load_model(os.path.join(modelFolder, weightsFileName),compile=False)
+        except:
+            structureFileName = 'unet.json'
+            weightsFileName = 'unet.h5'
+            modelFolder = modelFolder.replace("'","")
+            with open(os.path.join(modelFolder, structureFileName), "r") as modelStructureFile:
+                JSONModel = modelStructureFile.read()
+            self.unetModel = model_from_json(JSONModel)
+            self.unetModel.load_weights(os.path.join(modelFolder, weightsFileName))
 
     def predict(self,image):
         #Replace the following lines with whatever needs to be done to use the model to predict on new data
         # in this case the image needed to be recoloured and resized and our prediction returns the tool name and the
         # softmax output
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        resized = cv2.resize(image, (224, 224))
-        resized = numpy.expand_dims(resized, axis=0)
-        toolClassification = self.cnnModel.predict(numpy.array(resized))
-        labelIndex = numpy.argmax(toolClassification)
-        label = self.labels[labelIndex]
-        networkOutput = str(label) + str(toolClassification)
-        return networkOutput
+        originalShape = image.shape
+        print(originalShape)
+        resized = cv2.resize(image, (128, 128)).astype(numpy.float16)
+        scaled = resized / resized.max()
+        scaled = numpy.expand_dims(scaled, axis=0)
+        scaled = numpy.expand_dims(scaled, axis=-1)
+        prediction = self.unetModel.predict(numpy.array(scaled))
+        prediction = numpy.argmax(prediction,axis=-1)
+        prediction = prediction[0].astype(numpy.uint8)
+        prediction = cv2.resize(prediction, originalShape,interpolation = cv2.INTER_AREA)
+        print(prediction.shape)
+        return prediction
 
     def createModel(self,imageSize,num_classes):
         model = unet.segmentation_unet(imageSize[0], num_classes, self.filter_multiplier, self.reg_rate)
