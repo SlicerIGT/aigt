@@ -32,12 +32,15 @@ def main():
         server = pyigtl.OpenIGTLinkServer(port=FLAGS.outgoing_port,local_server=True)
     else:
         server = pyigtl.OpenIGTLinkServer(port=FLAGS.outgoing_port, local_server=False)
+
+    #server = pyigtl.OpenIGTLinkServer(port=FLAGS.outgoing_port)
     server.start()
     print("Server running on " + str(server.host) + " : " + str(server.port) + "...")
 
 
     print("Client starting...")
-    client = pyigtl.OpenIGTLinkClient(host=FLAGS.incoming_host, port=FLAGS.incoming_port)
+    #client = pyigtl.OpenIGTLinkClient(host=FLAGS.incoming_host, port=FLAGS.incoming_port)
+    client = pyigtl.OpenIGTLinkClient(host="localhost", port=FLAGS.incoming_port)
     client.start()
     print(FLAGS.incoming_host)
     print(FLAGS.incoming_port)
@@ -46,7 +49,8 @@ def main():
     ImageReceived = False
     frameCount = 0
     try:
-        while (not ImageReceived) or (ImageReceived and time.time() - lastMessageTime < FLAGS.timeout):
+       while (not ImageReceived) or (time.time() - lastMessageTime < FLAGS.timeout):
+        #while (not ImageReceived) or (time.time() - lastMessageTime < FLAGS.timeout):
 
             #if server.is_connected() and client.is_connected():
 
@@ -61,10 +65,13 @@ def main():
                         image = image[0]
                         print(time.time())
                         (networkOutput) = model.predict(image)
+                        print(networkOutput)
                         print(time.time())
                         if FLAGS.output_type == 'STRING':
+                            #print('got here')
                             labelMessage = pyigtl.StringMessage(networkOutput, device_name=FLAGS.device_name)
                             server.send_message(labelMessage)
+                            #print('sent message')
                         elif FLAGS.output_type == 'IMAGE':
                             labelMessage = pyigtl.ImageMessage(networkOutput, device_name=FLAGS.device_name)
                             server.send_message(labelMessage)
@@ -81,6 +88,9 @@ def main():
             else:
                 pass
             time.sleep(0.25)
+       client.stop()
+       server.stop()
+
     except KeyboardInterrupt:
         pass
 
@@ -108,7 +118,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--output_type',
       type=str,
-      default='IMAGE',
+      default='STRING',
       help='type of output your model generates'
   )
   parser.add_argument(
@@ -144,7 +154,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--device_name',
       type=str,
-      default='LabelNode',
+      default='Text',
       help='The name of the node that the network output should be sent to'
   )
 FLAGS, unparsed = parser.parse_known_args()
