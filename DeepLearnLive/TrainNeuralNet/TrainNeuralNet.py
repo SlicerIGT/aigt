@@ -881,7 +881,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
     #p = slicer.util.launchConsoleProcess(strCMD,useStartupEnvironment=True)
     #slicer.util.logProcessOutput(p)
     startupEnv = slicer.util.startupEnvironment()
-    p = subprocess.Popen(cmd, env=startupEnv)
+    p = subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE,env=startupEnv)
     logging.info("Saving training run to: " + str(os.path.join(os.path.dirname(self.trainingScriptPath),self.trainingRunName)))
 
   def cancelOverwrite(self):
