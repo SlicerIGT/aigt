@@ -15,6 +15,7 @@ import sklearn.metrics
 import cv2
 from matplotlib import pyplot as plt
 import UNet
+from unetSequence import unetSequence
 
 from tensorflow.keras import backend as K
 
@@ -28,59 +29,9 @@ class Train_UNet:
     # Returns:
     #   images: The list of images loaded from the files or girderIDs
     #   imageLabels: a dictionary of the labels for each image, indexed by the label name
-    def loadData(self,fold,set):
-        entries = self.dataCSVFile.loc[(self.dataCSVFile["Fold"] == fold) & (self.dataCSVFile["Set"] == set)]
-        images = []
-        imageLabels = []
-        numFilesWritten = 0
-        if "GirderID" in self.dataCSVFile.columns:
-            LabelNames = self.dataCSVFile.columns[8:]
-            for labelName in LabelNames:
-                imageLabels[labelName] = []
-            if self.gClient == None:
-                self.gClient = girder_client.GirderClient(apiUrl=entries["Girder_URL"][0])
-                userName = input("Username: ")
-                password = input("Password: ")
-                self.gClient.authenticate(username=userName,password=password)
-
-            # tempFileDir is a folder in which to temporarily store the files downloaded from Girder
-            # by default the temporary folder is created in the current working directory, but this can
-            # be modified as necessary
-            username = os.environ['username']
-            tempFileDir = os.path.join('C:/Users/',username,'Documents/temp')
-            if not os.path.isdir(tempFileDir):
-                os.mkdir(tempFileDir)
-            for i in entries.index:
-                fileID = entries["GirderID"][i]
-                fileName = entries["FileName"][i]
-                if not os.path.isfile(os.path.join(tempFileDir,fileName)):
-                    self.gClient.downloadItem(fileID,tempFileDir)
-                    numFilesWritten +=1
-                    print(numFilesWritten)
-                image = cv2.imread(os.path.join(tempFileDir,fileName), 0)
-                resized = cv2.resize(image, (224, 224))
-                images.append(numpy.array(resized))
-                for labelName in LabelNames:
-                    imageLabels[labelName].append(entries[labelName][i])
-
-        else:
-            for i in entries.index:
-
-                #Read in the ultrasound image
-                filePath = entries["Folder"][i]
-                fileName = entries["FileName"][i]
-                image = cv2.imread(os.path.join(filePath,fileName), 0)
-                # print(os.path.join(filePath,fileName))
-                processed = self.process_ultrasound(image)
-                images.append(numpy.array(processed))
-
-                #Read in the segmentation image
-                fileName_seg = entries["VesselsCombined"][i]
-                segmentation = cv2.imread(os.path.join(filePath,fileName_seg), 0)
-                processed_seg = self.process_seg(segmentation)
-                imageLabels.append(numpy.array(processed_seg))
-
-        return numpy.array(images), numpy.array(imageLabels)
+    def loadData(self, fold, set, dataset):
+        entries = dataset.loc[(dataset["Fold"] == fold) & (dataset["Set"] == set)]
+        return entries.index
 
     def process_ultrasound(self, image):
         resized = cv2.resize(image, (128, 128)).astype(numpy.float16)
@@ -164,34 +115,25 @@ class Train_UNet:
         for fold in range(0,1): #changed from range(0,self.numFolds)
             foldDir = self.saveLocation+"_Fold_"+str(fold)
             os.mkdir(foldDir)
-            labelName = self.dataCSVFile.columns[-1] #This should be the label that will be used to train the network
+            labelName = "Tissue" #This should be the label that will be used to train the network
 
-            trainImages,trainSegs = self.loadData(fold,"Train")
-            valImages,valSegs = self.loadData(fold,"Validation")
-            testImages,testSegs = self.loadData(fold,"Test")
+            trainIndexes = self.loadData(fold, "Train", self.dataCSVFile)
+            valIndexes = self.loadData(fold, "Validation", self.dataCSVFile)
+            testIndexes = self.loadData(fold, "Test", self.dataCSVFile)
 
-            seg_train_onehot = tensorflow.keras.utils.to_categorical(trainSegs, 2)
-            seg_val_onehot = tensorflow.keras.utils.to_categorical(valSegs, 2)
-            seg_test_onehot = tensorflow.keras.utils.to_categorical(testSegs, 2)
+            trainDataSet = unetSequence(self.dataCSVFile, trainIndexes, self.batch_size, labelName,self.gClient, tempFileDir)
+            valDataSet = unetSequence(self.dataCSVFile, valIndexes, self.batch_size, labelName, self.gClient,tempFileDir)
+            testDataSet = unetSequence(self.dataCSVFile, testIndexes, self.batch_size, labelName, self.gClient,tempFileDir)
 
-            print("TrainImages: {}". format(trainImages.shape))
-            print("TrainSegs: {}". format(seg_train_onehot.shape))
-            print("valImages: {}". format(valImages.shape))
-            print("valSegs: {}". format(seg_val_onehot.shape))
-            print("testImages: {}". format(testImages.shape))
-            print("testSegs: {}". format(seg_test_onehot.shape))
-
-            model = network.createModel((128,128,1),num_classes=2)
+            model = network.createModel((512,512,3),num_classes=10)
             print(model.summary())
             model.compile(optimizer = self.optimizer, loss = self.loss_Function, metrics = [IoU, 'accuracy'])
-            history = model.fit(x=trainImages,
-                                y=seg_train_onehot,
-                                validation_data=(valImages,seg_val_onehot),
+            history = model.fit(x=trainDataSet,
+                                validation_data=valDataSet,
                                 batch_size = self.batch_size,
                                 epochs = self.numEpochs)
 
-            results = model.evaluate(x = testImages,
-                                     y = seg_test_onehot,
+            results = model.evaluate(x = testDataSet,
                                      batch_size = self.batch_size)
             network.saveModel(model,foldDir)
             self.saveTrainingInfo(fold,foldDir,history.history,results)

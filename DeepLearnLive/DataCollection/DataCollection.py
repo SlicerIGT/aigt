@@ -128,7 +128,7 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow(self.collectFromSequenceCheckBox)
 
     self.problemTypeComboBox = qt.QComboBox()
-    self.problemTypeComboBox.addItems(["Select problem type","Classification","Detection","Segmentation"])
+    self.problemTypeComboBox.addItems(["Select problem type","Classification","Detection","Segmentation","Transform"])
     parametersFormLayout.addRow(self.problemTypeComboBox)
     self.classificationFrame = qt.QFrame()
     self.classificationLayout()
@@ -142,6 +142,11 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     self.segmentationLayout()
     parametersFormLayout.addRow(self.segmentationFrame)
     self.segmentationFrame.visible = False
+    self.transformFrame = qt.QFrame()
+    self.transformLayout()
+    parametersFormLayout.addRow(self.transformFrame)
+    self.transformFrame.visible = False
+
 
     #
     # Start/Stop Image Collection Button
@@ -724,6 +729,35 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
 
     self.segmentationLabellingMethodComboBox.connect('currentIndexChanged(int)', self.onLabellingMethodSelected)
 
+  def transformLayout(self):
+    self.transformFrame = qt.QFrame()
+    transformFormLayout = qt.QFormLayout(self.transformFrame)
+    self.transformLabellingMethodComboBox = qt.QComboBox()
+    self.transformLabellingMethodComboBox.addItems(["Unlabelled","From Sequence"]) #To-do: add support for exporting single transform for all labels
+    self.labellingMethod = self.transformLabellingMethodComboBox.currentText
+    transformFormLayout.addWidget(self.transformLabellingMethodComboBox)
+
+    self.transformLabelTypeLineEdit = qt.QLineEdit("Label Title")
+    transformFormLayout.addWidget(self.transformLabelTypeLineEdit)
+    self.transformLabelTypeLineEdit.visible = False
+
+    self.inputTransformSelector = slicer.qMRMLNodeComboBox()
+    self.inputTransformSelector.selectNodeUponCreation = True
+    self.inputTransformSelector.nodeTypes = ["vtkMRMLSequenceNode"]
+    self.inputTransformSelector.addEnabled = False
+    self.inputTransformSelector.removeEnabled = False
+    self.inputTransformSelector.editEnabled = False
+    self.inputTransformSelector.renameEnabled = False
+    self.inputTransformSelector.noneEnabled = False
+    self.inputTransformSelector.showHidden = False
+    self.inputTransformSelector.showChildNodeTypes = False
+    self.inputTransformSelector.setMRMLScene(slicer.mrmlScene)
+    transformFormLayout.addWidget(self.inputTransformSelector)
+    self.inputTransformSelector.visible = False
+    self.transformLabelNode = self.inputTransformSelector.currentNode()
+
+    self.transformLabellingMethodComboBox.connect('currentIndexChanged(int)', self.onLabellingMethodSelected)
+
 
   def createWebcamPlusConnector(self):
     """
@@ -1055,14 +1089,22 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
       self.classificationFrame.visible = True
       self.detectionFrame.visible = False
       self.segmentationFrame.visible = False
+      self.transformFrame.visible = False
     elif self.problemType == "Detection":
       self.classificationFrame.visible = False
       self.detectionFrame.visible = True
       self.segmentationFrame.visible = False
+      self.transformFrame.visible = False
     elif self.problemType == "Segmentation":
       self.classificationFrame.visible = False
       self.detectionFrame.visible = False
       self.segmentationFrame.visible = True
+      self.transformFrame.visible = False
+    elif self.problemType =="Transform":
+      self.transformFrame.visible = True
+      self.classificationFrame.visible = False
+      self.detectionFrame.visible = False
+      self.segmentationFrame.visible = False
 
   def onAutoLabelFileChanged(self):
     """
@@ -1103,9 +1145,12 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
     elif self.labellingMethod == "From Segmentation":
       self.logic.setLabelName(self.inputSegmentation)
       self.logic.setLabelType(self.inputSegmentation)
-    elif self.labellingMethod == "From Sequence":
+    elif self.problemType == "Classification" and self.labellingMethod == "From Sequence":
       self.logic.setLabelSequence(self.classificationLabelNode)
       self.logic.setLabelType(self.classificationLabelTypeLineEdit.text)
+    elif self.problemType == "Transform" and self.labellingMethod == "From Sequence":
+      self.logic.setLabelSequence(self.transformLabelNode)
+      self.logic.setLabelType(self.transformLabelNode.GetName())
     self.logic.startImageCollection (self.collectingImages, self.imageLabels,self.csvFilePath)
 
   def onLabellingMethodSelected(self):
@@ -1141,6 +1186,9 @@ class DataCollectionWidget(ScriptedLoadableModuleWidget):
         self.inputSegmentationSelector.visible = False
       else:
         self.inputSegmentationSelector.visible = True
+    elif self.problemType == "Transform":
+      self.labellingMethod = self.transformLabellingMethodComboBox.currentText
+      self.inputTransformSelector.visible = True
     else:
       self.labellingMethod = "Unlabelled"
     self.logic.setLabellingMethod(self.labellingMethod)
@@ -1458,7 +1506,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
 
     numDataNodes = sequenceNode.GetNumberOfDataNodes()
     addingToExisting = False
-    all_labels = self.getLabelsFromSequence()
+    labelType, all_labels = self.getLabelsFromSequence()
+    labelName = None
     if (not self.labelType in self.imageLabels.columns) and not self.imageLabels.empty:
       self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max() + 1)]
       addingToExisting = True
@@ -1471,10 +1520,14 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       timeRecorded = float(sequenceNode.GetNthIndexValue(i))
       roundedtimeRecorded = "%.2f" % timeRecorded
       if timeRecorded - prevTimeRecorded > 0.01:
-        prevTimeRecorded = timeRecorded
         roundedtimeRecorded = float(roundedtimeRecorded)
-        if self.labellingMethod == "From Sequence":
+        if self.labellingMethod == "From Sequence" and labelType == "Classification":
           labelName = self.getClassificationLabelFromSequence(all_labels,timeRecorded)
+        elif self.labellingMethod == "From Sequence" and labelType == "Transform":
+          tempLabelName = self.getTransformLabelFromSequence(timeRecorded,i)
+          if tempLabelName != None:
+            labelName = tempLabelName
+
         if addingToExisting:
           entry = self.imageLabels.loc[(self.imageLabels["Time Recorded"] == roundedtimeRecorded)]
           if entry.empty:
@@ -1585,6 +1638,18 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       labelName = label.iloc[0][self.labelType]
     return labelName
 
+  def getTransformLabelFromSequence(self,timeRecorded,index):
+    transformNode = self.labelSequenceNode.GetDataNodeAtValue(str(timeRecorded))
+    try:
+      transformArray = slicer.util.arrayFromTransformMatrix(transformNode)
+      fileName = self.labelType + "_" + str(index).zfill(5) + ".npy"
+      imagePath = os.path.dirname(self.labelFilePath)
+      numpy.save(os.path.join(imagePath, fileName), transformArray)
+    except AttributeError:
+      fileName = None
+    return fileName
+
+
   def getLabelsFromSequence(self,labelSequenceNode=None):
     """
     retrieves label data from a sequence node
@@ -1594,22 +1659,29 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     if labelSequenceNode != None:
       self.labelSequenceNode = labelSequenceNode
       self.labelType = labelSequenceNode.GetName().replace("-Sequence","")
-    labels = pandas.DataFrame(columns = [self.labelType,"Start","End"])
+
     numDataNodes = self.labelSequenceNode.GetNumberOfDataNodes()
-    startIndex = float(self.labelSequenceNode.GetNthIndexValue(0))
-    startLabel = self.labelSequenceNode.GetNthDataNode(0).GetText()
-    endIndex = float(self.labelSequenceNode.GetNthIndexValue(0))
-    for i in range(1,numDataNodes):
-      currentLabel = self.labelSequenceNode.GetNthDataNode(i).GetText()
-      if currentLabel == startLabel and i != numDataNodes-1:
-        endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
-      else:
-        endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
-        labels = labels.append({self.labelType:startLabel,"Start":startIndex,"End":endIndex},ignore_index=True)
-        startIndex = endIndex
-        startLabel = currentLabel
-        #endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
-    return labels
+    firstDataNode = self.labelSequenceNode.GetNthDataNode(0)
+    if "Transform" in firstDataNode.GetClassName():
+      labelType = "Transform"
+      labels = None
+    elif "Text" in firstDataNode.GetClassName():
+      labelType = "Classification"
+      labels = pandas.DataFrame(columns=[self.labelType, "Start", "End"])
+      startIndex = float(self.labelSequenceNode.GetNthIndexValue(0))
+      startLabel = self.labelSequenceNode.GetNthDataNode(0).GetText()
+      endIndex = float(self.labelSequenceNode.GetNthIndexValue(0))
+      for i in range(1,numDataNodes):
+        currentLabel = self.labelSequenceNode.GetNthDataNode(i).GetText()
+        if currentLabel == startLabel and i != numDataNodes-1:
+          endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
+        else:
+          endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
+          labels = labels.append({self.labelType:startLabel,"Start":startIndex,"End":endIndex},ignore_index=True)
+          startIndex = endIndex
+          startLabel = currentLabel
+          #endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
+    return labelType,labels
 
   def labelExistingEntries(self,imageLabels,autolabels):
     """
