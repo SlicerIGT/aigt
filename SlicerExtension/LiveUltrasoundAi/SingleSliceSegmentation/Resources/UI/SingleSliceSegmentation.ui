@@ -314,14 +314,14 @@
       <item row="2" column="0">
        <widget class="QLabel" name="label_8">
         <property name="text">
-         <string>Export additional data:</string>
+         <string>Export as .npy:</string>
         </property>
        </widget>
       </item>
       <item row="2" column="1">
        <widget class="QCheckBox" name="exportTransformCheckBox">
         <property name="text">
-         <string>Image to World Transform</string>
+         <string>Images, Segmentations, and Image-to-World Transforms</string>
         </property>
        </widget>
       </item>
