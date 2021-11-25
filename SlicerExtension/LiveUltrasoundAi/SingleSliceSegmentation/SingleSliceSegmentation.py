@@ -449,9 +449,10 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # Prevent segmentation master volume to be created in the wrong position.
     # Todo: Instead of this, the input image should be kept transformed, and the segmentation also transformed
 
-    inputImageNode = slicer.util.getFirstNodeByName(DEFAULT_INPUT_IMAGE_NAME)
-    if inputImageNode is not None and inputImageNode.GetClassName() == 'vtkMRMLScalarVolumeNode':
-      inputImageNode.SetAndObserveTransformNodeID(None)
+    # inputImageNode = slicer.util.getFirstNodeByName(DEFAULT_INPUT_IMAGE_NAME)
+
+    # if inputImageNode is not None and inputImageNode.GetClassName() == 'vtkMRMLScalarVolumeNode':
+    #   inputImageNode.SetAndObserveTransformNodeID(None)
 
     if self.ui.editor.turnOffLightboxes():
       slicer.util.warningDisplay('Segment Editor is not compatible with slice viewers in light box mode.'
