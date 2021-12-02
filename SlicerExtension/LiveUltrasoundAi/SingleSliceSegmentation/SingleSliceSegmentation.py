@@ -764,16 +764,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       logging.error("Export folder does not exist {}".format(outputFolder))
       return
 
-    # Grab the Landmarking Scan Sequence - we will get transforms from here.
-    landmarkingScanSequence = None
-    sequenceBrowserNodesList = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
-    for sequenceBrowserNode in sequenceBrowserNodesList:
-      if 'LandmarkingScan' in sequenceBrowserNode.GetName():
-        landmarkingScanSequence = sequenceBrowserNode
-    if landmarkingScanSequence is None:
-      logging.error("Landmarking Scan sequence does not exist.")
-      return
-
+    # Grab the Image To Transducer Transform - we will get all applicable transforms from here.
     imageToTrans = slicer.util.getFirstNodeByName("ImageToTransd*")
     if imageToTrans is None:
       logging.error("ImageToTransducer transform does not exist.")
@@ -781,12 +772,10 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
     num_items = selectedImageSequence.GetNumberOfItems()
     selectedImageSequence.SelectFirstItem()
-    landmarkingScanSequence.SelectFirstItem()
 
     for i in range(num_items):
 
       # Get landmarking scan transform, get TransformToWorld
-      landmarkingScanSequence.SetSelectedItemNumber(i)
       transformToWorld = vtk.vtkMatrix4x4()
       imageToTrans.GetMatrixTransformToWorld(transformToWorld)
       transformToWorld_numpy = slicer.util.arrayFromVTKMatrix(transformToWorld)
