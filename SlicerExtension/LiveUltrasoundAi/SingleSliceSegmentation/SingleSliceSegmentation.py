@@ -660,29 +660,29 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
     # Get whole image volume (each frame in the original recording)
     num_items = selectedImageSequence.GetNumberOfItems()
-    n = num_items
     selectedImageSequence.SelectFirstItem()
+    img_numpy_size = slicer.util.arrayFromVolume(selectedImage).shape
+    img_seq_numpy = np.zeros((num_items, img_numpy_size[1], img_numpy_size[2], 1), dtype=np.uint8)
 
-    for i in range(n):
-      
+    for i in range(num_items):
+
       img_numpy = slicer.util.arrayFromVolume(selectedImage)
       resize_img_numpy = np.expand_dims(img_numpy, axis=3)
 
-      if i == 0:
-        img_seq_numpy = resize_img_numpy
-      else:
-        img_seq_numpy = np.concatenate((img_seq_numpy, resize_img_numpy))
+      img_seq_numpy[i, ...] = resize_img_numpy
 
       selectedImageSequence.SelectNextItem()
+      slicer.app.processEvents()
 
+    np.save(img_fullname, img_seq_numpy)
+      
     # Get each segmentation at the right spot in volume the same size as the images
     num_items = selectedSegmentationSequence.GetNumberOfItems()
-    n = num_items
     selectedSegmentationSequence.SelectFirstItem()
 
     seg_seq_numpy = np.zeros(img_seq_numpy.shape, dtype=np.uint8)
     
-    for i in range(n):
+    for i in range(num_items):
 
       slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
                                                                                self.LabelmapNode, selectedImage)
@@ -690,10 +690,10 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       resize_seg_numpy = np.expand_dims(seg_numpy, axis=3)
       segmentationIndex = int(selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX))
       seg_seq_numpy[segmentationIndex, ...] = resize_seg_numpy
-    
-      selectedSegmentationSequence.SelectNextItem()
 
-    np.save(img_fullname, img_seq_numpy)
+      selectedSegmentationSequence.SelectNextItem()
+      slicer.app.processEvents()
+
     np.save(seg_fullname, seg_seq_numpy)
 
   def exportPngSequence(self,
@@ -773,17 +773,16 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     num_items = selectedImageSequence.GetNumberOfItems()
     selectedImageSequence.SelectFirstItem()
 
+    transforms_seq_numpy = np.zeros((num_items, 4, 4))
+
     for i in range(num_items):
 
       # Get landmarking scan transform, get TransformToWorld
       transformToWorld = vtk.vtkMatrix4x4()
       imageToTrans.GetMatrixTransformToWorld(transformToWorld)
       transformToWorld_numpy = slicer.util.arrayFromVTKMatrix(transformToWorld)
-
-      if i == 0:
-        transforms_seq_numpy = transformToWorld_numpy[np.newaxis, :]
-      else:
-        transforms_seq_numpy = np.concatenate((transforms_seq_numpy, transformToWorld_numpy[np.newaxis, :]), axis=0)
+      
+      transforms_seq_numpy[i, ...] = transformToWorld_numpy
 
       selectedImageSequence.SelectNextItem()
       slicer.app.processEvents()
