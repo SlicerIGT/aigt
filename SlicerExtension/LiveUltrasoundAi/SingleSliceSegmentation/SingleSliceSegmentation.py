@@ -586,9 +586,6 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
   def __init__(self, parent=None):
     ScriptedLoadableModuleLogic.__init__(self, parent)
 
-    self.LabelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
-
-
   def exportSlice(self,
                   selectedImage,
                   selectedSegmentation,
@@ -604,10 +601,11 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     ic.Update()
 
     png_writer = vtk.vtkPNGWriter()
+    labelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
 
     slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(
-      selectedSegmentation, self.LabelmapNode, selectedImage)
-    segmentedImageData = self.LabelmapNode.GetImageData()
+      selectedSegmentation, labelmapNode, selectedImage)
+    segmentedImageData = labelmapNode.GetImageData()
     ultrasoundData = selectedImage.GetImageData()
 
     seg_file_name = filenamePrefix + "_%04d_segmentation" % itemNumber + ".png"
@@ -653,6 +651,8 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       logging.error("Export folder does not exist {}".format(outputFolder))
       return
 
+    labelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
+
     seg_file_name = baseName + "_segmentation"
     img_file_name = baseName + "_ultrasound"
     seg_fullname = os.path.join(outputFolder, seg_file_name)
@@ -685,8 +685,8 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     for i in range(num_items):
 
       slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
-                                                                               self.LabelmapNode, selectedImage)
-      seg_numpy = slicer.util.arrayFromVolume(self.LabelmapNode)
+                                                                               labelmapNode, selectedImage)
+      seg_numpy = slicer.util.arrayFromVolume(labelmapNode)
       resize_seg_numpy = np.expand_dims(seg_numpy, axis=3)
       segmentationIndex = int(selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX))
       seg_seq_numpy[segmentationIndex, ...] = resize_seg_numpy
@@ -712,6 +712,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     imageCast.Update()
 
     pngWriter = vtk.vtkPNGWriter()
+    labelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
 
     num_items = selectedSegmentationSequence.GetNumberOfItems()
     selectedSegmentationSequence.SelectFirstItem()
@@ -725,9 +726,9 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       slicer.modules.sequences.logic().UpdateAllProxyNodes()
 
       slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
-                                                                               self.LabelmapNode,
+                                                                               labelmapNode,
                                                                                selectedImage)
-      segmentedImageData = self.LabelmapNode.GetImageData()
+      segmentedImageData = labelmapNode.GetImageData()
       ultrasoundData = selectedImage.GetImageData()
 
       segmentationFileName = baseName + "_%04d_segmentation" % i + ".png"
