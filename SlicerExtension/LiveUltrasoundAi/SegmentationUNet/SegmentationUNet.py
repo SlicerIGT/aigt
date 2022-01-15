@@ -384,6 +384,8 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     self.fpsBuffer = np.zeros(5)
     self.waitForNodeLastMTime = 0
 
+    self.predictionPaused = False
+
   def setDefaultParameters(self, parameterNode):
     if not parameterNode.GetParameter(self.USE_SEPARATE_PROCESS):
       parameterNode.SetParameter(self.USE_SEPARATE_PROCESS, "True")
@@ -391,6 +393,18 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
       parameterNode.SetParameter(self.OUTPUT_FPS, "0.0")
     if not parameterNode.GetParameter(self.PREDICTION_ACTIVE):
       parameterNode.SetParameter(self.PREDICTION_ACTIVE, "False")
+
+  def pausePrediction(self):
+    """
+    Blocks prediction computation until resumePrediction() is called, or prediction is started again.
+    """
+    self.predictionPaused = True
+
+  def resumePrediction(self):
+    """
+    Unblocks prediction computation, so prediction will be computed automatically when input is modified.
+    """
+    self.predictionPaused = False
 
   def setWaitForNode(self, selectedNode):
     parameterNode = self.getParameterNode()
@@ -512,12 +526,14 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
       # Start observing input image
 
+      self.predictionPaused = False
       useProcess = self.getUseProcess()
       if useProcess:
         logging.info("Starting separate process for prediction")
         self.setupProcess()
       self.inputModifiedObserverTag = inputImageNode.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent,
                                                                  self.onInputNodeModified)
+      self.onInputNodeModified(None, None)  # Compute prediction for current image instead of waiting for an update
     else:
       logging.info("Stopping live segmentation")
       if self.inputModifiedObserverTag is not None:
@@ -612,6 +628,9 @@ class SegmentationUNetLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     Callback function for input image modified event.
     :returns: None
     """
+    if self.predictionPaused == True:
+      return
+
     useProcesses = self.getUseProcess()
     if useProcesses:
       self.updatePredictionOnProcess()
