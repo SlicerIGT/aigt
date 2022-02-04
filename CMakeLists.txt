@@ -20,7 +20,7 @@ include(${Slicer_USE_FILE})
 # Extension modules
 add_subdirectory(DeepLearnLive)
 add_subdirectory(SequenceLabeller)
-add_subdirectory(SlicerExtension/UsAnnotationExport/SingleSliceSegmentation)
+add_subdirectory(SlicerExtension/LiveUltrasoundAi/SingleSliceSegmentation)
 
 #-----------------------------------------------------------------------------
 include(${Slicer_EXTENSION_GENERATE_CONFIG})
