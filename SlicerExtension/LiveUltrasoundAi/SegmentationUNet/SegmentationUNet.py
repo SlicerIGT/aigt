@@ -43,9 +43,9 @@ except:
   if retval:
     qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
     if cb.isChecked():
-      slicer.util.pip_install('tensorflow-gpu==2.5.0 scipy scikit-image')
+      slicer.util.pip_install('tensorflow-gpu scipy scikit-image')
     else:
-      slicer.util.pip_install('tensorflow==2.5.0 scipy scikit-image')
+      slicer.util.pip_install('tensorflow scipy scikit-image')
     qt.QApplication.restoreOverrideCursor()
 
 
