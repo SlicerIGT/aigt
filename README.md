@@ -3,7 +3,7 @@ This repository contains scripts for deep learning for guided medical interventi
 
 # Getting started
 ## Install and set up Anaconda environment
-- Install [Anaconda (with Python 3.7)](https://www.anaconda.com/distribution/)
+- Install a recent Anaconda version for Python 3.9 version from the [Anaconda download page](https://www.anaconda.com/products/distribution#windows)
 - Clone this repository on your computer. Your local clone may be in a path like `c:\dev\aigt`
 - Start the *Anaconda Prompt* application and navigate to the environment setup folder `cd c:\dev\aigt\SetupAnaconda`
 - Run the *setup_env.bat* file to create environment in a folder, e.g. `setup_env.bat c:\dev\dlenv`
