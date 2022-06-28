@@ -6,11 +6,18 @@ import datetime
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
+from ruamel.yaml import YAML
 
 import utils
-from losses import WeightedCategoricalCrossEntropy
+import ultrasound_batch_generator as generator
+from losses import WeightedCategoricalCrossEntropy, DiceLoss, BCEDiceLoss
 from Models.unet import UNet
-from ultrasound_batch_generator import UltrasoundSegmentationBatchGenerator
+
+
+# Set random seed for reproducibility
+rng = np.random.default_rng(2022)
+tf.random.set_seed(2022)
+os.environ["TF_DETERMINISTIC_OPS"] = "1"  # GPU seed
 
 
 def get_parser():
@@ -22,10 +29,10 @@ def get_parser():
         help="path to folder for all project files"
     )
     parser.add_argument(
-        "--model_name",
+        "--config_yaml",
         type=str,
         required=True,
-        help="name of model for file saving"
+        help="path to .yaml config file containing training settings"
     )
     parser.add_argument(
         "--girder_url",
@@ -44,41 +51,16 @@ def get_parser():
         required=True,
         help="CSV file containing Girder IDs and subject IDs for all files"
     )
-    parser.add_argument(
-        "--image_size",
-        nargs="+",
-        type=int,
-        required=True,
-        help="dimensions of the 2D image (e.g. --image_size 128 OR --image_size 128 256)"
-    )
-    parser.add_argument("--epochs", type=int, default=300)
-    parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=0.001)
-    parser.add_argument("--use_lr_decay", default=False, action="store_true")
-    parser.add_argument("--use_weight_decay", default=False, action="store_true")
-    parser.add_argument("--num_classes", type=int, default=2)
-    parser.add_argument(
-        "--class_weights",
-        nargs=2,
-        type=float,
-        default=[0.15, 0.85],
-        help="weights of each of the two classes for loss function"
-    )
-    parser.add_argument(
-        "--patience",
-        type=int,
-        default=20,
-        help="number of epochs with no improvement before training is stopped"
-    )
-    parser.add_argument(
-        "--data_aug_params",
-        nargs=4,
-        type=float,
-        default=[10.0, 0.1, 1.1, 0.9],
-        help="training data augmentation parameters "
-             "(usage: max_rotation_angle max_shift_factor max_zoom_factor min_zoom_factor)"
-    )
     return parser.parse_args()
+
+
+def parse_config(config_filepath):
+    try:
+        with open(config_filepath, "r") as f:
+            data = YAML().load(f)
+            return data
+    except Exception as e:
+        print(f"error parsing .yaml file: {e}")
 
 
 def get_schedule_intervals(n_images, batch_size, epochs, interval=10, decay_rate=0.5):
@@ -91,6 +73,13 @@ def get_schedule_intervals(n_images, batch_size, epochs, interval=10, decay_rate
             boundaries.append(np.floor(steps_per_epoch * interval * (i + 1)))
         values.append(1.0 * (decay_rate ** i))
     return boundaries, values
+
+
+def get_default_class_weights(arr):
+    size = arr.size
+    num_non_zeros = np.count_nonzero(arr)
+    num_zeros = size - num_non_zeros
+    return [num_zeros / size, num_non_zeros / size]
 
 
 def main(FLAGS):
@@ -108,19 +97,8 @@ def main(FLAGS):
             # Virtual devices must be set before GPUs have been initialized
             print(e)
 
-    # Learning hyperparameters
-    if len(FLAGS.image_size) == 1:
-        ultrasound_size = (FLAGS.image_size[0], FLAGS.image_size[0], 1)
-    elif len(FLAGS.image_size) == 2:
-        ultrasound_size = (FLAGS.image_size[0], FLAGS.image_size[1], 1)
-    else:
-        raise ValueError(f"expected 1 or 2 integers for --image_size, but got {len(FLAGS.image_size)}")
-
-    # Training data augmentation hyperparameters
-    max_rotation_angle = FLAGS.data_aug_params[0]
-    max_shift_factor = FLAGS.data_aug_params[1]
-    max_zoom_factor = FLAGS.data_aug_params[2]
-    min_zoom_factor = FLAGS.data_aug_params[3]
+    # Load training settings
+    config = parse_config(FLAGS.config_yaml)
 
     # Create standard folders for save
     data_arrays_fullpath, notebooks_save_fullpath, results_save_fullpath, \
@@ -156,7 +134,7 @@ def main(FLAGS):
     Example 3: leave-one-out cross validation with 3 patients, then training on all available data (no validation):
     validation_schedule_patient = np.array([[0],[1],[2],[-1]])
     """
-    validation_schedule_patient = np.array([[0, 1, 2, 3], [7, 11, 13, 18], [20, 23, 27, 30]])
+    validation_schedule_patient = np.array(config["train"]["validation_schedule"])
     if np.max(np.max(validation_schedule_patient)) > (n_patients - 1):
         raise Exception("Patient ID cannot be greater than {}".format(n_patients - 1))
 
@@ -165,32 +143,41 @@ def main(FLAGS):
     for i in range(num_validation_rounds):
         print("Validation on patients {} in round {}".format(validation_schedule_patient[i], i))
 
+    # Initialize data transformations
+    transforms = []
+    if config["train"]["preprocess"]:
+        for transform in config["train"]["preprocess"]:
+            try:
+                tfm_class = getattr(generator, transform["name"])(*[], **transform["args"])
+            except KeyError:
+                tfm_class = getattr(generator, transform["name"])()
+            transforms.append(tfm_class)
+
     # Print all training settings
     save_timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     print("\nTimestamp for saved files:        {}".format(save_timestamp))
     print("Saving models in:                 {}".format(models_save_fullpath))
-    print("Model name:                       {}".format(FLAGS.model_name))
+    print("Model name:                       {}".format(config["model_name"]))
     print("Saving validation predictions in: {}".format(val_data_fullpath))
 
     print("\nModel settings:")
     print("Number of patients:                     {}".format(n_patients))
     print("Total number of training images:        {}".format(n_images))
     print("Total number of training segmentations: {}".format(n_images))
-    print("Image size:                             {}".format(ultrasound_size))
-    print("Epochs:                                 {}".format(FLAGS.epochs))
-    print("Batch size:                             {}".format(FLAGS.batch_size))
-    print("Learning rate:                          {}".format(FLAGS.lr))
-    print("Use learning rate decay:                {}".format(FLAGS.use_lr_decay))
-    print("Use weight decay:                       {}".format(FLAGS.use_weight_decay))
-    print("Number of classes:                      {}".format(FLAGS.num_classes))
-    print("Class weights:                          {}".format(FLAGS.class_weights))
-    print("Patience:                               {}".format(FLAGS.patience))
+    print("Image size:                             {}".format(config["image_size"]))
+    print("Epochs:                                 {}".format(config["train"]["epochs"]))
+    print("Batch size:                             {}".format(config["train"]["batch_size"]))
+    print("Patience:                               {}".format(config["train"]["patience"]))
+    print("Optimizer:                              {}".format(config["train"]["optimizer"]["name"]))
+    print("Learning rate:                          {}".format(config["train"]["optimizer"]["lr"]))
+    print("Loss function:                          {}".format(config["train"]["loss"]["name"]))
 
-    print("\nData augmentation settings:")
-    print("Maximum rotation angle: {}".format(max_rotation_angle))
-    print("Maximum shift factor:   {}".format(max_shift_factor))
-    print("Maximum zoom factor:    {}".format(max_zoom_factor))
-    print("Minimum zoom factor:    {}".format(min_zoom_factor))
+    print("\nData augmentation transformations:")
+    for config_transform in config["train"]["preprocess"]:
+        try:
+            print(f"\t{config_transform['name']} - arguments: {dict(config_transform['args'])}")
+        except KeyError:
+            print(f"\t{config_transform['name']}")
 
     # Cross validation
     cross_val_time_start = datetime.datetime.now()
@@ -241,23 +228,53 @@ def main(FLAGS):
         print(f"\tTraining on {n_train} images, validating on {n_val} images...")
 
         # Initialize model
-        training_generator = UltrasoundSegmentationBatchGenerator(
+        training_generator = generator.UltrasoundSegmentationBatchGenerator(
             train_ultrasound_data,
-            train_segmentation_data[:, :, :, 0],
-            FLAGS.batch_size,
-            (ultrasound_size[0], ultrasound_size[1]),
-            max_rotation_angle=max_rotation_angle,
-            max_shift_factor=max_shift_factor,
-            min_zoom_factor=min_zoom_factor,
-            max_zoom_factor=max_zoom_factor
+            train_segmentation_data,
+            config["train"]["batch_size"],
+            (config["image_size"][0], config["image_size"][1]),
+            transforms=transforms,
+            rng=rng
         )
+
+        # Set decay schedule
         optimizer_step = tf.Variable(0, trainable=False)
-        boundaries, values = get_schedule_intervals(n_train, FLAGS.batch_size, FLAGS.epochs)
+        boundaries, values = get_schedule_intervals(n_train, config["train"]["batch_size"], config["train"]["epochs"])
         schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay(boundaries, values)
-        lr = lambda: FLAGS.lr * schedule(optimizer_step) if FLAGS.use_lr_decay else FLAGS.lr
-        wd = lambda: 1e-4 * schedule(optimizer_step) if FLAGS.use_weight_decay else 0
-        optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=wd)
-        loss_fn = WeightedCategoricalCrossEntropy(FLAGS.class_weights)
+        lr_schedule = lambda: config["train"]["optimizer"]["lr"] * schedule(optimizer_step)
+
+        # Initialize optimizer
+        optimizer_name = config["train"]["optimizer"]["name"]
+        if optimizer_name.lower() == "adam":
+            wd_schedule = lambda: 1e-4 * schedule(optimizer_step)
+            optimizer = tfa.optimizers.AdamW(learning_rate=lr_schedule, weight_decay=wd_schedule)
+        elif optimizer_name.lower() == "sgd":
+            optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule, momentum=0.9)
+        else:
+            raise ValueError(f"unsupported optimizer: {optimizer_name}")
+
+        # Initialize loss function
+        loss_fn_name = config["train"]["loss"]["name"]
+        if loss_fn_name.lower() == "wcce":
+            try:
+                loss_fn = WeightedCategoricalCrossEntropy(config["train"]["loss"]["class_weights"])
+            except KeyError:
+                class_weights = get_default_class_weights(train_ultrasound_data)
+                loss_fn = WeightedCategoricalCrossEntropy(class_weights)
+                print(f"No class weights provided, using class weights {class_weights}")
+        elif loss_fn_name.lower() == "dice":
+            loss_fn = DiceLoss()
+        elif loss_fn_name.lower() == "bce_dice":
+            try:
+                loss_fn = BCEDiceLoss(config["train"]["loss"]["class_weights"])
+            except KeyError:
+                class_weights = get_default_class_weights(train_ultrasound_data)
+                loss_fn = BCEDiceLoss(class_weights)
+                print(f"No class weights provided, using class weights {class_weights}")
+        else:
+            raise ValueError(f"unsupported loss function: {loss_fn_name}")
+
+        # Initialize metric and model
         metric = tf.keras.metrics.BinaryAccuracy()
         model = UNet()
 
@@ -281,8 +298,8 @@ def main(FLAGS):
         # Training loop
         training_time_start = datetime.datetime.now()
         epoch_size = len(training_generator)
-        for epoch in tqdm.tqdm(range(FLAGS.epochs)):
-            print(f"Starting epoch {epoch}, lr = {FLAGS.lr * schedule(optimizer_step)}")
+        for epoch in tqdm.tqdm(range(config["train"]["epochs"])):
+            print(f"Starting epoch {epoch}, lr = {config['train']['optimizer']['lr'] * schedule(optimizer_step)}")
             epoch_loss = 0
             epoch_accuracy = 0
             for batch_index in range(epoch_size):
@@ -302,14 +319,14 @@ def main(FLAGS):
             epoch_val_accuracy = 0
             with tf.device("cpu:0"):  # Prevent OOM
                 for val_batch_index in range(epoch_size):
-                    start_idx = val_batch_index * FLAGS.batch_size
-                    end_idx = (val_batch_index + 1) * FLAGS.batch_size
+                    start_idx = val_batch_index * config["train"]["batch_size"]
+                    end_idx = (val_batch_index + 1) * config["train"]["batch_size"]
                     val_ultrasound_batch = val_ultrasound_data[start_idx:end_idx]
                     val_segmentation_batch = val_segmentation_data[start_idx:end_idx]
+                    val_segmentation_onehot = tf.keras.utils.to_categorical(val_segmentation_batch, 2)
                     val_predictions = model(val_ultrasound_batch)
-                    val_segmentation_batch_onehot = tf.keras.utils.to_categorical(val_segmentation_batch, FLAGS.num_classes)
-                    epoch_val_loss += loss_fn(val_segmentation_batch_onehot, val_predictions) / epoch_size
-                    metric.update_state(val_segmentation_batch_onehot, val_predictions)
+                    epoch_val_loss += loss_fn(val_segmentation_onehot, val_predictions) / epoch_size
+                    metric.update_state(val_segmentation_onehot, val_predictions)
                     epoch_val_accuracy += metric.result().numpy() / epoch_size
 
             # Log epoch history
@@ -319,7 +336,7 @@ def main(FLAGS):
             history["val_accuracy"].append(epoch_val_accuracy)
 
             # Print epoch results
-            print(f"Epoch {epoch + 1}/{FLAGS.epochs}"
+            print(f"Epoch {epoch + 1}/{config['train']['epochs']}"
                   f" - loss: {epoch_loss:.4f} - accuracy: {epoch_accuracy:.4f}"
                   f" - val_loss: {epoch_val_loss:.4f} - val_accuracy: {epoch_val_accuracy:.4f}")
 
@@ -329,21 +346,21 @@ def main(FLAGS):
                 last_improvement = 0
 
                 # Save best performing model
-                model_filename = FLAGS.model_name + "_model-" + str(val_round_index) + "_" + save_timestamp + ".tf"
+                model_filename = config["model_name"] + "_model-" + str(val_round_index) + "_" + save_timestamp + ".tf"
                 model_fullname = os.path.join(models_save_fullpath, model_filename)
                 model.save(model_fullname)
                 print(f"Model checkpoint saved to {model_fullname}.")
 
                 # Save training history
-                history_filename = FLAGS.model_name + "_history-" + str(val_round_index) + "_" + save_timestamp + ".json"
+                history_filename = config["model_name"] + "_history-" + str(val_round_index) + "_" + save_timestamp + ".json"
                 history_fullname = os.path.join(logs_save_fullpath, history_filename)
                 with open(history_fullname, "w") as f:
                     json.dump(history, f)
                     print(f"Training history saved to {history_fullname}.")
             else:
                 last_improvement += 1
-            if last_improvement > FLAGS.patience:
-                print(f"Validation loss has not decreased for {FLAGS.patience} epochs. "
+            if last_improvement > config["train"]["patience"]:
+                print(f"Validation loss has not decreased for {config['train']['patience']} epochs. "
                       f"Stopping training at {epoch = }.")
                 break
 

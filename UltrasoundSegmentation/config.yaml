@@ -1,0 +1,28 @@
+model_name: UNet
+image_size: [128, 128]
+
+train:
+  validation_schedule:
+    - [0, 1, 2, 3]
+    - [7, 11, 13, 18]
+    - [20, 23, 27, 30]
+  epochs: 300
+  batch_size: 256
+  patience: 20
+
+  loss:
+    name: "bce_dice"  # weighted categorical cross entropy (wcce), dice, or bce_dice
+
+  optimizer:
+    name: "adam"  # choose between adam and sgd
+    lr: 0.02
+
+  preprocess:
+    - name: "RandomScale"
+      args:
+        scaling_limit: 0.1
+    - name: "RandomShift"
+      args:
+        shift_factor: 0.1
+    - name: "RandomFlip"
+    - name: "RandomRotation"
