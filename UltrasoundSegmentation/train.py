@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
 from ruamel.yaml import YAML
+from girder_apikey_read import girder_apikey_read
 
 import utils
 import ultrasound_batch_generator as generator
@@ -35,21 +36,16 @@ def get_parser():
         help="path to .yaml config file containing training settings"
     )
     parser.add_argument(
-        "--girder_url",
-        type=str,
-        default="https://pocus.cs.queensu.ca/api/v1",
-        help="full path to the REST API of a Girder instance"
-    )
-    parser.add_argument(
-        "--girder_key",
-        type=str,
-        help="API key for private Girder collections"
-    )
-    parser.add_argument(
         "--girder_csv",
         type=str,
         required=True,
         help="CSV file containing Girder IDs and subject IDs for all files"
+    )
+    parser.add_argument(
+        "--girder_url",
+        type=str,
+        default="https://pocus.cs.queensu.ca/api/v1",
+        help="full path to the REST API of a Girder instance"
     )
     return parser.parse_args()
 
@@ -107,7 +103,7 @@ def main(FLAGS):
 
     # Fetch Girder data
     ultrasound_arrays_by_patients, segmentation_arrays_by_patients = \
-        utils.load_girder_data(FLAGS.girder_csv, data_arrays_fullpath, FLAGS.girder_url, FLAGS.girder_key)
+        utils.load_girder_data(FLAGS.girder_csv, data_arrays_fullpath, FLAGS.girder_url, girder_apikey_read)
 
     n_patients = len(ultrasound_arrays_by_patients)
     n_images = 0
@@ -227,7 +223,7 @@ def main(FLAGS):
         print(f"\nLeave-{validation_schedule_patient.shape[1]}-out round #{val_round_index}")
         print(f"\tTraining on {n_train} images, validating on {n_val} images...")
 
-        # Initialize model
+        # Initialize dataloader and validation metric
         training_generator = generator.UltrasoundSegmentationBatchGenerator(
             train_ultrasound_data,
             train_segmentation_data,
@@ -236,6 +232,7 @@ def main(FLAGS):
             transforms=transforms,
             rng=rng
         )
+        metric = tf.keras.metrics.BinaryAccuracy()
 
         # Set decay schedule
         optimizer_step = tf.Variable(0, trainable=False)
@@ -274,9 +271,12 @@ def main(FLAGS):
         else:
             raise ValueError(f"unsupported loss function: {loss_fn_name}")
 
-        # Initialize metric and model
-        metric = tf.keras.metrics.BinaryAccuracy()
-        model = UNet()
+        # Initialize model
+        model_name = config["model_name"]
+        if model_name.lower() == "unet":
+            model = UNet()
+        else:
+            raise ValueError(f"unsupported model: {model_name}")
 
         # Train step using eager execution
         @tf.function

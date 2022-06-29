@@ -1,4 +1,4 @@
-model_name: UNet
+model_name: UNet  # only unet supported
 image_size: [128, 128]
 
 train:
@@ -11,7 +11,7 @@ train:
   patience: 20
 
   loss:
-    name: "bce_dice"  # weighted categorical cross entropy (wcce), dice, or bce_dice
+    name: "wcce"  # weighted categorical cross entropy (wcce), dice, or bce_dice
 
   optimizer:
     name: "adam"  # choose between adam and sgd
