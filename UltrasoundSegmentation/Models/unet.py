@@ -62,8 +62,9 @@ class UpsamplingBlock(Layer):
 
 
 class UNet(tf.keras.Model):
-    def __init__(self, n_filters=16, n_classes=2):
+    def __init__(self, n_filters=16, n_classes=2, img_size=(128, 128, 1)):
         super().__init__()
+        self.x = Input(shape=img_size)
 
         # Encoder
         self.encoder1 = ConvBlock(n_filters, n_stages=2)
