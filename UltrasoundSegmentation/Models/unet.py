@@ -112,21 +112,25 @@ class UNet(tf.keras.Model):
         e4_dw = self.encoder4_dw(e4)
 
         bridge = self.bridge(e4_dw)
-        d4_up = self.decoder4_up(bridge) + e4
+        d4_up = Concatenate()([self.decoder4_up(bridge), e4])
 
         d4 = self.decoder4(d4_up)
-        d3_up = self.decoder3_up(d4) + e3
+        d3_up = Concatenate()([self.decoder3_up(d4), e3])
 
         d3 = self.decoder3(d3_up)
-        d2_up = self.decoder2_up(d3) + e2
+        d2_up = Concatenate()([self.decoder2_up(d3), e2])
 
         d2 = self.decoder2(d2_up)
-        d1_up = self.decoder1_up(d2) + e1
+        d1_up = Concatenate()([self.decoder1_up(d2), e1])
 
         d1 = self.decoder1(d1_up)
         out = self.out_conv(d1)
         out = self.activation(out)
         return out
+
+    def summary(self):
+        model = tf.keras.Model(inputs=[self.x], outputs=self.call(self.x))
+        return model.summary()
 
 
 class OldUNet(tf.keras.Model):

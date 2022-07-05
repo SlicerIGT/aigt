@@ -7,11 +7,12 @@ train:
     - [7, 11, 13, 18]
     - [20, 23, 27, 30]
   epochs: 300
-  batch_size: 256
+  batch_size: 64
   patience: 20
 
   loss:
     name: "wcce"  # weighted categorical cross entropy (wcce), dice, or bce_dice
+#    class_weights: [0.15, 0.85]
 
   optimizer:
     name: "adam"  # choose between adam and sgd
