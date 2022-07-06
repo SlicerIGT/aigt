@@ -1,8 +1,10 @@
 import os
+import sys
 import json
 import tqdm
 import argparse
 import datetime
+import logging
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -13,7 +15,6 @@ import utils
 import ultrasound_batch_generator as generator
 from losses import WeightedCategoricalCrossEntropy, DiceLoss, BCEDiceLoss
 from Models.unet import UNet
-
 
 # Set random seed for reproducibility
 rng = np.random.default_rng(2022)
@@ -79,6 +80,30 @@ def get_default_class_weights(arr):
 
 
 def main(FLAGS):
+    # Load training settings
+    config = parse_config(FLAGS.config_yaml)
+
+    # Create standard folders for save
+    data_arrays_fullpath, notebooks_save_fullpath, results_save_fullpath, \
+        models_save_fullpath, logs_save_fullpath, val_data_fullpath = \
+            utils.create_standard_project_folders(FLAGS.save_folder)
+
+    # Setup logging
+    save_timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_log_filename = config["model_name"] + "_log_" + save_timestamp + ".log"
+    output_log_fullpath = os.path.join(logs_save_fullpath, output_log_filename)
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+    c_handler = logging.StreamHandler(sys.stdout)
+    f_handler = logging.FileHandler(output_log_fullpath)
+    c_format = logging.Formatter("%(message)s")
+    f_format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    c_handler.setFormatter(c_format)
+    f_handler.setFormatter(f_format)
+    logger.addHandler(c_handler)
+    logger.addHandler(f_handler)
+    logger.info(f"Run output saved to {output_log_fullpath}.")
+
     # Prevent OOM
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
@@ -87,18 +112,10 @@ def main(FLAGS):
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
             logical_gpus = tf.config.list_logical_devices('GPU')
-            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+            logger.info(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:
             # Memory growth must be set before GPUs have been initialized
-            print(e)
-
-    # Load training settings
-    config = parse_config(FLAGS.config_yaml)
-
-    # Create standard folders for save
-    data_arrays_fullpath, notebooks_save_fullpath, results_save_fullpath, \
-        models_save_fullpath, logs_save_fullpath, val_data_fullpath =\
-            utils.create_standard_project_folders(FLAGS.save_folder)
+            logger.exception(e)
 
     # Fetch Girder data
     ultrasound_arrays_by_patients, segmentation_arrays_by_patients = \
@@ -112,7 +129,7 @@ def main(FLAGS):
         n_patient_segmentations = segmentation_arrays_by_patients[i].shape[0]
         n_images += n_patient_images
         n_segmentations += n_patient_segmentations
-        print(f"Patient {i} has {n_patient_images} ultrasounds and {n_patient_segmentations} segmentations")
+        logger.info(f"Patient {i} has {n_patient_images} ultrasounds and {n_patient_segmentations} segmentations")
 
     # Cross validation scheduling
     """
@@ -134,9 +151,9 @@ def main(FLAGS):
         raise Exception("Patient ID cannot be greater than {}".format(n_patients - 1))
 
     num_validation_rounds = len(validation_schedule_patient)
-    print("Planning {} rounds of validation".format(num_validation_rounds))
+    logger.info("Planning {} rounds of validation".format(num_validation_rounds))
     for i in range(num_validation_rounds):
-        print("Validation on patients {} in round {}".format(validation_schedule_patient[i], i))
+        logger.info("Validation on patients {} in round {}".format(validation_schedule_patient[i], i))
 
     # Initialize data transformations
     transforms = []
@@ -149,30 +166,29 @@ def main(FLAGS):
             transforms.append(tfm_class)
 
     # Print all training settings
-    save_timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    print("\nTimestamp for saved files:        {}".format(save_timestamp))
-    print("Saving models in:                 {}".format(models_save_fullpath))
-    print("Model name:                       {}".format(config["model_name"]))
-    print("Saving validation predictions in: {}".format(val_data_fullpath))
+    logger.info("\nTimestamp for saved files:      {}".format(save_timestamp))
+    logger.info("Saving models in:                 {}".format(models_save_fullpath))
+    logger.info("Model name:                       {}".format(config["model_name"]))
+    logger.info("Saving validation predictions in: {}".format(val_data_fullpath))
 
-    print("\nModel settings:")
-    print("Number of patients:                     {}".format(n_patients))
-    print("Total number of training images:        {}".format(n_images))
-    print("Total number of training segmentations: {}".format(n_images))
-    print("Image size:                             {}".format(config["image_size"]))
-    print("Epochs:                                 {}".format(config["train"]["epochs"]))
-    print("Batch size:                             {}".format(config["train"]["batch_size"]))
-    print("Patience:                               {}".format(config["train"]["patience"]))
-    print("Optimizer:                              {}".format(config["train"]["optimizer"]["name"]))
-    print("Learning rate:                          {}".format(config["train"]["optimizer"]["lr"]))
-    print("Loss function:                          {}".format(config["train"]["loss"]["name"]))
+    logger.info("\nModel settings:")
+    logger.info("Number of patients:                     {}".format(n_patients))
+    logger.info("Total number of training images:        {}".format(n_images))
+    logger.info("Total number of training segmentations: {}".format(n_images))
+    logger.info("Image size:                             {}".format(config["image_size"]))
+    logger.info("Epochs:                                 {}".format(config["train"]["epochs"]))
+    logger.info("Batch size:                             {}".format(config["train"]["batch_size"]))
+    logger.info("Patience:                               {}".format(config["train"]["patience"]))
+    logger.info("Optimizer:                              {}".format(config["train"]["optimizer"]["name"]))
+    logger.info("Learning rate:                          {}".format(config["train"]["optimizer"]["lr"]))
+    logger.info("Loss function:                          {}".format(config["train"]["loss"]["name"]))
 
-    print("\nData augmentation transformations:")
+    logger.info("\nData augmentation transformations:")
     for config_transform in config["train"]["preprocess"]:
         try:
-            print(f"\t{config_transform['name']} - arguments: {dict(config_transform['args'])}")
+            logger.info(f"\t{config_transform['name']} - arguments: {dict(config_transform['args'])}")
         except KeyError:
-            print(f"\t{config_transform['name']}")
+            logger.info(f"\t{config_transform['name']}")
 
     # Cross validation
     cross_val_time_start = datetime.datetime.now()
@@ -219,8 +235,8 @@ def main(FLAGS):
                 )
         n_train = train_ultrasound_data.shape[0]
         n_val = val_ultrasound_data.shape[0]
-        print(f"\nLeave-{validation_schedule_patient.shape[1]}-out round #{val_round_index}")
-        print(f"\tTraining on {n_train} images, validating on {n_val} images...")
+        logger.info(f"\nLeave-{validation_schedule_patient.shape[1]}-out round #{val_round_index}")
+        logger.info(f"\tTraining on {n_train} images, validating on {n_val} images...")
 
         # Initialize dataloader and validation metric
         training_generator = generator.UltrasoundSegmentationBatchGenerator(
@@ -257,7 +273,7 @@ def main(FLAGS):
             except KeyError:
                 class_weights = get_default_class_weights(train_ultrasound_data)
                 loss_fn = WeightedCategoricalCrossEntropy(class_weights)
-                print(f"No class weights provided, using class weights {class_weights}")
+                logger.info(f"No class weights provided, using class weights {class_weights}")
         elif loss_fn_name.lower() == "dice":
             loss_fn = DiceLoss()
         elif loss_fn_name.lower() == "bce_dice":
@@ -266,7 +282,7 @@ def main(FLAGS):
             except KeyError:
                 class_weights = get_default_class_weights(train_ultrasound_data)
                 loss_fn = BCEDiceLoss(class_weights)
-                print(f"No class weights provided, using class weights {class_weights}")
+                logger.info(f"No class weights provided, using class weights {class_weights}")
         else:
             raise ValueError(f"unsupported loss function: {loss_fn_name}")
 
@@ -298,7 +314,7 @@ def main(FLAGS):
         training_time_start = datetime.datetime.now()
         epoch_size = len(training_generator)
         for epoch in tqdm.tqdm(range(config["train"]["epochs"])):
-            print(f"Starting epoch {epoch}, lr = {config['train']['optimizer']['lr'] * schedule(optimizer_step)}")
+            logger.info(f"Starting epoch {epoch}, lr = {config['train']['optimizer']['lr'] * schedule(optimizer_step)}")
             epoch_loss = 0
             epoch_accuracy = 0
             for batch_index in range(epoch_size):
@@ -335,9 +351,9 @@ def main(FLAGS):
             history["val_accuracy"].append(epoch_val_accuracy)
 
             # Print epoch results
-            print(f"Epoch {epoch + 1}/{config['train']['epochs']}"
-                  f" - loss: {epoch_loss:.4f} - accuracy: {epoch_accuracy:.4f}"
-                  f" - val_loss: {epoch_val_loss:.4f} - val_accuracy: {epoch_val_accuracy:.4f}")
+            logger.info(f"Epoch {epoch + 1}/{config['train']['epochs']}"
+                        f" - loss: {epoch_loss:.4f} - accuracy: {epoch_accuracy:.4f}"
+                        f" - val_loss: {epoch_val_loss:.4f} - val_accuracy: {epoch_val_accuracy:.4f}")
 
             # Early stopping if no improvement in validation loss
             if epoch_val_loss < best_epoch_val_loss:
@@ -348,28 +364,28 @@ def main(FLAGS):
                 model_filename = config["model_name"] + "_model-" + str(val_round_index) + "_" + save_timestamp + ".tf"
                 model_fullname = os.path.join(models_save_fullpath, model_filename)
                 model.save(model_fullname)
-                print(f"Model checkpoint saved to {model_fullname}.")
+                logger.info(f"Model checkpoint saved to {model_fullname}.")
 
                 # Save training history
                 history_filename = config["model_name"] + "_history-" + str(val_round_index) + "_" + save_timestamp + ".json"
                 history_fullname = os.path.join(logs_save_fullpath, history_filename)
                 with open(history_fullname, "w") as f:
                     json.dump(history, f)
-                    print(f"Training history saved to {history_fullname}.")
+                    logger.info(f"Training history saved to {history_fullname}.")
             else:
                 last_improvement += 1
             if last_improvement > config["train"]["patience"]:
-                print(f"Validation loss has not decreased for {config['train']['patience']} epochs. "
-                      f"Stopping training at {epoch = }.")
+                logger.info(f"Validation loss has not decreased for {config['train']['patience']} epochs. "
+                            f"Stopping training at {epoch = }.")
                 break
 
             training_generator.on_epoch_end()
 
         training_time_stop = datetime.datetime.now()
-        print(f"\tValidation round #{val_round_index} training time: {training_time_stop - training_time_start}")
+        logger.info(f"\tValidation round #{val_round_index} training time: {training_time_stop - training_time_start}")
 
     cross_val_time_stop = datetime.datetime.now()
-    print(f"Total training time: {cross_val_time_stop - cross_val_time_start}")
+    logger.info(f"Total training time: {cross_val_time_stop - cross_val_time_start}")
 
 
 if __name__ == '__main__':
