@@ -1,4 +1,20 @@
+import numpy as np
 import tensorflow as tf
+
+
+class BCELoss(tf.keras.losses.Loss):
+    def __init__(self, name="bce_loss"):
+        super().__init__(name=name)
+
+    def call(self, y_true, y_pred):
+        e = tf.keras.backend.epsilon()
+        # Clip to prevent NaNs and Infs
+        y_pred = tf.clip_by_value(y_pred, e, 1 - e)
+        # Calc
+        term_0 = y_true * tf.math.log(y_pred + e)
+        term_1 = (1 - y_true) * tf.math.log(1 - y_pred + e)
+        loss = -tf.math.reduce_mean(term_0 + term_1, axis=0)
+        return loss
 
 
 class WeightedCategoricalCrossEntropy(tf.keras.losses.Loss):
@@ -11,15 +27,16 @@ class WeightedCategoricalCrossEntropy(tf.keras.losses.Loss):
     def __init__(self, class_weights, name="weighted_categorical_cross_entropy"):
         super().__init__(name=name)
         self.class_weights = class_weights
+        self.bce = BCELoss()
 
     def call(self, y_true, y_pred):
-        # Scale predictions so that the class probas of each sample sum to 1
-        y_pred /= tf.math.reduce_sum(y_pred, axis=-1, keepdims=True)
-        # Clip to prevent NaN's and Inf's
-        y_pred = tf.clip_by_value(y_pred, tf.keras.backend.epsilon(), 1 - tf.keras.backend.epsilon())
-        # Calc
-        loss = y_true * tf.math.log(y_pred) * self.class_weights
-        loss = -tf.math.reduce_sum(loss, axis=-1)
+        # Calculate BCE
+        bce_loss = self.bce(y_true, y_pred)
+        # Apply weights
+        weight_vector = y_true * self.class_weights[0] + (1 - y_true) * self.class_weights[1]
+        weighted_bce = weight_vector * bce_loss
+        # Calculate loss
+        loss = tf.math.reduce_mean(weighted_bce)
         return loss
 
 
@@ -39,10 +56,10 @@ class DiceLoss(tf.keras.losses.Loss):
 
 
 class BCEDiceLoss(tf.keras.losses.Loss):
-    def __init__(self, class_weights, smooth=1e-5, name="bce_dice_loss"):
+    def __init__(self, smooth=1e-5, name="bce_dice_loss"):
         super().__init__(name=name)
         self.smooth = smooth
-        self.bce = WeightedCategoricalCrossEntropy(class_weights)
+        self.bce = BCELoss()
         self.dice = DiceLoss(smooth=smooth)
 
     def call(self, y_true, y_pred):

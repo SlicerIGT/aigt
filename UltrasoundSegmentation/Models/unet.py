@@ -11,7 +11,8 @@ class ConvBlock(Layer):
         ops = []
         for i in range(n_stages):
             ops.append(Conv2D(out_channels, kernel_size, strides=strides, padding=padding,
-                              dilation_rate=dilation_rate, kernel_initializer="he_normal"))
+                              dilation_rate=dilation_rate, kernel_initializer="he_normal",
+                              bias_regularizer=l1(0.0001)))
             if use_batch_norm:
                 ops.append(BatchNormalization(momentum=0.9))
             ops.append(ReLU())
@@ -29,7 +30,8 @@ class DownsamplingBlock(Layer):
         self.use_batch_norm = use_batch_norm
 
         self.conv = Conv2D(out_channels, kernel_size=kernel_size, strides=strides,
-                           padding=padding, kernel_initializer="he_normal")
+                           padding=padding, kernel_initializer="he_normal",
+                           bias_regularizer=l1(0.0001))
         if use_batch_norm:
             self.batchnorm = BatchNormalization(momentum=0.9)
         self.relu = ReLU()
@@ -48,7 +50,8 @@ class UpsamplingBlock(Layer):
         self.use_batch_norm = use_batch_norm
 
         self.conv = Conv2DTranspose(out_channels, kernel_size=kernel_size, strides=strides,
-                                    padding=padding, kernel_initializer="he_normal")
+                                    padding=padding, kernel_initializer="he_normal",
+                                    bias_regularizer=l1(0.0001))
         if use_batch_norm:
             self.batchnorm = BatchNormalization(momentum=0.9)
         self.relu = ReLU()
@@ -96,8 +99,8 @@ class UNet(tf.keras.Model):
         self.decoder1 = ConvBlock(n_filters, n_stages=2, use_batch_norm=True)
 
         # Final 1x1 convolution and activation
-        self.out_conv = ConvBlock(n_classes, kernel_size=1)
-        self.activation = Activation("softmax")
+        self.out_conv = Conv2D(1, 1, kernel_initializer="he_normal")
+        self.activation = Activation("sigmoid")
 
     def call(self, x, training=False):
         e1 = self.encoder1(x)
@@ -135,8 +138,9 @@ class UNet(tf.keras.Model):
 
 
 class OldUNet(tf.keras.Model):
-    def __init__(self, img_size=(128, 128, 1), num_classes=2, filter_multiplier=10):
+    def __init__(self, img_size=(128, 128, 1), num_classes=1, filter_multiplier=10):
         super().__init__()
+        self.x = Input(shape=img_size)
 
         # Calculate number of layers and filters in each layer
         num_layers = int(np.floor(np.log2(img_size[0])))
@@ -165,7 +169,7 @@ class OldUNet(tf.keras.Model):
 
         # Final convolution and activation
         self.deconv1 = Conv2D(up_filter_numbers[6], kernel_size=4, padding="same", bias_regularizer=l1(0.0001))
-        self.activation = Activation("softmax")
+        self.activation = Activation("sigmoid")
 
     def call(self, x, training=False):
         inputs = x
@@ -177,21 +181,25 @@ class OldUNet(tf.keras.Model):
         e6 = self.conv6(e5)
         e7 = self.conv7(e6)
 
-        d7 = self.deconv7(concatenate([UpSampling2D()(e7), e6], axis=3))
-        d6 = self.deconv6(concatenate([UpSampling2D()(d7), e5], axis=3))
-        d5 = self.deconv5(concatenate([UpSampling2D()(d6), e4], axis=3))
-        d4 = self.deconv4(concatenate([UpSampling2D()(d5), e3], axis=3))
-        d3 = self.deconv3(concatenate([UpSampling2D()(d4), e2], axis=3))
-        d2 = self.deconv2(concatenate([UpSampling2D()(d3), e1], axis=3))
-        d1 = self.deconv1(concatenate([UpSampling2D()(d2), inputs], axis=3))
+        d7 = self.deconv7(Concatenate()([UpSampling2D()(e7), e6]))
+        d6 = self.deconv6(Concatenate()([UpSampling2D()(d7), e5]))
+        d5 = self.deconv5(Concatenate()([UpSampling2D()(d6), e4]))
+        d4 = self.deconv4(Concatenate()([UpSampling2D()(d5), e3]))
+        d3 = self.deconv3(Concatenate()([UpSampling2D()(d4), e2]))
+        d2 = self.deconv2(Concatenate()([UpSampling2D()(d3), e1]))
+        d1 = self.deconv1(Concatenate()([UpSampling2D()(d2), inputs]))
         out = self.activation(d1)
 
         return out
+
+    def summary(self):
+        model = tf.keras.Model(inputs=[self.x], outputs=self.call(self.x))
+        return model.summary()
 
 
 if __name__ == '__main__':
     import numpy as np
     test_image = np.zeros((1, 128, 128, 1))
-    model = UNet()
+    model = OldUNet()
     output = model(test_image)
     model.summary()
