@@ -99,8 +99,8 @@ class UNet(tf.keras.Model):
         self.decoder1 = ConvBlock(n_filters, n_stages=2, use_batch_norm=True)
 
         # Final 1x1 convolution and activation
-        self.out_conv = Conv2D(1, 1, kernel_initializer="he_normal")
-        self.activation = Activation("sigmoid")
+        self.out_conv = Conv2D(n_classes, 1, kernel_initializer="he_normal")
+        self.activation = Activation("softmax")
 
     def call(self, x, training=False):
         e1 = self.encoder1(x)
@@ -138,7 +138,7 @@ class UNet(tf.keras.Model):
 
 
 class OldUNet(tf.keras.Model):
-    def __init__(self, img_size=(128, 128, 1), num_classes=1, filter_multiplier=10):
+    def __init__(self, img_size=(128, 128, 1), num_classes=2, filter_multiplier=10):
         super().__init__()
         self.x = Input(shape=img_size)
 
@@ -169,7 +169,7 @@ class OldUNet(tf.keras.Model):
 
         # Final convolution and activation
         self.deconv1 = Conv2D(up_filter_numbers[6], kernel_size=4, padding="same", bias_regularizer=l1(0.0001))
-        self.activation = Activation("sigmoid")
+        self.activation = Activation("softmax")
 
     def call(self, x, training=False):
         inputs = x

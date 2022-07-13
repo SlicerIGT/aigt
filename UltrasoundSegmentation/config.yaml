@@ -6,9 +6,10 @@ train:
     - [0, 1, 2, 3]
     - [7, 11, 13, 18]
     - [20, 23, 27, 30]
-  epochs: 300
+  epochs: 200
   batch_size: 64
   patience: 20
+  num_classes: 2
 
   loss:
     name: "wcce"  # weighted categorical cross entropy (wcce), dice, or bce_dice
@@ -17,6 +18,8 @@ train:
   optimizer:
     name: "adam"  # choose between adam and sgd
     lr: 0.02
+    decay: 0.5
+    decay_rate: 10
 
   preprocess:
     - name: "RandomScale"

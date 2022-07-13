@@ -61,9 +61,10 @@ class UltrasoundSegmentationBatchGenerator(tf.keras.utils.Sequence):
 
         x_batch = np.clip(x_batch, 0.0, 1.0)
         y_batch = np.clip(y_batch, 0.0, 1.0)
+        y_batch = tf.keras.utils.to_categorical(y_batch, self.n_classes)
 
         x_batch = tf.convert_to_tensor(x_batch)
-        y_batch = tf.cast(tf.convert_to_tensor(y_batch), dtype=tf.float32)
+        y_batch = tf.convert_to_tensor(y_batch)
 
         return x_batch, y_batch
 

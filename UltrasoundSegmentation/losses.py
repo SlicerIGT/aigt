@@ -1,5 +1,25 @@
-import numpy as np
 import tensorflow as tf
+
+
+class WeightedCategoricalCrossEntropy(tf.keras.losses.Loss):
+    """
+    A weighted version of keras.objectives.categorical_crossentropy
+    Variables:
+        class_weights: numpy array of shape (C,) where C is the number of classes
+    """
+    def __init__(self, class_weights, name="weighted_categorical_cross_entropy"):
+        super().__init__(name=name)
+        self.class_weights = tf.keras.backend.variable(class_weights)
+
+    def call(self, y_true, y_pred):
+        # scale predictions so that the class probas of each sample sum to 1
+        y_pred /= tf.keras.backend.sum(y_pred, axis=-1, keepdims=True)
+        # clip to prevent NaN's and Inf's
+        y_pred = tf.keras.backend.clip(y_pred, tf.keras.backend.epsilon(), 1 - tf.keras.backend.epsilon())
+        # calc
+        loss = y_true * tf.keras.backend.log(y_pred) * self.class_weights
+        loss = -tf.keras.backend.sum(loss, -1)
+        return loss
 
 
 class BCELoss(tf.keras.losses.Loss):
@@ -14,29 +34,6 @@ class BCELoss(tf.keras.losses.Loss):
         term_0 = y_true * tf.math.log(y_pred + e)
         term_1 = (1 - y_true) * tf.math.log(1 - y_pred + e)
         loss = -tf.math.reduce_mean(term_0 + term_1, axis=0)
-        return loss
-
-
-class WeightedCategoricalCrossEntropy(tf.keras.losses.Loss):
-    """
-    A weighted version of keras.objectives.categorical_crossentropy
-
-    Variables:
-        class_weights: numpy array of shape (C,) where C is the number of classes
-    """
-    def __init__(self, class_weights, name="weighted_categorical_cross_entropy"):
-        super().__init__(name=name)
-        self.class_weights = class_weights
-        self.bce = BCELoss()
-
-    def call(self, y_true, y_pred):
-        # Calculate BCE
-        bce_loss = self.bce(y_true, y_pred)
-        # Apply weights
-        weight_vector = y_true * self.class_weights[0] + (1 - y_true) * self.class_weights[1]
-        weighted_bce = weight_vector * bce_loss
-        # Calculate loss
-        loss = tf.math.reduce_mean(weighted_bce)
         return loss
 
 
