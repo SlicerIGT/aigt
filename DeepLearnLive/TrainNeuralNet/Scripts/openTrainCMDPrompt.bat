@@ -7,4 +7,4 @@ set DataCSV=%4
 set SaveLocation=%5
 set TrainingScript=%6
 
-call cmd.exe /C %CurrentPath%\Scripts\TrainNeuralNet.bat %CondaPath% %EnvName% %DataCSV% %SaveLocation% %TrainingScript%
+call cmd.exe /K %CurrentPath%\Scripts\TrainNeuralNet.bat %CondaPath% %EnvName% %DataCSV% %SaveLocation% %TrainingScript%
