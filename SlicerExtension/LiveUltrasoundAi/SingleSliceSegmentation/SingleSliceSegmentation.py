@@ -81,9 +81,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.shortcutC = qt.QShortcut(slicer.util.mainWindow())
     self.shortcutC.setKey(qt.QKeySequence('c'))
 
-
-
-
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
 
@@ -214,7 +211,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     
     logging.debug("onSequenceBrowserSelected: {}".format(currentNode.GetName()))
 
-
   def onInputVolumeChanged(self, currentNode):
     # todo: delete after testing parameter node
     # volumeNodes = slicer.util.getNodesByClass('vtkMRMLScalarVolumeNode')
@@ -226,7 +222,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     else:
       self.parameterSetNode.SetAttribute(self.INPUT_IMAGE_ID, currentNode.GetID())
 
-
   def onSegmentationChanged(self, currentNode):
     segmentationNodes = slicer.util.getNodesByClass('vtkMRMLSegmentationNode')
     for segmentation in segmentationNodes:
@@ -236,7 +231,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
     else:
       currentNode.SetAttribute(self.SEGMENTATION, "True")
-
 
   def onSegmentationBrowserChanged(self, currentNode):
     browserNodes = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
@@ -259,7 +253,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     if inputBrowserNode is not None:
       inputBrowserNode.SetAttribute(self.INPUT_SKIP_NUMBER, str(value))
   
-
   def onCaptureButton(self):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
     inputImage = self.ui.inputVolumeSelector.currentNode()
@@ -298,7 +291,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.logic.eraseCurrentSegmentation(selectedSegmentation)
     selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
   
-  
   def onSkipButton(self):
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
@@ -311,7 +303,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       return
     self.logic.eraseCurrentSegmentation(selectedSegmentation)
     inputBrowserNode.SelectNextItem(numSkip)
-  
   
   def onExportButton(self):
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
@@ -334,23 +325,26 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       logging.error("No image sequence browser selected!")
       return
 
-    self.logic.exportPngSequence(selectedImage,
+    if self.ui.exportTransformCheckBox.checked:
+      self.logic.exportNumpySlice(selectedImage,
+                                  selectedImageSequence,
+                                  selectedSegmentation,
+                                  selectedSegmentationSequence,
+                                  outputFolder,
+                                  baseName)
+      self.logic.exportTransformToWorldSequence(selectedImage,
+                                                selectedImageSequence,
+                                                selectedSegmentation,
+                                                selectedSegmentationSequence,
+                                                outputFolder,
+                                                baseName)
+    else:
+      self.logic.exportPngSequence(selectedImage,
                                  selectedImageSequence,
                                  selectedSegmentation,
                                  selectedSegmentationSequence,
                                  outputFolder,
                                  baseName)
-
-    if self.ui.exportTransformCheckBox.checked:
-      self.logic.exportNumpySlice(selectedImage,
-                                  selectedSegmentation,
-                                  selectedSegmentationSequence,
-                                  outputFolder)
-      self.logic.exportTransformToWorldSequence(selectedSegmentation,
-                                                selectedSegmentationSequence,
-                                                outputFolder,
-                                                baseName)
-
 
   def onLayoutSelectButton(self):
     layoutManager = slicer.app.layoutManager()
@@ -404,12 +398,10 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     else:
       layoutManager.setLayout(501) # switch to custom layout with 3d viewer
 
-
   # Segment Editor Functionalities
 
   def editorEffectRegistered(self):
     self.editor.updateEffectList()
-
 
   def selectParameterNode(self):
     # Select parameter set node if one is found in the scene, and create one otherwise
@@ -425,7 +417,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.parameterSetNode = segmentEditorNode
     self.ui.editor.setMRMLSegmentEditorNode(self.parameterSetNode)
 
-
   def getCompositeNode(self, layoutName):
     """ use the Red slice composite node to define the active volumes """
     count = slicer.mrmlScene.GetNumberOfNodesByClass('vtkMRMLSliceCompositeNode')
@@ -435,7 +426,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       if layoutName and compNode.GetLayoutName() != layoutName:
         continue
       return compNode
-
 
   def getDefaultMasterVolumeNodeID(self):
     layoutManager = slicer.app.layoutManager()
@@ -452,7 +442,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # Not found anything
     return None
 
-
   def enter(self):
     """Runs whenever the module is reopened"""
     logging.debug('Entered SingleSliceSegmentation module widget')
@@ -460,9 +449,10 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     # Prevent segmentation master volume to be created in the wrong position.
     # Todo: Instead of this, the input image should be kept transformed, and the segmentation also transformed
 
-    inputImageNode = slicer.util.getFirstNodeByName(DEFAULT_INPUT_IMAGE_NAME)
-    if inputImageNode is not None and inputImageNode.GetClassName() == 'vtkMRMLScalarVolumeNode':
-      inputImageNode.SetAndObserveTransformNodeID(None)
+    # inputImageNode = slicer.util.getFirstNodeByName(DEFAULT_INPUT_IMAGE_NAME)
+
+    # if inputImageNode is not None and inputImageNode.GetClassName() == 'vtkMRMLScalarVolumeNode':
+    #   inputImageNode.SetAndObserveTransformNodeID(None)
 
     if self.ui.editor.turnOffLightboxes():
       slicer.util.warningDisplay('Segment Editor is not compatible with slice viewers in light box mode.'
@@ -507,18 +497,15 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     redController = slicer.app.layoutManager().sliceWidget('Red').sliceController()
     redController.fitSliceToBackground()
   
-  
   def connectKeyboardShortcuts(self):
     self.shortcutS.connect('activated()', self.onSkipButton)
     self.shortcutD.connect('activated()', self.onClearButton)
     self.shortcutC.connect('activated()', self.onCaptureButton)
   
-  
   def disconnectKeyboardShortcuts(self):
     self.shortcutS.activated.disconnect()
     self.shortcutD.activated.disconnect()
     self.shortcutC.activated.disconnect()
-
 
   def exit(self):
     self.ui.editor.setActiveEffect(None)
@@ -527,18 +514,15 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     
     self.disconnectKeyboardShortcuts()
 
-
   def onSceneStartClose(self, caller, event):
     self.parameterSetNode = None
     self.ui.editor.setSegmentationNode(None)
     self.ui.editor.removeViewObservations()
 
-
   def onSceneEndClose(self, caller, event):
     if self.parent.isEntered:
       self.selectParameterNode()
       self.ui.editor.updateWidgetFromMRML()
-
 
   def onSceneEndImport(self, caller, event):
     if self.parent.isEntered:
@@ -546,7 +530,6 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       self.ui.editor.updateWidgetFromMRML()
 
     self.updateSelections()
-
 
   def updateSelections(self):
 
@@ -603,9 +586,6 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
   def __init__(self, parent=None):
     ScriptedLoadableModuleLogic.__init__(self, parent)
 
-    self.LabelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
-
-
   def exportSlice(self,
                   selectedImage,
                   selectedSegmentation,
@@ -621,10 +601,11 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     ic.Update()
 
     png_writer = vtk.vtkPNGWriter()
+    labelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
 
     slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(
-      selectedSegmentation, self.LabelmapNode, selectedImage)
-    segmentedImageData = self.LabelmapNode.GetImageData()
+      selectedSegmentation, labelmapNode, selectedImage)
+    segmentedImageData = labelmapNode.GetImageData()
     ultrasoundData = selectedImage.GetImageData()
 
     seg_file_name = filenamePrefix + "_%04d_segmentation" % itemNumber + ".png"
@@ -660,44 +641,60 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
   def exportNumpySlice(self,
                        selectedImage,
+                       selectedImageSequence,
                        selectedSegmentation,
                        selectedSegmentationSequence,
-                       outputFolder):
+                       outputFolder,
+                       baseName):
 
     if not os.path.exists(outputFolder):
       logging.error("Export folder does not exist {}".format(outputFolder))
       return
 
-    seg_file_name = r"segmentation"
-    img_file_name = r"ultrasound"
+    labelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
+
+    seg_file_name = baseName + "_segmentation"
+    img_file_name = baseName + "_ultrasound"
     seg_fullname = os.path.join(outputFolder, seg_file_name)
     img_fullname = os.path.join(outputFolder, img_file_name)
 
-    num_items = selectedSegmentationSequence.GetNumberOfItems()
-    n = num_items
-    selectedSegmentationSequence.SelectFirstItem()
+    # Get whole image volume (each frame in the original recording)
+    num_items = selectedImageSequence.GetNumberOfItems()
+    selectedImageSequence.SelectFirstItem()
+    img_numpy_size = slicer.util.arrayFromVolume(selectedImage).shape
+    img_seq_numpy = np.zeros((num_items, img_numpy_size[1], img_numpy_size[2], 1), dtype=np.uint8)
 
-    for i in range(n):
-      slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
-                                                                               self.LabelmapNode, selectedImage)
-      seg_numpy = slicer.util.arrayFromVolume(self.LabelmapNode)
-      resize_seg_numpy = np.expand_dims(seg_numpy, axis=3)
+    for i in range(num_items):
 
       img_numpy = slicer.util.arrayFromVolume(selectedImage)
       resize_img_numpy = np.expand_dims(img_numpy, axis=3)
 
-      if i == 0:
-        seg_seq_numpy = resize_seg_numpy
-        img_seq_numpy = resize_img_numpy
-      else:
-        seg_seq_numpy = np.concatenate((seg_seq_numpy, resize_seg_numpy))
-        img_seq_numpy = np.concatenate((img_seq_numpy, resize_img_numpy))
+      img_seq_numpy[i, ...] = resize_img_numpy
 
-      selectedSegmentationSequence.SelectNextItem()
+      selectedImageSequence.SelectNextItem()
+      slicer.app.processEvents()
 
     np.save(img_fullname, img_seq_numpy)
-    np.save(seg_fullname, seg_seq_numpy)
+      
+    # Get each segmentation at the right spot in volume the same size as the images
+    num_items = selectedSegmentationSequence.GetNumberOfItems()
+    selectedSegmentationSequence.SelectFirstItem()
 
+    seg_seq_numpy = np.zeros(img_seq_numpy.shape, dtype=np.uint8)
+    
+    for i in range(num_items):
+
+      slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
+                                                                               labelmapNode, selectedImage)
+      seg_numpy = slicer.util.arrayFromVolume(labelmapNode)
+      resize_seg_numpy = np.expand_dims(seg_numpy, axis=3)
+      segmentationIndex = int(selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX))
+      seg_seq_numpy[segmentationIndex, ...] = resize_seg_numpy
+
+      selectedSegmentationSequence.SelectNextItem()
+      slicer.app.processEvents()
+
+    np.save(seg_fullname, seg_seq_numpy)
 
   def exportPngSequence(self,
                         selectedImage,
@@ -715,22 +712,27 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     imageCast.Update()
 
     pngWriter = vtk.vtkPNGWriter()
+    labelmapNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
 
     num_items = selectedSegmentationSequence.GetNumberOfItems()
     selectedSegmentationSequence.SelectFirstItem()
     for i in range(num_items):
       originalIndex = selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
-      try:
-        selectedImageSequence.SetSelectedItemNumber(int(originalIndex))
-      except:
-        logging.error(f"Original image not found for segmentation {i} - skipping")
-        continue
+      if originalIndex == None:
+        logging.warning("Input image index attribute not found in segmentation. Input sequence will not be used.")
+      else:
+        try:
+          selectedImageSequence.SetSelectedItemNumber(int(originalIndex))
+        except:
+          logging.error(f"Original image not found for segmentation {i} - skipping")
+          continue
+
       slicer.modules.sequences.logic().UpdateAllProxyNodes()
 
       slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
-                                                                               self.LabelmapNode,
+                                                                               labelmapNode,
                                                                                selectedImage)
-      segmentedImageData = self.LabelmapNode.GetImageData()
+      segmentedImageData = labelmapNode.GetImageData()
       ultrasoundData = selectedImage.GetImageData()
 
       segmentationFileName = baseName + "_%04d_segmentation" % i + ".png"
@@ -757,6 +759,8 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
 
   def exportTransformToWorldSequence(self,
+                                     selectedImage,
+                                     selectedImageSequence,
                                      selectedSegmentation,
                                      selectedSegmentationSequence,
                                      outputFolder,
@@ -765,40 +769,27 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       logging.error("Export folder does not exist {}".format(outputFolder))
       return
 
-    # Grab the Landmarking Scan Sequence - we will get transforms from here.
-    landmarkingScanSequence = None
-    sequenceBrowserNodesList = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
-    for sequenceBrowserNode in sequenceBrowserNodesList:
-      if 'LandmarkingScan' in sequenceBrowserNode.GetName():
-        landmarkingScanSequence = sequenceBrowserNode
-    if landmarkingScanSequence is None:
-      logging.error("Landmarking Scan sequence does not exist.")
-      return
-
+    # Grab the Image To Transducer Transform - we will get all applicable transforms from here.
     imageToTrans = slicer.util.getFirstNodeByName("ImageToTransd*")
     if imageToTrans is None:
       logging.error("ImageToTransducer transform does not exist.")
       return
 
-    num_items = selectedSegmentationSequence.GetNumberOfItems()
-    selectedSegmentationSequence.SelectFirstItem()
-    landmarkingScanSequence.SelectFirstItem()
+    num_items = selectedImageSequence.GetNumberOfItems()
+    selectedImageSequence.SelectFirstItem()
+
+    transforms_seq_numpy = np.zeros((num_items, 4, 4))
 
     for i in range(num_items):
 
-      # Get landmarking scan transform index, set it, get TransformToWorld
-      transformIndex = int(selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX))
-      landmarkingScanSequence.SetSelectedItemNumber(transformIndex)
+      # Get landmarking scan transform, get TransformToWorld
       transformToWorld = vtk.vtkMatrix4x4()
       imageToTrans.GetMatrixTransformToWorld(transformToWorld)
       transformToWorld_numpy = slicer.util.arrayFromVTKMatrix(transformToWorld)
       
-      if i == 0:
-        transforms_seq_numpy = transformToWorld_numpy[np.newaxis, :]
-      else:
-        transforms_seq_numpy = np.concatenate((transforms_seq_numpy, transformToWorld_numpy[np.newaxis, :]), axis=0)
+      transforms_seq_numpy[i, ...] = transformToWorld_numpy
 
-      selectedSegmentationSequence.SelectNextItem()
+      selectedImageSequence.SelectNextItem()
       slicer.app.processEvents()
     
     # Save stacked transforms as output numpy array.
