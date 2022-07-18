@@ -718,11 +718,15 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     selectedSegmentationSequence.SelectFirstItem()
     for i in range(num_items):
       originalIndex = selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
-      try:
-        selectedImageSequence.SetSelectedItemNumber(int(originalIndex))
-      except:
-        logging.error(f"Original image not found for segmentation {i} - skipping")
-        continue
+      if originalIndex == None:
+        logging.warning("Input image index attribute not found in segmentation. Input sequence will not be used.")
+      else:
+        try:
+          selectedImageSequence.SetSelectedItemNumber(int(originalIndex))
+        except:
+          logging.error(f"Original image not found for segmentation {i} - skipping")
+          continue
+
       slicer.modules.sequences.logic().UpdateAllProxyNodes()
 
       slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
