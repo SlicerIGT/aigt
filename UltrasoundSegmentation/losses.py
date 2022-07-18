@@ -1,4 +1,7 @@
+import cv2
+import numpy as np
 import tensorflow as tf
+from tensorflow.keras.layers import Resizing, Rescaling
 
 
 class WeightedCategoricalCrossEntropy(tf.keras.losses.Loss):
@@ -61,4 +64,42 @@ class BCEDiceLoss(tf.keras.losses.Loss):
 
     def call(self, y_true, y_pred):
         loss = self.bce(y_true, y_pred) + self.dice(y_true, y_pred)
+        return loss
+
+
+class GGNetLoss(tf.keras.losses.Loss):
+    def __init__(self, img_size=(128, 128), n_layers=4, alpha=1, beta=10, smooth=1e-5, name="gg_net_loss"):
+        super().__init__(name=name)
+        self.img_size = img_size
+        self.n_layers = n_layers
+        self.alpha = alpha
+        self.beta = beta
+        self.smooth = smooth
+        self.dice = DiceLoss(smooth=smooth)
+        self.bce = BCELoss()
+        self.mse = tf.keras.losses.MeanSquaredError()
+
+    def set_bd_label(self, y_true_bd):
+        self.y_true_bd = y_true_bd
+
+    def call(self, y_true, y_pred):
+        # Calculate bd module loss
+        bd_loss = 0
+        for i in range(self.n_layers):
+            # Get segmentation and boundary ground truths
+            resize_factor = int(tf.math.pow(2, i + 1))
+            y_true_seg = Resizing(self.img_size[0] // resize_factor, self.img_size[1] // resize_factor)(y_true)
+            y_true_bd = Resizing(self.img_size[0] // resize_factor, self.img_size[1] // resize_factor)(self.y_true_bd)
+            # Calculate segmentation loss
+            layer_seg_loss = self.dice(y_true_seg, y_pred[i + 1][1]) - self.bce(y_true_seg, y_pred[i + 1][1])
+            # Calculate boundary loss
+            layer_bd_loss = self.mse(y_true_bd, y_pred[i + 1][0])
+            # Add to bd_loss
+            bd_loss += self.alpha * layer_seg_loss + self.beta * layer_bd_loss
+
+        # Output segmentation loss
+        out_seg_loss = self.dice(y_true, y_pred[0]) - self.bce(y_true, y_pred[0])
+
+        # Total model loss
+        loss = bd_loss + out_seg_loss
         return loss

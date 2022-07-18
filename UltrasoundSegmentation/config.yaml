@@ -1,4 +1,4 @@
-model_name: UNet  # only unet supported
+model_name: GGNet  # only unet supported
 image_size: [128, 128]
 
 train:
@@ -6,8 +6,8 @@ train:
     - [0, 1, 2, 3]
     - [7, 11, 13, 18]
     - [20, 23, 27, 30]
-  epochs: 200
-  batch_size: 64
+  epochs: 100
+  batch_size: 4
   patience: 20
   num_classes: 2
 
@@ -16,10 +16,10 @@ train:
 #    class_weights: [0.15, 0.85]
 
   optimizer:
-    name: "adam"  # choose between adam and sgd
-    lr: 0.02
-    decay: 0.5
-    decay_rate: 10
+    name: "sgd"  # choose between adam and sgd
+    lr: 0.001
+    decay: 0.1
+    decay_rate: 50
 
   preprocess:
     - name: "RandomScale"

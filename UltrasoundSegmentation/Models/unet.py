@@ -198,7 +198,6 @@ class OldUNet(tf.keras.Model):
 
 
 if __name__ == '__main__':
-    import numpy as np
     test_image = np.zeros((1, 128, 128, 1))
     model = OldUNet()
     output = model(test_image)
