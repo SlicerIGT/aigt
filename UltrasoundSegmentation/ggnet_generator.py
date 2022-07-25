@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.applications.resnet50 import preprocess_input
 
 
 class UltrasoundSegmentationBatchGenerator(tf.keras.utils.Sequence):
@@ -59,14 +60,25 @@ class UltrasoundSegmentationBatchGenerator(tf.keras.utils.Sequence):
             x_batch = np.concatenate((x_batch, np.expand_dims(img, axis=0)))
             y_batch = np.concatenate((y_batch, np.expand_dims(label, axis=0)))
 
-        x_batch = np.clip(x_batch, 0.0, 1.0)
+        x_batch = np.clip(x_batch, 0.0, 1.0) * 255
         y_batch = np.clip(y_batch, 0.0, 1.0)
-        y_batch = tf.keras.utils.to_categorical(y_batch, self.n_classes)
 
+        # Convert to 3-channel and process for resnet
         x_batch = tf.convert_to_tensor(x_batch)
-        y_batch = tf.convert_to_tensor(y_batch)
+        x_batch = tf.repeat(x_batch, repeats=3, axis=-1)
+        x_batch = preprocess_input(x_batch)
 
-        return x_batch, y_batch
+        # Generate boundary ground truth
+        y_batch_boundary = np.zeros((0, *self.image_dimensions, 1))
+        for i in range(self.batch_size):
+            y_boundary = (y_batch[i, ..., 0] * 255).astype(np.uint8)
+            y_boundary = cv2.Canny(y_boundary, 100, 200).astype(np.float32)
+            y_boundary /= 255.
+            y_batch_boundary = np.concatenate((y_batch_boundary, y_boundary[np.newaxis, ..., np.newaxis]))
+        y_batch_boundary = tf.convert_to_tensor(y_batch_boundary, dtype=tf.float32)
+        y_batch = tf.convert_to_tensor(y_batch, dtype=tf.float32)
+
+        return x_batch, y_batch, y_batch_boundary
 
 
 class RandomScale:

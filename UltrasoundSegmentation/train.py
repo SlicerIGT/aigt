@@ -13,7 +13,7 @@ from girder_apikey_read import girder_apikey_read
 
 import utils
 import ultrasound_batch_generator as generator
-from losses import WeightedCategoricalCrossEntropy, DiceLoss, BCEDiceLoss
+from losses import BCELoss, WeightedCategoricalCrossEntropy, DiceLoss, BCEDiceLoss
 from Models.unet import UNet
 
 # Set random seed for reproducibility
@@ -60,15 +60,15 @@ def parse_config(config_filepath):
         print(f"error parsing .yaml file: {e}")
 
 
-def get_schedule_intervals(n_images, batch_size, epochs, interval=10, decay_rate=0.5):
+def get_schedule_intervals(n_images, batch_size, epochs, interval=10, decay=0.5):
     steps_per_epoch = n_images / batch_size
     num_intervals = epochs // interval  # Decay lr/weight every interval epochs
     boundaries = []
     values = []
-    for i in range(num_intervals):
-        if i < num_intervals - 1:  # len(boundaries) is one less than len(values)
+    for i in range(num_intervals + 1):
+        if i < num_intervals:  # len(boundaries) is one less than len(values)
             boundaries.append(np.floor(steps_per_epoch * interval * (i + 1)))
-        values.append(1.0 * (decay_rate ** i))
+        values.append(1.0 * (decay ** i))
     return boundaries, values
 
 
@@ -102,7 +102,7 @@ def main(FLAGS):
     f_handler.setFormatter(f_format)
     logger.addHandler(c_handler)
     logger.addHandler(f_handler)
-    logger.info(f"Run output saved to {output_log_fullpath}.")
+    logger.info(f"Writing run output to {output_log_fullpath}.")
 
     # Prevent OOM
     gpus = tf.config.list_physical_devices('GPU')
@@ -112,7 +112,7 @@ def main(FLAGS):
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
             logical_gpus = tf.config.list_logical_devices('GPU')
-            logger.info(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+            logger.info(f"{len(gpus)} Physical GPUs, {len(logical_gpus)} Logical GPUs")
         except RuntimeError as e:
             # Memory growth must be set before GPUs have been initialized
             logger.exception(e)
@@ -168,20 +168,23 @@ def main(FLAGS):
     # Print all training settings
     logger.info("\nTimestamp for saved files:      {}".format(save_timestamp))
     logger.info("Saving models in:                 {}".format(models_save_fullpath))
-    logger.info("Model name:                       {}".format(config["model_name"]))
+    logger.info("Model name:                       {}".format(model_name := config["model_name"]))
     logger.info("Saving validation predictions in: {}".format(val_data_fullpath))
 
     logger.info("\nModel settings:")
     logger.info("Number of patients:                     {}".format(n_patients))
     logger.info("Total number of training images:        {}".format(n_images))
     logger.info("Total number of training segmentations: {}".format(n_images))
-    logger.info("Image size:                             {}".format(config["image_size"]))
-    logger.info("Epochs:                                 {}".format(config["train"]["epochs"]))
-    logger.info("Batch size:                             {}".format(config["train"]["batch_size"]))
-    logger.info("Patience:                               {}".format(config["train"]["patience"]))
-    logger.info("Optimizer:                              {}".format(config["train"]["optimizer"]["name"]))
-    logger.info("Learning rate:                          {}".format(config["train"]["optimizer"]["lr"]))
-    logger.info("Loss function:                          {}".format(config["train"]["loss"]["name"]))
+    logger.info("Image size:                             {}".format(image_size := config["image_size"]))
+    logger.info("Epochs:                                 {}".format(epochs := config["train"]["epochs"]))
+    logger.info("Batch size:                             {}".format(batch_size := config["train"]["batch_size"]))
+    logger.info("Patience:                               {}".format(patience := config["train"]["patience"]))
+    logger.info("Number of classes:                      {}".format(num_classes := config["train"]["num_classes"]))
+    logger.info("Optimizer:                              {}".format(optimizer_name := config["train"]["optimizer"]["name"]))
+    logger.info("Learning rate:                          {}".format(lr := config["train"]["optimizer"]["lr"]))
+    logger.info("Learning rate decay:                    {}".format(decay := config["train"]["optimizer"]["decay"]))
+    logger.info("Learning rate decay rate:               {}".format(decay_rate := config["train"]["optimizer"]["decay_rate"]))
+    logger.info("Loss function:                          {}".format(loss_fn_name := config["train"]["loss"]["name"]))
 
     logger.info("\nData augmentation transformations:")
     for config_transform in config["train"]["preprocess"]:
@@ -242,21 +245,24 @@ def main(FLAGS):
         training_generator = generator.UltrasoundSegmentationBatchGenerator(
             train_ultrasound_data,
             train_segmentation_data,
-            config["train"]["batch_size"],
-            (config["image_size"][0], config["image_size"][1]),
+            batch_size,
+            (image_size[0], image_size[1]),
             transforms=transforms,
+            n_classes=num_classes,
             rng=rng
         )
         metric = tf.keras.metrics.BinaryAccuracy()
 
         # Set decay schedule
         optimizer_step = tf.Variable(0, trainable=False)
-        boundaries, values = get_schedule_intervals(n_train, config["train"]["batch_size"], config["train"]["epochs"])
-        schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay(boundaries, values)
-        lr_schedule = lambda: config["train"]["optimizer"]["lr"] * schedule(optimizer_step)
+        if epochs < decay_rate:
+            schedule = lambda x: 1.0
+        else:
+            boundaries, values = get_schedule_intervals(n_train, batch_size, epochs, decay_rate, decay)
+            schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay(boundaries, values)
+        lr_schedule = lambda: lr * schedule(optimizer_step)
 
         # Initialize optimizer
-        optimizer_name = config["train"]["optimizer"]["name"]
         if optimizer_name.lower() == "adam":
             wd_schedule = lambda: 1e-4 * schedule(optimizer_step)
             optimizer = tfa.optimizers.AdamW(learning_rate=lr_schedule, weight_decay=wd_schedule)
@@ -266,8 +272,9 @@ def main(FLAGS):
             raise ValueError(f"unsupported optimizer: {optimizer_name}")
 
         # Initialize loss function
-        loss_fn_name = config["train"]["loss"]["name"]
-        if loss_fn_name.lower() == "wcce":
+        if loss_fn_name.lower() == "bce":
+            loss_fn = BCELoss()
+        elif loss_fn_name.lower() == "wcce":
             try:
                 loss_fn = WeightedCategoricalCrossEntropy(config["train"]["loss"]["class_weights"])
             except KeyError:
@@ -287,9 +294,8 @@ def main(FLAGS):
             raise ValueError(f"unsupported loss function: {loss_fn_name}")
 
         # Initialize model
-        model_name = config["model_name"]
         if model_name.lower() == "unet":
-            model = UNet()
+            model = UNet(n_classes=num_classes)
         else:
             raise ValueError(f"unsupported model: {model_name}")
 
@@ -303,6 +309,11 @@ def main(FLAGS):
             optimizer.apply_gradients(zip(grads, model.trainable_variables))
             return out, loss
 
+        # TensorFlow profiler to profile model training performance
+        tb_log_folder = os.path.join(logs_save_fullpath, model_name + "_logs-" + str(val_round_index) + "_" + save_timestamp)
+        logger.info(f"Writing training performance data to {tb_log_folder}.")
+        tf.profiler.experimental.start(tb_log_folder)
+
         # Dictionary to track loss and accuracy over training
         history = {"loss": [], "accuracy": [], "val_loss": [], "val_accuracy": []}
 
@@ -313,13 +324,18 @@ def main(FLAGS):
         # Training loop
         training_time_start = datetime.datetime.now()
         epoch_size = len(training_generator)
-        for epoch in tqdm.tqdm(range(config["train"]["epochs"])):
-            logger.info(f"Starting epoch {epoch}, lr = {config['train']['optimizer']['lr'] * schedule(optimizer_step)}")
+        for epoch in tqdm.tqdm(range(epochs)):
+            logger.info(f"Starting epoch {epoch}, lr = {lr * schedule(optimizer_step)}")
             epoch_loss = 0
             epoch_accuracy = 0
             for batch_index in range(epoch_size):
-                img, label = training_generator[batch_index]
-                out, loss = train_step(img, label)
+                if epoch == 3 and 10 <= batch_index <= 15:
+                    with tf.profiler.experimental.Trace('train', step_num=optimizer_step, _r=1):
+                        img, label = training_generator[batch_index]
+                        out, loss = train_step(img, label)
+                else:
+                    img, label = training_generator[batch_index]
+                    out, loss = train_step(img, label)
 
                 # Calculate average training loss and accuracy
                 epoch_loss += loss / epoch_size
@@ -333,16 +349,19 @@ def main(FLAGS):
             epoch_val_loss = 0
             epoch_val_accuracy = 0
             with tf.device("cpu:0"):  # Prevent OOM
-                for val_batch_index in range(epoch_size):
-                    start_idx = val_batch_index * config["train"]["batch_size"]
-                    end_idx = (val_batch_index + 1) * config["train"]["batch_size"]
+                n_val_batches = n_val // batch_size
+                for val_batch_index in range(n_val_batches):
+                    start_idx = val_batch_index * batch_size
+                    end_idx = (val_batch_index + 1) * batch_size
                     val_ultrasound_batch = val_ultrasound_data[start_idx:end_idx]
-                    val_segmentation_batch = val_segmentation_data[start_idx:end_idx]
-                    val_segmentation_onehot = tf.keras.utils.to_categorical(val_segmentation_batch, 2)
+                    val_segmentation_batch = tf.keras.utils.to_categorical(
+                        val_segmentation_data[start_idx:end_idx],
+                        num_classes
+                    )
                     val_predictions = model(val_ultrasound_batch)
-                    epoch_val_loss += loss_fn(val_segmentation_onehot, val_predictions) / epoch_size
-                    metric.update_state(val_segmentation_onehot, val_predictions)
-                    epoch_val_accuracy += metric.result().numpy() / epoch_size
+                    epoch_val_loss += loss_fn(val_segmentation_batch, val_predictions) / n_val_batches
+                    metric.update_state(val_segmentation_batch, val_predictions)
+                    epoch_val_accuracy += metric.result().numpy() / n_val_batches
 
             # Log epoch history
             history["loss"].append(epoch_loss.numpy().tolist())  # Convert EagerTensor to float
@@ -351,13 +370,13 @@ def main(FLAGS):
             history["val_accuracy"].append(epoch_val_accuracy)
 
             # Print epoch results
-            logger.info(f"Epoch {epoch + 1}/{config['train']['epochs']}"
+            logger.info(f"Epoch {epoch + 1}/{epochs}"
                         f" - loss: {epoch_loss:.4f} - accuracy: {epoch_accuracy:.4f}"
                         f" - val_loss: {epoch_val_loss:.4f} - val_accuracy: {epoch_val_accuracy:.4f}")
 
             # Early stopping if no improvement in validation loss
             if epoch_val_loss < best_epoch_val_loss:
-                best_epoch_val_loss = epoch_loss
+                best_epoch_val_loss = epoch_val_loss
                 last_improvement = 0
 
                 # Save best performing model
@@ -374,8 +393,8 @@ def main(FLAGS):
                     logger.info(f"Training history saved to {history_fullname}.")
             else:
                 last_improvement += 1
-            if last_improvement > config["train"]["patience"]:
-                logger.info(f"Validation loss has not decreased for {config['train']['patience']} epochs. "
+            if last_improvement > patience:
+                logger.info(f"Validation loss has not decreased for {patience} epochs. "
                             f"Stopping training at {epoch = }.")
                 break
 
@@ -383,6 +402,8 @@ def main(FLAGS):
 
         training_time_stop = datetime.datetime.now()
         logger.info(f"\tValidation round #{val_round_index} training time: {training_time_stop - training_time_start}")
+        tf.profiler.experimental.stop()
+        tf.summary.flush()
 
     cross_val_time_stop = datetime.datetime.now()
     logger.info(f"Total training time: {cross_val_time_stop - cross_val_time_start}")
