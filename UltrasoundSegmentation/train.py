@@ -9,7 +9,11 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
 from ruamel.yaml import YAML
-from girder_apikey_read import girder_apikey_read
+try:
+    from girder_apikey_read import girder_apikey_read
+except Exception as e:
+    girder_apikey_read = None
+    print("No Girder API found, trying to load files from disk.")
 
 import utils
 import ultrasound_batch_generator as generator
