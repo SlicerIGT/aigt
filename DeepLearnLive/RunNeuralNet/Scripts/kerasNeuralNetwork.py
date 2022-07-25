@@ -11,8 +11,9 @@ import pyigtl
 FLAGS = None
 
 def main():
+    print(FLAGS.model_directory)
     try:
-        networkModuleName = FLAGS.network_module_name
+        networkModuleName = FLAGS.model_name
         sys.path.append(os.path.join(FLAGS.model_directory,os.pardir))
         importStatement = "from " + networkModuleName + " import " + networkModuleName + " as NeuralNetwork"
         exec(importStatement,globals())
@@ -20,6 +21,8 @@ def main():
         logging.info("Could not find model folder " + str(FLAGS.model_name))
         errorMessage = "Could not find model folder " + str(FLAGS.model_name)
         print(errorMessage)
+    except:
+        print(FLAGS.model_name)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     model_name = FLAGS.model_name
     modelFolder =FLAGS.model_directory
