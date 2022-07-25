@@ -17,4 +17,4 @@ set OutgoingPort=%9
 shift
 set DeviceName=%9
 
-call cmd.exe /K %CurrentPath%\StartNeuralNet.bat %CondaPath% %EnvName% %CurrentPath% %NetworkType% %ModelPath% %ModelName% %OutputType% %IncomingHostName% %IncomingPort% %OutgoingHostName% %OutgoingPort% %DeviceName%
+call cmd.exe /C START /MIN %CurrentPath%\StartNeuralNet.bat %CondaPath% %EnvName% %CurrentPath% %NetworkType% %ModelPath% %ModelName% %OutputType% %IncomingHostName% %IncomingPort% %OutgoingHostName% %OutgoingPort% %DeviceName%

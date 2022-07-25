@@ -310,9 +310,14 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.outgoingPort = outgoingPort
     self.incomingHostName = incomingHostName
     self.incomingPort = incomingPort
-    self.moduleDir = os.path.dirname(slicer.modules.runneuralnet.path)
+    try:
+      self.moduleDir = os.path.dirname(slicer.modules.runneuralnet.path)
+    except:
+      self.moduleDir = None
 
-  def startNeuralNetwork(self):
+  def startNeuralNetwork(self,minimized = False):
+    if self.moduleDir == None:
+      self.moduleDir = os.path.dirname(slicer.modules.runneuralnet.path)
     self.registerIncomingAndOutgoingNodes()
     self.incomingConnectorNode.Start()
     self.outgoingConnectorNode.Start()
@@ -332,7 +337,11 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
              str(self.incomingPort),
              str(self.outputNode.GetName())]
       print(self.condaEnvName)
-      strCMD = cmd[0]
+      if minimized:
+        strCMD = "START /MIN "
+      else:
+        strCMD = ''
+      strCMD += cmd[0]
       for i in range(1,len(cmd)):
         strCMD = strCMD + ' ' + cmd[i]
       startupEnv = slicer.util.startupEnvironment()
@@ -463,6 +472,8 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.outgoingConnectorNode.RegisterOutgoingMRMLNode(self.inputNode)
 
   def createNewModel(self,newModelName,newModelLocation = None):
+    if self.moduleDir == None:
+      self.moduleDir = os.path.dirname(slicer.modules.runneuralnet.path)
     templateModelFilePath = os.path.join(self.moduleDir,"Scripts","TemplateNetworkFile.txt")
     if newModelLocation == None:
       newModelPath = os.path.join(self.moduleDir,os.pardir,"Networks",newModelName)
