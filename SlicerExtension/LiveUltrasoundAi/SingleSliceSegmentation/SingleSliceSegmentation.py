@@ -655,8 +655,10 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
     seg_file_name = baseName + "_segmentation"
     img_file_name = baseName + "_ultrasound"
+    ind_file_name = baseName + "_indices"
     seg_fullname = os.path.join(outputFolder, seg_file_name)
     img_fullname = os.path.join(outputFolder, img_file_name)
+    ind_fullname = os.path.join(outputFolder, ind_file_name)
 
     # Get whole image volume (each frame in the original recording)
     num_items = selectedImageSequence.GetNumberOfItems()
@@ -676,11 +678,13 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
     np.save(img_fullname, img_seq_numpy)
       
-    # Get each segmentation at the right spot in volume the same size as the images
+    # Get each segmentation at the right spot in volume the same size as the images, and store all original indices
     num_items = selectedSegmentationSequence.GetNumberOfItems()
     selectedSegmentationSequence.SelectFirstItem()
 
     seg_seq_numpy = np.zeros(img_seq_numpy.shape, dtype=np.uint8)
+
+    originalIndices = np.array([], dtype=np.uint8)
     
     for i in range(num_items):
 
@@ -689,12 +693,14 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       seg_numpy = slicer.util.arrayFromVolume(labelmapNode)
       resize_seg_numpy = np.expand_dims(seg_numpy, axis=3)
       segmentationIndex = int(selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX))
+      originalIndices = np.append(originalIndices, segmentationIndex)
       seg_seq_numpy[segmentationIndex, ...] = resize_seg_numpy
 
       selectedSegmentationSequence.SelectNextItem()
       slicer.app.processEvents()
 
     np.save(seg_fullname, seg_seq_numpy)
+    np.save(ind_fullname, originalIndices)
 
   def exportPngSequence(self,
                         selectedImage,
