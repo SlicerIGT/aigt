@@ -254,9 +254,14 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       inputBrowserNode.SetAttribute(self.INPUT_SKIP_NUMBER, str(value))
   
   def onCaptureButton(self):
+    """
+    Callback function for capture button or hotkey to trigger either saving of a new segmentation (if the input image sequence
+    browser is selected) or overwriting an existing segmentation (if the segmentation sequence is selected).
+    :returns: None
+    """
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
     inputImage = self.ui.inputVolumeSelector.currentNode()
-    selectedSegmentationBrowser = self.ui.segmentationBrowserSelector.currentNode()
+    outputBrowserNode = self.ui.segmentationBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
     numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
 
@@ -266,34 +271,46 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     if selectedSegmentation is None:
       logging.error("No segmentation selected!")
       return
-    if selectedSegmentationBrowser is None:
+    if outputBrowserNode is None:
       logging.error("No segmentation sequence browser selected!")
       return
 
-    inputImageIndex = inputBrowserNode.GetSelectedItemNumber()
-    
     original_index_str = selectedSegmentation.GetAttribute(self.ORIGINAL_IMAGE_INDEX)
-    if original_index_str is None or original_index_str == "None" or original_index_str == "":
-      selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
-      self.logic.captureSlice(selectedSegmentationBrowser, selectedSegmentation, inputImage)
-    else:
-      self.logic.captureSlice(selectedSegmentationBrowser, selectedSegmentation, inputImage)
 
-    self.logic.eraseCurrentSegmentation(selectedSegmentation)
-    selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
-    inputBrowserNode.SelectNextItem(numSkip)
+    if original_index_str is None or original_index_str == "None" or original_index_str == "":  # new segmentation
+      inputImageIndex = inputBrowserNode.GetSelectedItemNumber()
+      selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
+      self.logic.captureSlice(outputBrowserNode, selectedSegmentation, inputImage)
+      self.logic.eraseCurrentSegmentation(selectedSegmentation)
+      selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
+      inputBrowserNode.SelectNextItem(numSkip)
+    else:  # overwrite segmentation
+      self.logic.captureSlice(outputBrowserNode, selectedSegmentation, inputImage)
+      outputBrowserNode.SelectNextItem()
+
 
   def onClearButton(self):
+    """
+    Callback function for "delete" button. Clears segmentation canvas.
+    :returns: none
+    """
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
     if selectedSegmentation is None:
       logging.error("No segmentation selected!")
       return
     self.logic.eraseCurrentSegmentation(selectedSegmentation)
-    selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
   
   def onSkipButton(self):
+    """
+    Callback function for skip button or hotkey. If input sequence browser is active, skips specified number of frames without
+    recording any segmentation. If output sequence browser is active, moves to the next output frame without skipping any frames
+    because the user is probably editing/overwriting existing segmentations.
+    :returns: None
+    """
     inputBrowserNode = self.ui.inputSequenceBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
+    outputBrowserNode = self.ui.segmentationBrowserSelector.currentNode()
+
     numSkip = slicer.modules.singleslicesegmentation.widgetRepresentation().self().ui.skipImagesSpinBox.value
     if inputBrowserNode is None:
       logging.error("No browser node selected!")
@@ -301,8 +318,13 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     if selectedSegmentation is None:
       logging.error("No segmentation selected!")
       return
-    self.logic.eraseCurrentSegmentation(selectedSegmentation)
-    inputBrowserNode.SelectNextItem(numSkip)
+
+    activeBrowserNode = slicer.modules.sequences.toolBar().activeBrowserNode()
+    if activeBrowserNode == outputBrowserNode:
+      outputBrowserNode.SelectNextItem()
+    else:
+      self.logic.eraseCurrentSegmentation(selectedSegmentation)
+      inputBrowserNode.SelectNextItem(numSkip)
   
   def onExportButton(self):
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
@@ -804,29 +826,36 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     np.save(transformFullname, transforms_seq_numpy)
 
 
-  def captureSlice(self, selectedSegmentationSequence, selectedSegmentation, inputImage):
-    originalIndex = selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
+  def captureSlice(self, segmentationSequenceBrowser, selectedSegmentation, inputImage):
+    """
+    Saves current segmentation in the selected segmentation sequence browser.
+    If the current input image index is already associated with a saved segmentation, that saved segmentation will be replaced
+    to avoid saving two different segmentations for the same input image.
+    :param segmentationSequenceBrowser: Output sequence browser for segmentations
+    :param selectedSegmentation: Output segmentation node, proxy node of one of the sequences in segmentationSequenceBrowser
+    :param inputImage: Input volume node, proxy node of one of the sequences in segmentationSequenceBrowser
+    """
+
+    # Find sequences in selected browser associated with then inputImage and selectedSegmentation as proxy nodes
     
-    #todo overwrite existing segmentation of the same image
-    
-    # Figure out which sequence of the selected browser has the proxy node inputImage and selectedSegmentation
-    
-    segmentedImageSequenceNode = selectedSegmentationSequence.GetSequenceNode(selectedSegmentation)
-    if segmentedImageSequenceNode is None:
+    inputImageSequenceNode = segmentationSequenceBrowser.GetSequenceNode(inputImage)
+    if inputImageSequenceNode is None:
       logging.error("Sequence not found for input image: {}".format(inputImage.GetName()))
       return
     
-    segmentationSequenceNode = selectedSegmentationSequence.GetSequenceNode(selectedSegmentation)
+    segmentationSequenceNode = segmentationSequenceBrowser.GetSequenceNode(selectedSegmentation)
     if segmentationSequenceNode is None:
       logging.error("Sequence not found for segmentation: {}".format(selectedSegmentation.GetName()))
       return
     
-    # Check all nodes saved in sequence if anyone has the same attribute (this image already recorded)
-    
-    numDataNodes = segmentedImageSequenceNode.GetNumberOfDataNodes()
+    # Check all nodes saved in the segmentation sequence if any of them has the same input image index attribute
+
+    originalIndex = selectedSegmentation.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
     recordedOriginalIndex = None
-    for i in range(numDataNodes):
-      segmentationNode = segmentedImageSequenceNode.GetNthDataNode(i)
+
+    numSegmentationNodes = segmentationSequenceNode.GetNumberOfDataNodes()
+    for i in range(numSegmentationNodes):
+      segmentationNode = segmentationSequenceNode.GetNthDataNode(i)
       savedIndex = segmentationNode.GetAttribute(SingleSliceSegmentationWidget.ORIGINAL_IMAGE_INDEX)
       if originalIndex == savedIndex:
         recordedOriginalIndex = i
@@ -840,9 +869,9 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       recordedOriginalIndex = None
     
     if recordedOriginalIndex is None:
-      selectedSegmentationSequence.SaveProxyNodesState()
+      segmentationSequenceBrowser.SaveProxyNodesState()
     else:
-      recordedIndexValue = segmentedImageSequenceNode.GetNthIndexValue(recordedOriginalIndex)
+      recordedIndexValue = inputImageSequenceNode.GetNthIndexValue(recordedOriginalIndex)
       segmentationSequenceNode.SetDataNodeAtValue(selectedSegmentation, recordedIndexValue)
 
 
@@ -859,7 +888,8 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       slicer.vtkOrientedImageDataResample.FillImage(labelMapRep, 0, labelMapRep.GetExtent())
       slicer.vtkSlicerSegmentationsModuleLogic.SetBinaryLabelmapToSegment(
         labelMapRep, selectedSegmentation, segmentId, slicer.vtkSlicerSegmentationsModuleLogic.MODE_REPLACE)
-
+    if num_segments > 1:
+      selectedSegmentation.Modified()
 
 class SingleSliceSegmentationTest(ScriptedLoadableModuleTest):
   """
