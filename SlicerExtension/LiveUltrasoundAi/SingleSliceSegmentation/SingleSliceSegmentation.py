@@ -71,6 +71,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.parameterSetNode = None
     self.editor = None
     self.ui = None
+    self.lastForegroundOpacity = 0.3  # Default value for CT/MRI overlay
     
     # Shortcuts
 
@@ -80,6 +81,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.shortcutD.setKey(qt.QKeySequence('d'))
     self.shortcutC = qt.QShortcut(slicer.util.mainWindow())
     self.shortcutC.setKey(qt.QKeySequence('c'))
+    self.shortcutA = qt.QShortcut(slicer.util.mainWindow())
+    self.shortcutA.setKey(qt.QKeySequence('a'))
 
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
@@ -110,6 +113,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.skipImageButton.connect('clicked(bool)', self.onSkipButton)
     self.ui.exportButton.connect('clicked(bool)', self.onExportButton)
     self.ui.layoutSelectButton.connect('clicked(bool)', self.onLayoutSelectButton)
+    self.ui.overlayButton.connect('clicked(bool)', self.onOverlayClicked)
 
     self.ui.editor.setMRMLScene(slicer.mrmlScene)
     
@@ -420,6 +424,18 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     else:
       layoutManager.setLayout(501) # switch to custom layout with 3d viewer
 
+  def onOverlayClicked(self):
+    # show/hide foreground image
+
+    layoutManager = slicer.app.layoutManager()
+    compositeNode = layoutManager.sliceWidget('Red').sliceLogic().GetSliceCompositeNode()
+    currentOpacity = compositeNode.GetForegroundOpacity()
+    if currentOpacity == 0:
+      compositeNode.SetForegroundOpacity(self.lastForegroundOpacity)
+    else:
+      self.lastForegroundOpacity = currentOpacity
+      compositeNode.SetForegroundOpacity(0.0)
+
   # Segment Editor Functionalities
 
   def editorEffectRegistered(self):
@@ -523,11 +539,13 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.shortcutS.connect('activated()', self.onSkipButton)
     self.shortcutD.connect('activated()', self.onClearButton)
     self.shortcutC.connect('activated()', self.onCaptureButton)
+    self.shortcutA.connect('activated()', self.onOverlayClicked)
   
   def disconnectKeyboardShortcuts(self):
     self.shortcutS.activated.disconnect()
     self.shortcutD.activated.disconnect()
     self.shortcutC.activated.disconnect()
+    self.shortcutA.activated.disconnect()
 
   def exit(self):
     self.ui.editor.setActiveEffect(None)
@@ -873,7 +891,6 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
     else:
       recordedIndexValue = inputImageSequenceNode.GetNthIndexValue(recordedOriginalIndex)
       segmentationSequenceNode.SetDataNodeAtValue(selectedSegmentation, recordedIndexValue)
-
 
   def eraseCurrentSegmentation(self, selectedSegmentation):
     num_segments = selectedSegmentation.GetSegmentation().GetNumberOfSegments()
