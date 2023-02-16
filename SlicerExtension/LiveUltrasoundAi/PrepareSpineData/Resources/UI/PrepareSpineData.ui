@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>794</width>
+    <width>961</width>
     <height>776</height>
    </rect>
   </property>
@@ -20,7 +20,7 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>Input volume:</string>
+         <string>Input sequence:</string>
         </property>
        </widget>
       </item>
@@ -48,7 +48,7 @@
       <item row="1" column="0">
        <widget class="QLabel" name="label_5">
         <property name="text">
-         <string>Output volume:</string>
+         <string>Output sequence:</string>
         </property>
        </widget>
       </item>
@@ -77,26 +77,29 @@
      <property name="text">
       <string>Crop</string>
      </property>
-     <layout class="QFormLayout" name="formLayout">
-      <item row="1" column="0">
-       <widget class="QLabel" name="label_3">
-        <property name="text">
-         <string>Sequence: </string>
+     <layout class="QGridLayout" name="gridLayout">
+      <item row="0" column="1">
+       <widget class="qMRMLSequenceBrowserToolBar" name="MRMLSequenceBrowserToolBar">
+        <property name="layoutDirection">
+         <enum>Qt::LeftToRight</enum>
         </property>
+        <property name="autoFillBackground">
+         <bool>false</bool>
+        </property>
+        <property name="inputMethodHints">
+         <set>Qt::ImhNone</set>
+        </property>
+        <property name="allowedAreas">
+         <set>Qt::AllToolBarAreas</set>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonIconOnly</enum>
+        </property>
+        <addaction name="separator"/>
        </widget>
       </item>
-      <item row="1" column="1">
-       <widget class="ctkRangeWidget" name="RangeWidget">
-        <property name="maximum">
-         <double>1000.000000000000000</double>
-        </property>
-        <property name="maximumValue">
-         <double>1000.000000000000000</double>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="0" colspan="2">
-       <widget class="QPushButton" name="pushButton">
+      <item row="2" column="1">
+       <widget class="QPushButton" name="ApplyCrop">
         <property name="enabled">
          <bool>true</bool>
         </property>
@@ -105,29 +108,42 @@
         </property>
        </widget>
       </item>
+      <item row="1" column="1">
+       <widget class="ctkRangeWidget" name="SequenceRange">
+        <property name="maximum">
+         <double>1000.000000000000000</double>
+        </property>
+        <property name="maximumValue">
+         <double>1000.000000000000000</double>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
    <item>
     <layout class="QGridLayout" name="gridLayout_2">
+     <property name="spacing">
+      <number>2</number>
+     </property>
      <item row="0" column="0">
-      <widget class="ctkPushButton" name="PushButton">
+      <widget class="ctkPushButton" name="VolumeReview">
        <property name="text">
         <string>Volume Review</string>
        </property>
       </widget>
      </item>
      <item row="0" column="1">
-      <widget class="ctkPushButton" name="PushButton_2">
+      <widget class="ctkPushButton" name="SequenceReview">
        <property name="text">
         <string>Sequence Review</string>
        </property>
       </widget>
      </item>
-     <item row="1" column="0" rowspan="2">
-      <widget class="QPushButton" name="pushButton_2">
+     <item row="1" column="0">
+      <widget class="ctkPushButton" name="ClearData">
        <property name="text">
-        <string>Clean hidden data</string>
+        <string>Clear hidden data</string>
        </property>
       </widget>
      </item>
@@ -176,6 +192,11 @@
    <header>qMRMLWidget.h</header>
    <container>1</container>
   </customwidget>
+  <customwidget>
+   <class>qMRMLSequenceBrowserToolBar</class>
+   <extends>QToolBar</extends>
+   <header>qMRMLSequenceBrowserToolBar.h</header>
+  </customwidget>
  </customwidgets>
  <resources/>
  <connections>
@@ -192,6 +213,38 @@
     <hint type="destinationlabel">
      <x>248</x>
      <y>61</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>PrepareSpineData</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>MRMLSequenceBrowserToolBar</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>404</x>
+     <y>387</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>65</x>
+     <y>30</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>PrepareSpineData</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>SequenceRange</receiver>
+   <slot>update()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>480</x>
+     <y>387</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>480</x>
+     <y>185</y>
     </hint>
    </hints>
   </connection>
