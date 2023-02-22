@@ -137,13 +137,19 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
         # (in the selected parameter node).
         self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-        self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-        self.ui.invertedOutputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.ctSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
+        self.ui.patientID.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
 
         # Buttons
-        self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
+        self.ui.generateCrop.connect('clicked(bool)', self.onApplyButton)
+        self.ui.removeHidden.connect('clicked(bool)', self.onApplyButton)
+        self.ui.removeUnusedMark.connect('clicked(bool)', self.onApplyButton)
+        self.ui.removeUnusedSeq.connect('clicked(bool)', self.onApplyButton)
+        self.ui.removeUnusedVol.connect('clicked(bool)', self.onApplyButton)
+        self.ui.volReview.connect('clicked(bool)', self.onApplyButton)
+        self.ui.seqReview.connect('clicked(bool)', self.onApplyButton)
+        self.ui.genRegistration.connect('clicked(bool)', self.onApplyButton)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -231,20 +237,31 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
         self._updatingGUIFromParameterNode = True
 
+        # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
+        # (in the selected parameter node).
+        self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.ctSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
+        self.ui.patientID.connect("textChanged(String)", self.updateParameterNodeFromGUI)
+
+        sequenceNodeID = self.ui.inputSelector.currentNodeID
+        sequenceNode = slicer.mrmlScene.GetNodeByID(sequenceNodeID)
+
         # Update node selectors and sliders
         self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
-        self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
-        self.ui.invertedOutputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolumeInverse"))
-        self.ui.imageThresholdSliderWidget.value = float(self._parameterNode.GetParameter("Threshold"))
-        self.ui.invertOutputCheckBox.checked = (self._parameterNode.GetParameter("Invert") == "true")
-
-        # Update buttons states and tooltips
-        if self._parameterNode.GetNodeReference("InputVolume") and self._parameterNode.GetNodeReference("OutputVolume"):
-            self.ui.applyButton.toolTip = "Compute output volume"
-            self.ui.applyButton.enabled = True
+        self.ui.ctSelector.setCurrentNode(self._parameterNode.GetNodeReference("CTVolume"))
+        self.ui.sequenceRange.minimum = 0
+        if sequenceNode is not None:
+            # get sequence max
+            numSequence = sequenceNode.GetNumberOfItems()
+            seqMax = float(numSequence / 10)
+            self.ui.sequenceRange.maximum = seqMax
+            temp = self.ui.sequenceRange
+            # self.ui.sequenceRange.value = seqMax
         else:
-            self.ui.applyButton.toolTip = "Select input and output volume nodes"
-            self.ui.applyButton.enabled = False
+            self.ui.sequenceRange.maximum = 100
+        self.ui.patientID.text = (self._parameterNode.GetParameter("SequenceRange"))
+
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -261,10 +278,8 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
         self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
-        self._parameterNode.SetNodeReferenceID("OutputVolume", self.ui.outputSelector.currentNodeID)
-        self._parameterNode.SetParameter("Threshold", str(self.ui.imageThresholdSliderWidget.value))
-        self._parameterNode.SetParameter("Invert", "true" if self.ui.invertOutputCheckBox.checked else "false")
-        self._parameterNode.SetNodeReferenceID("OutputVolumeInverse", self.ui.invertedOutputSelector.currentNodeID)
+        self._parameterNode.SetNodeReferenceID("CTVolume", self.ui.ctSelector.currentNodeID)
+        self._parameterNode.SetParameter("SequenceRange", self.ui.patientID.text)
 
         self._parameterNode.EndModify(wasModified)
 

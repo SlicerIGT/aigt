@@ -28,7 +28,7 @@
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="qMRMLNodeComboBox" name="InputSelector">
+       <widget class="qMRMLNodeComboBox" name="inputSelector">
         <property name="nodeTypes">
          <stringlist notr="true">
           <string>vtkMRMLSequenceBrowserNode</string>
@@ -50,7 +50,7 @@
        </widget>
       </item>
       <item row="1" column="1">
-       <widget class="QComboBox" name="NameSelector">
+       <widget class="QComboBox" name="nameSelector">
         <property name="enabled">
          <bool>true</bool>
         </property>
@@ -74,7 +74,7 @@
        </widget>
       </item>
       <item row="2" column="1">
-       <widget class="qMRMLNodeComboBox" name="CTSelector">
+       <widget class="qMRMLNodeComboBox" name="ctSelector">
         <property name="nodeTypes">
          <stringlist notr="true">
           <string>vtkMRMLScalarVolumeNode</string>
@@ -121,7 +121,10 @@
        </widget>
       </item>
       <item row="2" column="0" colspan="2">
-       <widget class="ctkRangeWidget" name="SequenceRange">
+       <widget class="ctkRangeWidget" name="sequenceRange">
+        <property name="singleStep">
+         <double>0.100000000000000</double>
+        </property>
         <property name="maximum">
          <double>1000.000000000000000</double>
         </property>
@@ -131,7 +134,7 @@
        </widget>
       </item>
       <item row="3" column="0">
-       <widget class="QCheckBox" name="checkBox">
+       <widget class="QCheckBox" name="deleteOrig">
         <property name="enabled">
          <bool>true</bool>
         </property>
@@ -141,7 +144,7 @@
        </widget>
       </item>
       <item row="4" column="0" colspan="2">
-       <widget class="ctkPushButton" name="PushButton_4">
+       <widget class="ctkPushButton" name="generateCrop">
         <property name="text">
          <string>Generate cropped sequence</string>
         </property>
@@ -165,28 +168,28 @@
          <number>2</number>
         </property>
         <item row="0" column="0">
-         <widget class="ctkPushButton" name="ClearDataButton">
+         <widget class="ctkPushButton" name="removeHidden">
           <property name="text">
            <string>Remove hidden model nodes</string>
           </property>
          </widget>
         </item>
         <item row="1" column="0">
-         <widget class="ctkPushButton" name="PushButton_2">
+         <widget class="ctkPushButton" name="removeUnusedVol">
           <property name="text">
            <string>Remove unused volumes</string>
           </property>
          </widget>
         </item>
         <item row="1" column="1">
-         <widget class="ctkPushButton" name="PushButton_3">
+         <widget class="ctkPushButton" name="removeUnusedMark">
           <property name="text">
            <string>Remove unused markups</string>
           </property>
          </widget>
         </item>
         <item row="0" column="1">
-         <widget class="ctkPushButton" name="PushButton">
+         <widget class="ctkPushButton" name="removeUnusedSeq">
           <property name="text">
            <string>Remove unused sequence browsers</string>
           </property>
@@ -209,28 +212,28 @@
          <number>2</number>
         </property>
         <item row="1" column="1">
-         <widget class="ctkPushButton" name="SequenceReview">
+         <widget class="ctkPushButton" name="seqReview">
           <property name="text">
            <string>Sequence Review</string>
           </property>
          </widget>
         </item>
         <item row="2" column="1">
-         <widget class="QCheckBox" name="checkBox_2">
+         <widget class="QCheckBox" name="showInteractor">
           <property name="text">
            <string>Show 3D Interactor</string>
           </property>
          </widget>
         </item>
         <item row="1" column="0">
-         <widget class="ctkPushButton" name="VolumeReview">
+         <widget class="ctkPushButton" name="volReview">
           <property name="text">
            <string>Volume Review</string>
           </property>
          </widget>
         </item>
         <item row="2" column="0">
-         <widget class="ctkPushButton" name="PushButton_5">
+         <widget class="ctkPushButton" name="genRegistration">
           <property name="text">
            <string>Generate Registration Transform</string>
           </property>
@@ -290,7 +293,7 @@
   <connection>
    <sender>PrepareSpineData</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>SequenceRange</receiver>
+   <receiver>sequenceRange</receiver>
    <slot>update()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -306,7 +309,7 @@
   <connection>
    <sender>PrepareSpineData</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>InputSelector</receiver>
+   <receiver>inputSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -322,7 +325,7 @@
   <connection>
    <sender>PrepareSpineData</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>CTSelector</receiver>
+   <receiver>ctSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
