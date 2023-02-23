@@ -7,7 +7,7 @@ import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
-
+import numpy as np
 #
 # PrepareSpineData
 #
@@ -143,7 +143,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.patientID.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
 
         # Buttons
-        # self.ui.generateCrop.connect('clicked(bool)', self.onGenerateCrop)
+        self.ui.generateCrop.connect('clicked(bool)', self.onGenerateCrop)
         # self.ui.removeHidden.connect('clicked(bool)', self.onRemoveHidden)
         # self.ui.removeUnusedMark.connect('clicked(bool)', self.onRemoveUnusedMark)
         # self.ui.removeUnusedSeq.connect('clicked(bool)', self.onRemoveUnusedSeq)
@@ -303,6 +303,30 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 ct_name = self.ui.ctSelector.currentNode().GetName()
                 # Compute output
                 self.logic.seqReviewLogic(ultrasound_name, ct_name)
+
+    def onGenerateCrop(self):
+        with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
+            if self.ui.inputSelector.currentNode():
+                sequenceNodeID = self.ui.inputSelector.currentNodeID
+                sequenceNode = slicer.mrmlScene.GetNodeByID(sequenceNodeID)
+                masterSequence = sequenceNode.GetMasterSequenceNode()
+                cropStart = self.ui.sequenceRange.minimumValue
+                cropEnd = self.ui.sequenceRange.maximumValue
+                increments = np.arange(cropStart, cropEnd + 0.1, 0.1)
+                # create a new sequence browser in slicer
+                newSequence = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", 'NewSequence')
+                startingVal = 0
+                increaseBy = 0.1
+                for i in increments:
+                    currVolume = masterSequence.GetDataNodeAtValue(str(i), False)
+                    newSequence.SetDataNodeAtValue(currVolume, str(startingVal))
+                    startingVal += increaseBy
+                name = self.ui.nameSelector.currentText
+                NewSequenceBrowserNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode")
+                NewSequenceBrowserNode.AddSynchronizedSequenceNode(newSequence)
+                NewSequenceBrowserNode.SetName(slicer.mrmlScene.GetUniqueNameByString(name))
+
+
 #
 # PrepareSpineDataLogic
 #
