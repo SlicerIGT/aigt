@@ -138,18 +138,19 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # (in the selected parameter node).
         self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.ctSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.ultrasoundSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
         self.ui.patientID.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
 
         # Buttons
-        self.ui.generateCrop.connect('clicked(bool)', self.onApplyButton)
-        self.ui.removeHidden.connect('clicked(bool)', self.onApplyButton)
-        self.ui.removeUnusedMark.connect('clicked(bool)', self.onApplyButton)
-        self.ui.removeUnusedSeq.connect('clicked(bool)', self.onApplyButton)
-        self.ui.removeUnusedVol.connect('clicked(bool)', self.onApplyButton)
-        self.ui.volReview.connect('clicked(bool)', self.onApplyButton)
-        self.ui.seqReview.connect('clicked(bool)', self.onApplyButton)
-        self.ui.genRegistration.connect('clicked(bool)', self.onApplyButton)
+        # self.ui.generateCrop.connect('clicked(bool)', self.onGenerateCrop)
+        # self.ui.removeHidden.connect('clicked(bool)', self.onRemoveHidden)
+        # self.ui.removeUnusedMark.connect('clicked(bool)', self.onRemoveUnusedMark)
+        # self.ui.removeUnusedSeq.connect('clicked(bool)', self.onRemoveUnusedSeq)
+        # self.ui.removeUnusedVol.connect('clicked(bool)', self.onRemoveUnusedVol)
+        self.ui.volReview.connect('clicked(bool)', self.onVolReview)
+        self.ui.seqReview.connect('clicked(bool)', self.onSeqReview)
+        # self.ui.genRegistration.connect('clicked(bool)', self.onGenRegistration)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -241,6 +242,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # (in the selected parameter node).
         self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.ctSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.ultrasoundSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
         self.ui.patientID.connect("textChanged(String)", self.updateParameterNodeFromGUI)
 
@@ -250,14 +252,15 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Update node selectors and sliders
         self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
         self.ui.ctSelector.setCurrentNode(self._parameterNode.GetNodeReference("CTVolume"))
+        self.ui.ultrasoundSelector.setCurrentNode(self._parameterNode.GetNodeReference("UltrasoundVolume"))
+
         self.ui.sequenceRange.minimum = 0
         if sequenceNode is not None:
             # get sequence max
             numSequence = sequenceNode.GetNumberOfItems()
             seqMax = float(numSequence / 10)
             self.ui.sequenceRange.maximum = seqMax
-            temp = self.ui.sequenceRange
-            # self.ui.sequenceRange.value = seqMax
+            self.ui.sequenceRange.setValues(0, seqMax)
         else:
             self.ui.sequenceRange.maximum = 100
         self.ui.patientID.text = (self._parameterNode.GetParameter("SequenceRange"))
@@ -279,27 +282,27 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
         self._parameterNode.SetNodeReferenceID("CTVolume", self.ui.ctSelector.currentNodeID)
+        self._parameterNode.SetNodeReferenceID("UltrasoundVolume", self.ui.ultrasoundSelector.currentNodeID)
         self._parameterNode.SetParameter("SequenceRange", self.ui.patientID.text)
+        self._parameterNode.SetParameter("UltrasoundVolume", self.ui.ultrasoundSelector.currentNodeID)
 
         self._parameterNode.EndModify(wasModified)
 
-    def onApplyButton(self):
-        """
-        Run processing when user clicks "Apply" button.
-        """
+    def onVolReview(self):
         with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
+            if self.ui.ctSelector.currentNode() and self.ui.ultrasoundSelector.currentNode():
+                ultrasound_name = self.ui.ultrasoundSelector.currentNode().GetName()
+                ct_name = self.ui.ctSelector.currentNode().GetName()
+                # Compute output
+                self.logic.volReviewLogic(ultrasound_name, ct_name)
 
-            # Compute output
-            self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-                               self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-            # Compute inverted output (if needed)
-            if self.ui.invertedOutputSelector.currentNode():
-                # If additional output volume is selected then result with inverted threshold is written there
-                self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-                                   self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
-
-
+    def onSeqReview(self):
+        with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
+            if self.ui.ctSelector.currentNode() and self.ui.ultrasoundSelector.currentNode():
+                ultrasound_name = self.ui.ultrasoundSelector.currentNode().GetName()
+                ct_name = self.ui.ctSelector.currentNode().GetName()
+                # Compute output
+                self.logic.seqReviewLogic(ultrasound_name, ct_name)
 #
 # PrepareSpineDataLogic
 #
@@ -360,6 +363,88 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
 
         stopTime = time.time()
         logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
+
+    def volReviewLogic(self, ultrasoundVolumeName, ctVolumeName):
+
+        ultrasoundVolume = slicer.mrmlScene.GetFirstNodeByName(ultrasoundVolumeName)
+        ctVolume = slicer.mrmlScene.GetFirstNodeByName(ctVolumeName)
+        imageNode = slicer.mrmlScene.GetFirstNodeByName("Image_Image")
+
+        layoutManager = slicer.app.layoutManager()
+
+        redNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed')
+        redNode.SetSliceResolutionMode(slicer.vtkMRMLSliceNode.SliceResolutionMatchVolumes)
+        greenNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeGreen')
+        yellowNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeYellow')
+
+        cyan = slicer.mrmlScene.GetNodeByID("vtkMRMLColorTableNodeCyan")
+        ultrasoundVolume.GetDisplayNode().SetAndObserveColorNodeID(cyan.GetID())
+        yellow = slicer.mrmlScene.GetNodeByID("vtkMRMLColorTableNodeYellow")
+        ctVolume.GetDisplayNode().SetAndObserveColorNodeID(yellow.GetID())
+
+        layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpView)
+        resliceLogic = slicer.modules.volumereslicedriver.logic()
+        sliceNodeList = [redNode, greenNode, yellowNode]
+        sliceNames = ["Red", "Green", "Yellow"]
+
+        for i, sliceNode in enumerate(sliceNodeList):
+            resliceLogic.SetDriverForSlice("", sliceNode)  # No driver
+            resliceLogic.SetModeForSlice(i, sliceNode)  # Axial, coronal, sagittal
+            resliceLogic.SetFlipForSlice(False, sliceNode)
+            sliceLogic = layoutManager.sliceWidget(sliceNames[i]).sliceLogic()
+            sliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(ultrasoundVolume.GetID())
+            sliceLogic.GetSliceCompositeNode().SetForegroundVolumeID(ctVolume.GetID())
+            sliceLogic.GetSliceCompositeNode().SetForegroundOpacity(0.5)
+            sliceLogic.FitSliceToAll()
+            if i == 0:
+                sliceNode.SetOrientationToAxial()
+            elif i == 1:
+                sliceNode.SetOrientationToCoronal()
+            else:
+                sliceNode.SetOrientationToSagittal()
+
+        layoutManager.sliceWidget("Red").sliceController().setSliceVisible(False)
+
+    def seqReviewLogic(self, ultrasoundVolumeName, ctVolumeName):
+
+        ultrasoundVolume = slicer.mrmlScene.GetFirstNodeByName(ultrasoundVolumeName)
+        ctVolume = slicer.mrmlScene.GetFirstNodeByName(ctVolumeName)
+        imageNode = slicer.mrmlScene.GetFirstNodeByName("Image_Image")
+
+        layoutManager = slicer.app.layoutManager()
+
+        redNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed')
+        redNode.SetSliceResolutionMode(slicer.vtkMRMLSliceNode.SliceResolutionMatchVolumes)
+        greenNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeGreen')
+        yellowNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeYellow')
+
+        cyan = slicer.mrmlScene.GetNodeByID("vtkMRMLColorTableNodeCyan")
+        ultrasoundVolume.GetDisplayNode().SetAndObserveColorNodeID(cyan.GetID())
+        yellow = slicer.mrmlScene.GetNodeByID("vtkMRMLColorTableNodeYellow")
+        ctVolume.GetDisplayNode().SetAndObserveColorNodeID(yellow.GetID())
+
+        layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpView)
+        resliceLogic = slicer.modules.volumereslicedriver.logic()
+        sliceNodeList = [redNode, greenNode, yellowNode]
+        sliceNames = ["Red", "Green", "Yellow"]
+
+        for i, sliceNode in enumerate(sliceNodeList):
+            resliceLogic.SetDriverForSlice(imageNode.GetID(), sliceNode)  # No driver
+            resliceLogic.SetModeForSlice(6, sliceNode)  # Axial, coronal, sagittal
+            resliceLogic.SetFlipForSlice(True, sliceNode)
+            sliceLogic = layoutManager.sliceWidget(sliceNames[i]).sliceLogic()
+            sliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(imageNode.GetID())
+            sliceLogic.GetSliceCompositeNode().SetForegroundVolumeID(ctVolume.GetID())
+            sliceLogic.GetSliceCompositeNode().SetForegroundOpacity(0.5)
+            sliceLogic.FitSliceToAll()
+            if i == 0:
+                sliceLogic.GetSliceCompositeNode().SetForegroundOpacity(0.3)
+            elif i == 1:
+                sliceLogic.GetSliceCompositeNode().SetForegroundOpacity(0.0)
+            else:
+                sliceLogic.GetSliceCompositeNode().SetForegroundOpacity(0.5)
+
+        layoutManager.sliceWidget("Red").sliceController().setSliceVisible(True)
 
 
 #

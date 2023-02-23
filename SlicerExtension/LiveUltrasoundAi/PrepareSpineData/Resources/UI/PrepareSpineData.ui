@@ -88,15 +88,37 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="0">
+      <item row="4" column="0">
        <widget class="QLabel" name="label_4">
         <property name="text">
          <string>Patient ID</string>
         </property>
        </widget>
       </item>
-      <item row="3" column="1">
+      <item row="4" column="1">
        <widget class="QLineEdit" name="patientID"/>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_6">
+        <property name="text">
+         <string>Ultrasound  node</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="qMRMLNodeComboBox" name="ultrasoundSelector">
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="hideChildNodeTypes">
+         <stringlist notr="true"/>
+        </property>
+        <property name="interactionNodeSingletonTag">
+         <string notr="true"/>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
@@ -206,7 +228,7 @@
       <string>Registration</string>
      </property>
      <layout class="QGridLayout" name="gridLayout">
-      <item row="0" column="0">
+      <item row="2" column="0">
        <layout class="QGridLayout" name="gridLayout_2">
         <property name="spacing">
          <number>2</number>
@@ -335,6 +357,22 @@
     <hint type="destinationlabel">
      <x>336</x>
      <y>99</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>PrepareSpineData</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ultrasoundSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>400</x>
+     <y>365</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>400</x>
+     <y>472</y>
     </hint>
    </hints>
   </connection>
