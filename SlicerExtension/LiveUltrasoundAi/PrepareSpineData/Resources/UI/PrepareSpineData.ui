@@ -157,11 +157,11 @@
       </item>
       <item row="3" column="0">
        <widget class="QCheckBox" name="deleteOrig">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
         <property name="text">
          <string>Delete original sequence</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -244,6 +244,9 @@
          <widget class="QCheckBox" name="showInteractor">
           <property name="text">
            <string>Show 3D Interactor</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
           </property>
          </widget>
         </item>

@@ -306,25 +306,125 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onGenerateCrop(self):
         with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
-            if self.ui.inputSelector.currentNode():
-                sequenceNodeID = self.ui.inputSelector.currentNodeID
-                sequenceNode = slicer.mrmlScene.GetNodeByID(sequenceNodeID)
-                masterSequence = sequenceNode.GetMasterSequenceNode()
-                cropStart = self.ui.sequenceRange.minimumValue
-                cropEnd = self.ui.sequenceRange.maximumValue
-                increments = np.arange(cropStart, cropEnd + 0.1, 0.1)
-                # create a new sequence browser in slicer
-                newSequence = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", 'NewSequence')
-                startingVal = 0
-                increaseBy = 0.1
-                for i in increments:
-                    currVolume = masterSequence.GetDataNodeAtValue(str(i), False)
-                    newSequence.SetDataNodeAtValue(currVolume, str(startingVal))
-                    startingVal += increaseBy
-                name = self.ui.nameSelector.currentText
-                NewSequenceBrowserNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode")
-                NewSequenceBrowserNode.AddSynchronizedSequenceNode(newSequence)
-                NewSequenceBrowserNode.SetName(slicer.mrmlScene.GetUniqueNameByString(name))
+            startTimeStamp = self.ui.sequenceRange.minimumValue
+            endTimeStamp = self.ui.sequenceRange.maximumValue
+            originalSequenceBrowser = self.ui.inputSelector.currentNode().GetName()
+            croppedSequenceBrowserName = self.ui.nameSelector.currentText
+            eraseOriginal = False
+            listSynchronizedNodes = ["Image_Image", "ImageToTransd", "TransdToReference"]
+
+            originalSequenceBrowser = slicer.mrmlScene.GetFirstNodeByName(originalSequenceBrowser)
+            croppedSequenceBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode")
+            croppedSequenceBrowser.SetName(slicer.mrmlScene.GetUniqueNameByString(croppedSequenceBrowserName))
+            listSequenceNodes = []
+            for aSynchronizedNode in listSynchronizedNodes:
+                sequenceNodeAdded = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", "Sequence_" + aSynchronizedNode)
+                listSequenceNodes.append(sequenceNodeAdded)
+
+            sequenceBrowserLogic = slicer.modules.sequences.logic()
+            for aSequenceNode, aSynchronizedNode in zip(listSequenceNodes, listSynchronizedNodes):
+                croppedSequenceBrowser.AddSynchronizedSequenceNodeID(aSequenceNode.GetID())
+                sequenceBrowserLogic.AddSynchronizedNode(aSequenceNode,
+                                                         slicer.mrmlScene.GetFirstNodeByName(aSynchronizedNode),
+                                                         croppedSequenceBrowser)
+                croppedSequenceBrowser.SetRecording(aSequenceNode, True)
+
+            startIndex = 0
+            endIndex = 0
+            for itemIndex in range(1, originalSequenceBrowser.GetNumberOfItems()):
+                previousTimeSeconds = float(originalSequenceBrowser.GetFormattedIndexValue(itemIndex - 1))
+                currentTimeSeconds = float(originalSequenceBrowser.GetFormattedIndexValue(itemIndex))
+                if (startTimeStamp >= previousTimeSeconds) and (
+                        startTimeStamp <= currentTimeSeconds):
+                    startIndex = itemIndex
+                if (endTimeStamp >= previousTimeSeconds) and (endTimeStamp <= currentTimeSeconds):
+                    endIndex = itemIndex
+
+            # Copy desired sequences, within a period of time, to the new sequence browser
+            for itemIndex in range(startIndex, endIndex + 1):
+                originalSequenceBrowser.SetSelectedItemNumber(itemIndex)
+                croppedSequenceBrowser.SaveProxyNodesState()
+
+            # Erase the original sequence browser and its linked sequence nodes, if required
+            if self.ui.deleteOrig.isChecked():
+                sequenceNodesToDelete = vtk.vtkCollection()
+                originalSequenceBrowser.GetSynchronizedSequenceNodes(sequenceNodesToDelete, True)
+                slicer.mrmlScene.RemoveNode(originalSequenceBrowser)
+                for aSequence in sequenceNodesToDelete:
+                    slicer.mrmlScene.RemoveNode(aSequence)
+
+            # Check if there is already a segmentation and erase it
+            segmentationName = "Segmentation"
+            segmentationNode = slicer.mrmlScene.GetFirstNodeByName(segmentationName)
+            if segmentationNode:
+                slicer.mrmlScene.RemoveNode(segmentationNode)
+
+            # Move Image_image out of any transform
+            imageImageNode = slicer.mrmlScene.GetFirstNodeByName("Image_Image")
+            imageImageNode.SetAndObserveTransformNodeID("")
+
+            # Add segmentation node
+            segmentationNodeNew = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", segmentationName)
+            segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Transverse process",
+                                                                  (0.501961, 0.682353, 0.501961))
+            segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Spinous process", (0.945098, 0.839216, 0.568627))
+            segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Other bone", (0.694118, 0.478431, 0.396078))
+
+            # Move Image_image and Segmentation back to ImageToTransd transform
+            imageToTransdTransform = slicer.mrmlScene.GetFirstNodeByName("ImageToTransd")
+            imageImageNode.SetAndObserveTransformNodeID(imageToTransdTransform.GetID())
+            segmentationNodeNew.SetAndObserveTransformNodeID(imageToTransdTransform.GetID())
+
+            # Remove SegmentationBrowser, if it exists
+            segmentationBrowserName = "SegmentationBrowser"
+            segmentationBrowser = slicer.mrmlScene.GetFirstNodeByName(segmentationBrowserName)
+            if segmentationBrowser:
+                sequenceNodesToDelete = vtk.vtkCollection()
+                segmentationBrowser.GetSynchronizedSequenceNodes(sequenceNodesToDelete, True)
+                slicer.mrmlScene.RemoveNode(segmentationBrowser)
+                for aSequence in sequenceNodesToDelete:
+                    slicer.mrmlScene.RemoveNode(aSequence)
+
+            # Create new sequence browser and desired sequences
+            listSynchronizedNodesSegmentation = ["Image_Image", "ImageToTransd", "TransdToReference", segmentationName]
+            segmentationBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode",
+                                                                     segmentationBrowserName)
+            listSequenceNodesSegmentation = []
+            for aSynchronizedNode in listSynchronizedNodesSegmentation:
+                sequenceNodeAdded = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode",
+                                                                       "Sequence_" + aSynchronizedNode)
+                listSequenceNodesSegmentation.append(sequenceNodeAdded)
+
+            # Link desired sequences to new sequence browser and link each desired sequence to its corresponding
+            # synchronized node
+            sequenceBrowserLogic = slicer.modules.sequences.logic()
+            for aSequenceNode, aSynchronizedNode in zip(listSequenceNodesSegmentation,
+                                                        listSynchronizedNodesSegmentation):
+                segmentationBrowser.AddSynchronizedSequenceNodeID(aSequenceNode.GetID())
+                sequenceBrowserLogic.AddSynchronizedNode(aSequenceNode,
+                                                         slicer.mrmlScene.GetFirstNodeByName(aSynchronizedNode),
+                                                         segmentationBrowser)
+                segmentationBrowser.SetRecording(aSequenceNode, True)
+
+            # if self.ui.inputSelector.currentNode():
+            #     sequenceNodeID = self.ui.inputSelector.currentNodeID
+            #     sequenceNode = slicer.mrmlScene.GetNodeByID(sequenceNodeID)
+            #     masterSequence = sequenceNode.GetMasterSequenceNode()
+            #     cropStart = self.ui.sequenceRange.minimumValue
+            #     cropEnd = self.ui.sequenceRange.maximumValue
+            #     increments = np.arange(cropStart, cropEnd + 0.1, 0.1)
+            #     # create a new sequence browser in slicer
+            #     newSequence = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", 'NewSequence')
+            #     startingVal = 0
+            #     increaseBy = 0.1
+            #     for i in increments:
+            #         currVolume = masterSequence.GetDataNodeAtValue(str(i), False)
+            #         newSequence.SetDataNodeAtValue(currVolume, str(startingVal))
+            #         startingVal += increaseBy
+            #     name = self.ui.nameSelector.currentText
+            #     NewSequenceBrowserNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode")
+            #     NewSequenceBrowserNode.AddSynchronizedSequenceNode(newSequence)
+            #     NewSequenceBrowserNode.SetName(slicer.mrmlScene.GetUniqueNameByString(name))
 
 
 #
