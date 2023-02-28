@@ -101,7 +101,7 @@
       <item row="3" column="0">
        <widget class="QLabel" name="label_6">
         <property name="text">
-         <string>Ultrasound  node</string>
+         <string>Ultrasound  volume</string>
         </property>
        </widget>
       </item>
@@ -165,10 +165,17 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0" colspan="2">
+      <item row="5" column="0" colspan="2">
        <widget class="ctkPushButton" name="generateCrop">
         <property name="text">
          <string>Generate cropped sequence</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QLabel" name="label_7">
+        <property name="text">
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;right&quot;&gt;&lt;span style=&quot; color:#b86d73;&quot;&gt;Note: cropping sequence may take a few minutes&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
        </widget>
       </item>
