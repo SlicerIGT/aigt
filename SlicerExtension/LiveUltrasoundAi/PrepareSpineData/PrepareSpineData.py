@@ -8,6 +8,8 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
 import numpy as np
+
+
 #
 # PrepareSpineData
 #
@@ -20,9 +22,11 @@ class PrepareSpineData(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = "PrepareSpineData"  # TODO: make this more human readable by adding spaces
-        self.parent.categories = ["Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
+        self.parent.categories = [
+            "Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
         self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-        self.parent.contributors = ["John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
+        self.parent.contributors = [
+            "John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
         # TODO: update with short description of the module and a link to online module documentation
         self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
@@ -144,10 +148,10 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Buttons
         self.ui.generateCrop.connect('clicked(bool)', self.onGenerateCrop)
-        # self.ui.removeHidden.connect('clicked(bool)', self.onRemoveHidden)
-        # self.ui.removeUnusedMark.connect('clicked(bool)', self.onRemoveUnusedMark)
-        # self.ui.removeUnusedSeq.connect('clicked(bool)', self.onRemoveUnusedSeq)
-        # self.ui.removeUnusedVol.connect('clicked(bool)', self.onRemoveUnusedVol)
+        self.ui.removeHidden.connect('clicked(bool)', self.onRemoveHidden)
+        self.ui.removeUnusedMark.connect('clicked(bool)', self.onRemoveUnusedMark)
+        self.ui.removeUnusedSeq.connect('clicked(bool)', self.onRemoveUnusedSeq)
+        self.ui.removeUnusedVol.connect('clicked(bool)', self.onRemoveUnusedVol)
         self.ui.volReview.connect('clicked(bool)', self.onVolReview)
         self.ui.seqReview.connect('clicked(bool)', self.onSeqReview)
         # self.ui.genRegistration.connect('clicked(bool)', self.onGenRegistration)
@@ -265,7 +269,6 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sequenceRange.maximum = 100
         self.ui.patientID.text = (self._parameterNode.GetParameter("SequenceRange"))
 
-
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
 
@@ -318,7 +321,8 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             croppedSequenceBrowser.SetName(slicer.mrmlScene.GetUniqueNameByString(croppedSequenceBrowserName))
             listSequenceNodes = []
             for aSynchronizedNode in listSynchronizedNodes:
-                sequenceNodeAdded = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", "Sequence_" + aSynchronizedNode)
+                sequenceNodeAdded = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode",
+                                                                       "Sequence_" + aSynchronizedNode)
                 listSequenceNodes.append(sequenceNodeAdded)
 
             sequenceBrowserLogic = slicer.modules.sequences.logic()
@@ -406,25 +410,80 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                                                          segmentationBrowser)
                 segmentationBrowser.SetRecording(aSequenceNode, True)
 
-            # if self.ui.inputSelector.currentNode():
-            #     sequenceNodeID = self.ui.inputSelector.currentNodeID
-            #     sequenceNode = slicer.mrmlScene.GetNodeByID(sequenceNodeID)
-            #     masterSequence = sequenceNode.GetMasterSequenceNode()
-            #     cropStart = self.ui.sequenceRange.minimumValue
-            #     cropEnd = self.ui.sequenceRange.maximumValue
-            #     increments = np.arange(cropStart, cropEnd + 0.1, 0.1)
-            #     # create a new sequence browser in slicer
-            #     newSequence = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", 'NewSequence')
-            #     startingVal = 0
-            #     increaseBy = 0.1
-            #     for i in increments:
-            #         currVolume = masterSequence.GetDataNodeAtValue(str(i), False)
-            #         newSequence.SetDataNodeAtValue(currVolume, str(startingVal))
-            #         startingVal += increaseBy
-            #     name = self.ui.nameSelector.currentText
-            #     NewSequenceBrowserNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode")
-            #     NewSequenceBrowserNode.AddSynchronizedSequenceNode(newSequence)
-            #     NewSequenceBrowserNode.SetName(slicer.mrmlScene.GetUniqueNameByString(name))
+    def onRemoveHidden(self):
+        return
+
+    def onRemoveUnusedMark(self):
+        # Input parameters
+        keepBrowserName = self.ui.ultrasoundSelector.currentNode().GetName()
+        CTName = self.ui.ctSelector.currentNode().GetName()
+        sequenceName = self.ui.inputSelector.currentNode().GetName()
+        patientMarkups = "patientUsLandmarks_Ras"
+        keepVolumeNames = [keepBrowserName, CTName, sequenceName, patientMarkups]
+
+        # Delete all markups
+        print("")
+        print("*** Removing Markup fiducials")
+        allMarkups = slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode")
+        for markup in allMarkups:
+            if markup.GetName() in keepVolumeNames:
+                print("Keep    {}".format(markup.GetName()))
+            else:
+                print("Delete  {}".format(markup.GetName()))
+                slicer.mrmlScene.RemoveNode(markup)
+
+    def onRemoveUnusedSeq(self):
+        sequenceName = self.ui.inputSelector.currentNode().GetName()
+
+        # Delete all sequence browsers, except for one
+        keepBrowser = slicer.mrmlScene.GetFirstNodeByName(sequenceName)
+        sequencesToKeep = vtk.vtkCollection()
+        keepBrowser.GetSynchronizedSequenceNodes(sequencesToKeep, True)
+        listSynchronizedNodes = []
+
+        print("")
+        print("*** Removing sequences")
+        allSequences = slicer.util.getNodesByClass("vtkMRMLSequenceNode")
+        for sequence in allSequences:
+            if sequencesToKeep.IsItemPresent(sequence):
+                proxyNode = keepBrowser.GetProxyNode(sequence)
+                listSynchronizedNodes.append(proxyNode.GetName())
+                print("Keep    {}".format(sequence.GetName()))
+            else:
+                print("Delete  {}".format(sequence.GetName()))
+                slicer.mrmlScene.RemoveNode(sequence)
+
+        # Delete all sequences except the ones belonging to the browser to keep
+        print("")
+        print("*** Removing sequence browsers")
+        allSequenceBrowsers = slicer.util.getNodesByClass("vtkMRMLSequenceBrowserNode")
+        for browser in allSequenceBrowsers:
+            if browser == keepBrowser:
+                print("Keep    {}".format(browser.GetName()))
+            else:
+                print("Delete  {}".format(browser.GetName()))
+                slicer.mrmlScene.RemoveNode(browser)
+
+    def onRemoveUnusedVol(self):
+        # Input parameters
+        keepBrowserName = self.ui.ultrasoundSelector.currentNode().GetName()
+        CTName = self.ui.ctSelector.currentNode().GetName()
+        sequenceName = self.ui.inputSelector.currentNode().GetName()
+        patientMarkups = "patientUsLandmarks_Ras"
+        inputImageName = "Image_Image"
+        keepVolumeNames = [keepBrowserName, CTName, sequenceName, patientMarkups]
+
+        # Delete all volume nodes, except for those that are in the keep list
+        print("")
+        print("*** Removing volumes")
+        volumeNodes = slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode")
+        for volume in volumeNodes:
+            volumeName = volume.GetName()
+            if volumeName == inputImageName or volumeName in keepVolumeNames:
+                print("Keep   {}".format(volumeName))
+            else:
+                print("Delete {}".format(volumeName))
+                slicer.mrmlScene.RemoveNode(volume)
 
 
 #
@@ -481,12 +540,13 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
             'ThresholdValue': imageThreshold,
             'ThresholdType': 'Above' if invert else 'Below'
         }
-        cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
+        cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True,
+                                 update_display=showResult)
         # We don't need the CLI module node anymore, remove it to not clutter the scene with it
         slicer.mrmlScene.RemoveNode(cliNode)
 
         stopTime = time.time()
-        logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
+        logging.info(f'Processing completed in {stopTime - startTime:.2f} seconds')
 
     def volReviewLogic(self, ultrasoundVolumeName, ctVolumeName):
 
