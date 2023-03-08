@@ -281,6 +281,13 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     original_index_str = selectedSegmentation.GetAttribute(self.ORIGINAL_IMAGE_INDEX)
 
+    # If input sequence browser is selected in the toolbar, always consider this a new segmentation. This is needed in case
+    # a scene was loaded with segmentation attribute ORIGINAL_IMAGE_INDEX not None.
+
+    activeBrowserNode = slicer.modules.sequences.toolBar().activeBrowserNode()
+    if activeBrowserNode == inputBrowserNode:
+      original_index_str = None
+
     if original_index_str is None or original_index_str == "None" or original_index_str == "":  # new segmentation
       inputImageIndex = inputBrowserNode.GetSelectedItemNumber()
       selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(inputImageIndex))
