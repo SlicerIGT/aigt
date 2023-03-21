@@ -378,12 +378,31 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 if (endTimeStamp >= previousTimeSeconds) and (endTimeStamp <= currentTimeSeconds):
                     endIndex = itemIndex
 
+            # Set up frame skipping when tracking info is missing (identity transforms)
+
+            transdToReferenceMatrix = vtk.vtkMatrix4x4()
+            skipInvalid = self.ui.skipInvalidTrackingCheckBox.checked
+            transdToReference = slicer.mrmlScene.GetFirstNodeByName("TransdToReference")
+            if transdToReference is None and skipInvalid == True:
+                logging.warning("Could not find TransdToReference transform. Not skipping any frames.")
+                skipInvalid = False
+
             # Copy desired sequences, within a period of time, to the new sequence browser
+
             for itemIndex in range(startIndex, endIndex + 1):
                 originalSequenceBrowser.SetSelectedItemNumber(itemIndex)
-                croppedSequenceBrowser.SaveProxyNodesState()
+                if skipInvalid:
+                    transdToReference.GetMatrixTransformToParent(transdToReferenceMatrix)
+                    p_Ref = transdToReferenceMatrix.MultiplyFloatPoint([0.0, 0.0, 0.0, 1.0])
+                    if p_Ref[0] != 0.0 or p_Ref[1] != 0.0 or p_Ref[2] != 0.0:
+                        croppedSequenceBrowser.SaveProxyNodesState()
+                    else:
+                        print(f"Skipping item: {itemIndex}")
+                else:
+                    croppedSequenceBrowser.SaveProxyNodesState()
 
             # Erase the original sequence browser and its linked sequence nodes, if required
+
             if self.ui.deleteOrig.isChecked():
                 sequenceNodesToDelete = vtk.vtkCollection()
                 originalSequenceBrowser.GetSynchronizedSequenceNodes(sequenceNodesToDelete, True)
