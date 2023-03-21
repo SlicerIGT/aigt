@@ -1,9 +1,8 @@
 import logging
 import os
 
-import vtk
+import vtk, qt, ctk, slicer
 
-import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
@@ -21,12 +20,10 @@ class PrepareSpineData(ScriptedLoadableModule):
 
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = "PrepareSpineData"  # TODO: make this more human readable by adding spaces
-        self.parent.categories = [
-            "Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
-        self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-        self.parent.contributors = [
-            "John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
+        self.parent.title = "Prepare spine data"  # TODO: make this more human readable by adding spaces
+        self.parent.categories = ["Ultrasound"]
+        self.parent.dependencies = []
+        self.parent.contributors = ["Nicole Kitner (Queen's University)"]
         # TODO: update with short description of the module and a link to online module documentation
         self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
@@ -137,6 +134,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # These connections ensure that we update parameter node when scene is closed
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
+        self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndImportEvent, self.onSceneImportEnd)
 
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
         # (in the selected parameter node).
@@ -145,6 +143,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.ultrasoundSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
         self.ui.patientID.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
+        self.ui.ctToUsSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onCtToUsNodeSelected)
 
         # Buttons
         self.ui.generateCrop.connect('clicked(bool)', self.onGenerateCrop)
@@ -155,6 +154,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.volReview.connect('clicked(bool)', self.onVolReview)
         self.ui.seqReview.connect('clicked(bool)', self.onSeqReview)
         # self.ui.genRegistration.connect('clicked(bool)', self.onGenRegistration)
+        self.ui.showInteractor.connect('toggled(bool)', self.onShowInteractorToggled)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -179,6 +179,26 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
         self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 
+
+    def onCtToUsNodeSelected(self, ctToUsNode):
+        if ctToUsNode is not None:
+            self._parameterNode.SetNodeReferenceID(self.logic.CT_TO_US_TRANSFORM, ctToUsNode.GetID())
+        else:
+            self._parameterNode.SetNodeReferenceID(self.logic.CT_TO_US_TRANSFORM, "")
+
+
+    def onShowInteractorToggled(self, toggled):
+        """
+        Callback function for checkbox to toggle registration transform interactor visibility.
+        """
+        ctToUsNode = self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM)
+        if ctToUsNode is None:
+            logging.warning("CT to US transform should be referenced, but not found")
+            return
+
+        ctToUsNode.GetDisplayNode().SetEditorVisibility(toggled)
+
+
     def onSceneStartClose(self, caller, event):
         """
         Called just before the scene is closed.
@@ -193,6 +213,15 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # If this module is shown while the scene is closed then recreate a new parameter node immediately
         if self.parent.isEntered:
             self.initializeParameterNode()
+
+    def onSceneImportEnd(self, caller, event):
+        """
+        Called after a scene was loaded in Slicer.
+        """
+        qt.QTimer.singleShot(0, self.finishImportingScene)  # Need some time for import to finish
+
+    def finishImportingScene(self):
+        self.updateGUIFromParameterNode()  # Update GUI using new parameter node
 
     def initializeParameterNode(self):
         """
@@ -242,14 +271,6 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
         self._updatingGUIFromParameterNode = True
 
-        # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
-        # (in the selected parameter node).
-        self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.ctSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.ultrasoundSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-        self.ui.patientID.connect("textChanged(String)", self.updateParameterNodeFromGUI)
-
         sequenceNodeID = self.ui.inputSelector.currentNodeID
         sequenceNode = slicer.mrmlScene.GetNodeByID(sequenceNodeID)
 
@@ -257,6 +278,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
         self.ui.ctSelector.setCurrentNode(self._parameterNode.GetNodeReference("CTVolume"))
         self.ui.ultrasoundSelector.setCurrentNode(self._parameterNode.GetNodeReference("UltrasoundVolume"))
+        self.ui.ctToUsSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM))
 
         self.ui.sequenceRange.minimum = 0
         if sequenceNode is not None:
@@ -268,6 +290,18 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         else:
             self.ui.sequenceRange.maximum = 100
         self.ui.patientID.text = (self._parameterNode.GetParameter("SequenceRange"))
+
+        ctToUsNode = self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM)
+        if ctToUsNode is not None:
+            editorVisible = ctToUsNode.GetDisplayNode().GetEditorVisibility()
+            self.ui.showInteractor.enabled = True
+            if editorVisible:
+                self.ui.showInteractor.checked = True
+            else:
+                self.ui.showInteractor.checked = False
+        else:
+            self.ui.showInteractor.checked = False
+            self.ui.showInteractor.enabled = False
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -500,6 +534,9 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
+    CT_TO_US_TRANSFORM = "CtToUsTransformNode"
+
+
     def __init__(self):
         """
         Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -629,7 +666,6 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
                 sliceLogic.GetSliceCompositeNode().SetForegroundOpacity(0.5)
 
         layoutManager.sliceWidget("Red").sliceController().setSliceVisible(True)
-
 
 #
 # PrepareSpineDataTest

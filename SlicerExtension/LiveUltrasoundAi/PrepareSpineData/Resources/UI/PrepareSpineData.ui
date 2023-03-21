@@ -101,7 +101,7 @@
       <item row="3" column="0">
        <widget class="QLabel" name="label_6">
         <property name="text">
-         <string>Ultrasound  volume</string>
+         <string>Ultrasound volume</string>
         </property>
        </widget>
       </item>
@@ -114,6 +114,37 @@
         </property>
         <property name="hideChildNodeTypes">
          <stringlist notr="true"/>
+        </property>
+        <property name="interactionNodeSingletonTag">
+         <string notr="true"/>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="label_8">
+        <property name="text">
+         <string>CT to US transform</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="qMRMLNodeComboBox" name="ctToUsSelector">
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLLinearTransformNode</string>
+         </stringlist>
+        </property>
+        <property name="hideChildNodeTypes">
+         <stringlist notr="true"/>
+        </property>
+        <property name="noneEnabled">
+         <bool>true</bool>
+        </property>
+        <property name="editEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="renameEnabled">
+         <bool>true</bool>
         </property>
         <property name="interactionNodeSingletonTag">
          <string notr="true"/>
@@ -264,13 +295,6 @@
           </property>
          </widget>
         </item>
-        <item row="2" column="0">
-         <widget class="ctkPushButton" name="genRegistration">
-          <property name="text">
-           <string>Generate Registration Transform</string>
-          </property>
-         </widget>
-        </item>
        </layout>
       </item>
      </layout>
@@ -383,6 +407,22 @@
     <hint type="destinationlabel">
      <x>400</x>
      <y>472</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>PrepareSpineData</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>ctToUsSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>400</x>
+     <y>365</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>449</x>
+     <y>180</y>
     </hint>
    </hints>
   </connection>
