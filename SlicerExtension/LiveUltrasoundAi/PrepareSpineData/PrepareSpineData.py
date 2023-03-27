@@ -474,8 +474,25 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 segmentationBrowser.SetRecording(aSequenceNode, True)
 
             progressbar.close()
+
     def onRemoveHidden(self):
-        return
+        # Input parameters
+        us_probe = "UsProbe_Transd"
+        reference_hold = "ReferenceHolder"
+        skel = "SkeletonModel_Articulated"
+        keepModelNodes = [us_probe, reference_hold, skel]
+
+        # Delete all volume nodes, except for those that are in the keep list
+        print("")
+        print("*** Removing modelNodes")
+        modelNodes = slicer.util.getNodesByClass("vtkMRMLModelNode")
+        for model in modelNodes:
+            modelName = model.GetName()
+            if modelName in keepModelNodes:
+                print("Keep   {}".format(modelName))
+            else:
+                print("Delete {}".format(modelName))
+                slicer.mrmlScene.RemoveNode(model)
 
     def onRemoveUnusedMark(self):
         # Input parameters
