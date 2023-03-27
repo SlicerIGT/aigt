@@ -388,8 +388,13 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 skipInvalid = False
 
             # Copy desired sequences, within a period of time, to the new sequence browser
+            progressbar = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(), windowTitle='Cropping sequence...',
+                                                           autoClose=True)
+            progress = 0
+            steps = endIndex - startIndex + 1
+            progressbar.setCancelButton(None)
 
-            for itemIndex in range(startIndex, endIndex + 1):
+            for i, itemIndex in enumerate(range(startIndex, endIndex + 1)):
                 originalSequenceBrowser.SetSelectedItemNumber(itemIndex)
                 if skipInvalid:
                     transdToReference.GetMatrixTransformToParent(transdToReferenceMatrix)
@@ -400,6 +405,11 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                         print(f"Skipping item: {itemIndex}")
                 else:
                     croppedSequenceBrowser.SaveProxyNodesState()
+                progressStep = 100 / steps
+                # Update progress value
+                progressbar.setValue(progress)
+                progress += progressStep
+                slicer.app.processEvents()
 
             # Erase the original sequence browser and its linked sequence nodes, if required
 
@@ -463,6 +473,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                                                          segmentationBrowser)
                 segmentationBrowser.SetRecording(aSequenceNode, True)
 
+            progressbar.close()
     def onRemoveHidden(self):
         return
 
