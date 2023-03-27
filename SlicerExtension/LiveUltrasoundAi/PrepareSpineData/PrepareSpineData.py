@@ -394,7 +394,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             steps = endIndex - startIndex + 1
             progressbar.setCancelButton(None)
 
-            for i, itemIndex in enumerate(range(startIndex, endIndex + 1)):
+            for itemIndex in range(startIndex, endIndex + 1):
                 originalSequenceBrowser.SetSelectedItemNumber(itemIndex)
                 if skipInvalid:
                     transdToReference.GetMatrixTransformToParent(transdToReferenceMatrix)
