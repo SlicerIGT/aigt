@@ -388,6 +388,11 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 skipInvalid = False
 
             # Copy desired sequences, within a period of time, to the new sequence browser
+            progressbar = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(), windowTitle='Cropping sequence...',
+                                                           autoClose=True)
+            progress = 0
+            steps = endIndex - startIndex + 1
+            progressbar.setCancelButton(None)
 
             for itemIndex in range(startIndex, endIndex + 1):
                 originalSequenceBrowser.SetSelectedItemNumber(itemIndex)
@@ -400,6 +405,11 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                         print(f"Skipping item: {itemIndex}")
                 else:
                     croppedSequenceBrowser.SaveProxyNodesState()
+                progressStep = 100 / steps
+                # Update progress value
+                progressbar.setValue(progress)
+                progress += progressStep
+                slicer.app.processEvents()
 
             # Erase the original sequence browser and its linked sequence nodes, if required
 
@@ -463,8 +473,26 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                                                          segmentationBrowser)
                 segmentationBrowser.SetRecording(aSequenceNode, True)
 
+            progressbar.close()
+
     def onRemoveHidden(self):
-        return
+        # Input parameters
+        us_probe = "UsProbe_Transd"
+        reference_hold = "ReferenceHolder"
+        skel = "SkeletonModel_Articulated"
+        keepModelNodes = [us_probe, reference_hold, skel]
+
+        # Delete all volume nodes, except for those that are in the keep list
+        print("")
+        print("*** Removing modelNodes")
+        modelNodes = slicer.util.getNodesByClass("vtkMRMLModelNode")
+        for model in modelNodes:
+            modelName = model.GetName()
+            if modelName in keepModelNodes:
+                print("Keep   {}".format(modelName))
+            else:
+                print("Delete {}".format(modelName))
+                slicer.mrmlScene.RemoveNode(model)
 
     def onRemoveUnusedMark(self):
         # Input parameters
