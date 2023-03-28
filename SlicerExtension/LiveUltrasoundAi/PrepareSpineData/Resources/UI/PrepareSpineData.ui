@@ -240,7 +240,7 @@
         <item row="0" column="0">
          <widget class="ctkPushButton" name="removeHidden">
           <property name="text">
-           <string>Remove hidden model nodes</string>
+           <string>Remove model nodes</string>
           </property>
          </widget>
         </item>

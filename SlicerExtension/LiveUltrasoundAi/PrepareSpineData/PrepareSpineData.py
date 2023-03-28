@@ -488,7 +488,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         modelNodes = slicer.util.getNodesByClass("vtkMRMLModelNode")
         for model in modelNodes:
             modelName = model.GetName()
-            if modelName in keepModelNodes:
+            if modelName in keepModelNodes or model.GetHideFromEditors():
                 print("Keep   {}".format(modelName))
             else:
                 print("Delete {}".format(modelName))
