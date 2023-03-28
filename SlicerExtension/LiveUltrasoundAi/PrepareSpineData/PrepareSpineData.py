@@ -486,13 +486,16 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         print("")
         print("*** Removing modelNodes")
         modelNodes = slicer.util.getNodesByClass("vtkMRMLModelNode")
+        numRemoved = 0
         for model in modelNodes:
             modelName = model.GetName()
-            if modelName in keepModelNodes:
+            if modelName in keepModelNodes or model.GetHideFromEditors():
                 print("Keep   {}".format(modelName))
             else:
                 print("Delete {}".format(modelName))
                 slicer.mrmlScene.RemoveNode(model)
+                numRemoved += 1
+        self.ui.feedbackLabel.setText(f"{numRemoved} models removed")
 
     def onRemoveUnusedMark(self):
         # Input parameters
@@ -506,12 +509,15 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         print("")
         print("*** Removing Markup fiducials")
         allMarkups = slicer.util.getNodesByClass("vtkMRMLMarkupsFiducialNode")
+        numRemoved = 0
         for markup in allMarkups:
             if markup.GetName() in keepVolumeNames:
                 print("Keep    {}".format(markup.GetName()))
             else:
                 print("Delete  {}".format(markup.GetName()))
                 slicer.mrmlScene.RemoveNode(markup)
+                numRemoved += 1
+            self.ui.feedbackLabel.setText(f"{numRemoved} markups removed")
 
     def onRemoveUnusedSeq(self):
         sequenceName = self.ui.inputSelector.currentNode().GetName()
@@ -525,6 +531,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         print("")
         print("*** Removing sequences")
         allSequences = slicer.util.getNodesByClass("vtkMRMLSequenceNode")
+        numRemoved_seq = 0
         for sequence in allSequences:
             if sequencesToKeep.IsItemPresent(sequence):
                 proxyNode = keepBrowser.GetProxyNode(sequence)
@@ -533,17 +540,21 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             else:
                 print("Delete  {}".format(sequence.GetName()))
                 slicer.mrmlScene.RemoveNode(sequence)
+                numRemoved_seq += 1
 
         # Delete all sequences except the ones belonging to the browser to keep
         print("")
         print("*** Removing sequence browsers")
         allSequenceBrowsers = slicer.util.getNodesByClass("vtkMRMLSequenceBrowserNode")
+        numRemoved_sb = 0
         for browser in allSequenceBrowsers:
             if browser == keepBrowser:
                 print("Keep    {}".format(browser.GetName()))
             else:
                 print("Delete  {}".format(browser.GetName()))
                 slicer.mrmlScene.RemoveNode(browser)
+                numRemoved_sb += 1
+        self.ui.feedbackLabel.setText(f"{numRemoved_seq} sequences and {numRemoved_sb} sequence browsers removed")
 
     def onRemoveUnusedVol(self):
         # Input parameters
@@ -558,6 +569,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         print("")
         print("*** Removing volumes")
         volumeNodes = slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode")
+        numRemoved = 0
         for volume in volumeNodes:
             volumeName = volume.GetName()
             if volumeName == inputImageName or volumeName in keepVolumeNames:
@@ -565,6 +577,8 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             else:
                 print("Delete {}".format(volumeName))
                 slicer.mrmlScene.RemoveNode(volume)
+                numRemoved += 1
+        self.ui.feedbackLabel.setText(f"{numRemoved} volumes removed")
 
 
 #

@@ -237,17 +237,10 @@
         <property name="spacing">
          <number>2</number>
         </property>
-        <item row="0" column="0">
-         <widget class="ctkPushButton" name="removeHidden">
+        <item row="0" column="1">
+         <widget class="ctkPushButton" name="removeUnusedSeq">
           <property name="text">
-           <string>Remove hidden model nodes</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="0">
-         <widget class="ctkPushButton" name="removeUnusedVol">
-          <property name="text">
-           <string>Remove unused volumes</string>
+           <string>Remove unused sequence browsers</string>
           </property>
          </widget>
         </item>
@@ -258,10 +251,17 @@
           </property>
          </widget>
         </item>
-        <item row="0" column="1">
-         <widget class="ctkPushButton" name="removeUnusedSeq">
+        <item row="1" column="0">
+         <widget class="ctkPushButton" name="removeUnusedVol">
           <property name="text">
-           <string>Remove unused sequence browsers</string>
+           <string>Remove unused volumes</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="ctkPushButton" name="removeHidden">
+          <property name="text">
+           <string>Remove model nodes</string>
           </property>
          </widget>
         </item>
@@ -308,6 +308,16 @@
        </layout>
       </item>
      </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="feedbackLabel">
+     <property name="text">
+      <string/>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
     </widget>
    </item>
    <item>
