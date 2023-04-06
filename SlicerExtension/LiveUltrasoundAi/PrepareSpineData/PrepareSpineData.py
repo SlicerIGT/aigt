@@ -293,6 +293,9 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         ctToUsNode = self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM)
         if ctToUsNode is not None:
+            if ctToUsNode.GetDisplayNode() is None:
+                ctToUsNode.CreateDefaultDisplayNodes()
+
             editorVisible = ctToUsNode.GetDisplayNode().GetEditorVisibility()
             self.ui.showInteractor.enabled = True
             if editorVisible:
@@ -394,6 +397,8 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             steps = endIndex - startIndex + 1
             progressbar.setCancelButton(None)
 
+            slicer.app.pauseRender()  # Speeds up iteration by blocking rendering in 2D and 3D views
+
             for itemIndex in range(startIndex, endIndex + 1):
                 originalSequenceBrowser.SetSelectedItemNumber(itemIndex)
                 if skipInvalid:
@@ -410,6 +415,8 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 progressbar.setValue(progress)
                 progress += progressStep
                 slicer.app.processEvents()
+
+            slicer.app.resumeRender()  # Resume rendering in all views
 
             # Erase the original sequence browser and its linked sequence nodes, if required
 
