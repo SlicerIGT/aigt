@@ -294,11 +294,24 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       self.logic.captureSlice(outputBrowserNode, selectedSegmentation, inputImage)
       self.logic.eraseCurrentSegmentation(selectedSegmentation)
       selectedSegmentation.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
-      inputBrowserNode.SelectNextItem(numSkip)
+      currentItemNum = inputBrowserNode.GetSelectedItemNumber()
+      newItemNum = inputBrowserNode.SelectNextItem(numSkip)
     else:  # overwrite segmentation
       self.logic.captureSlice(outputBrowserNode, selectedSegmentation, inputImage)
-      outputBrowserNode.SelectNextItem()
+      currentItemNum = outputBrowserNode.GetSelectedItemNumber()
+      newItemNum = outputBrowserNode.SelectNextItem()
 
+    # Check if sequence browser wrapped around. If yes, pop up message box to ask if user wants to continue.
+
+    if newItemNum < currentItemNum:
+      logging.debug("Sequence wrapped around!")
+
+      msgBox = qt.QMessageBox()
+      msgBox.setText("Sequence wrapped around!")
+      msgBox.setInformativeText("Please save the scene before closing the application!")
+      msgBox.setStandardButtons(qt.QMessageBox.Ok)
+      msgBox.setDefaultButton(qt.QMessageBox.Ok)
+      msgBox.exec_()
 
   def onClearButton(self):
     """
@@ -332,10 +345,23 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     activeBrowserNode = slicer.modules.sequences.toolBar().activeBrowserNode()
     if activeBrowserNode == outputBrowserNode:
-      outputBrowserNode.SelectNextItem()
+      currentItemNum = outputBrowserNode.GetSelectedItemNumber()
+      newItemNum = outputBrowserNode.SelectNextItem()
     else:
       self.logic.eraseCurrentSegmentation(selectedSegmentation)
-      inputBrowserNode.SelectNextItem(numSkip)
+      currentItemNum = inputBrowserNode.GetSelectedItemNumber()
+      newItemNum = inputBrowserNode.SelectNextItem(numSkip)
+
+    # Check if sequence browser wrapped around. If yes, pop up message box to ask if user wants to continue.
+
+    if newItemNum < currentItemNum:
+      logging.debug("Sequence wrapped around!")
+      msgBox = qt.QMessageBox()
+      msgBox.setText("Sequence wrapped around!")
+      msgBox.setInformativeText("Please save the scene before closing the application!")
+      msgBox.setStandardButtons(qt.QMessageBox.Ok)
+      msgBox.setDefaultButton(qt.QMessageBox.Ok)
+      msgBox.exec_()
   
   def onExportButton(self):
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
