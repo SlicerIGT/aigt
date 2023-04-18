@@ -337,12 +337,27 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.logic.volReviewLogic(ultrasound_name, ct_name)
 
     def onSeqReview(self):
-        with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
+        # Make sure views are unlinked
+
+        sliceCompositeNodes = slicer.util.getNodesByClass("vtkMRMLSliceCompositeNode")
+        defaultSliceCompositeNode = slicer.mrmlScene.GetDefaultNodeByClass("vtkMRMLSliceCompositeNode")
+        if not defaultSliceCompositeNode:
+            defaultSliceCompositeNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLSliceCompositeNode")
+            defaultSliceCompositeNode.UnRegister(None)  # CreateNodeByClass is factory method, need to unregister the result
+            slicer.mrmlScene.AddDefaultNode(defaultSliceCompositeNode)
+        sliceCompositeNodes.append(defaultSliceCompositeNode)
+        for sliceCompositeNode in sliceCompositeNodes:
+            sliceCompositeNode.SetLinkedControl(False)
+
+        # Setting up volumes for views
+
+        with slicer.util.tryWithErrorDisplay("Failed to set up views for seqeunce review", waitCursor=True):
             if self.ui.ctSelector.currentNode() and self.ui.ultrasoundSelector.currentNode():
                 ultrasound_name = self.ui.ultrasoundSelector.currentNode().GetName()
                 ct_name = self.ui.ctSelector.currentNode().GetName()
-                # Compute output
                 self.logic.seqReviewLogic(ultrasound_name, ct_name)
+
+
 
     def onGenerateCrop(self):
         with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
