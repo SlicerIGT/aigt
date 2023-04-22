@@ -51,6 +51,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
   ATTRIBUTE_PREFIX = 'SingleSliceSegmentation_'
+  EXPORT_FOLDER = ATTRIBUTE_PREFIX + 'FilenamePrefix'
   INPUT_BROWSER = ATTRIBUTE_PREFIX + 'InputBrowser'
   INPUT_SKIP_NUMBER = ATTRIBUTE_PREFIX + 'InputSkipNumber'
   DEFAULT_INPUT_SKIP_NUMBER = 4
@@ -111,6 +112,8 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.captureButton.connect('clicked(bool)', self.onCaptureButton)
     self.ui.clearSegmentationButton.connect('clicked(bool)', self.onClearButton)
     self.ui.skipImageButton.connect('clicked(bool)', self.onSkipButton)
+
+    self.ui.outputDirectoryButton.connect('directoryChanged(QString)', self.onExportFolderChanged)
     self.ui.exportButton.connect('clicked(bool)', self.onExportButton)
     self.ui.layoutSelectButton.connect('clicked(bool)', self.onLayoutSelectButton)
     self.ui.overlayButton.connect('clicked(bool)', self.onOverlayClicked)
@@ -195,6 +198,11 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
   def cleanup(self):
     self.effectFactorySingleton.disconnect('effectRegistered(QString)', self.editorEffectRegistered)
+
+  def onExportFolderChanged(self, text):
+    """Save the filename prefix in application settings"""
+    settings = qt.QSettings()
+    settings.setValue(self.EXPORT_FOLDER, text)
 
   def onInputBrowserChanged(self, currentNode):
     browserNodes = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
@@ -558,9 +566,9 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       if not segmentationNode:
         segmentationNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSegmentationNode')
       self.ui.editor.setSegmentationNode(segmentationNode)
-      if not self.ui.editor.masterVolumeNodeID():
+      if not self.ui.editor.sourceVolumeNodeID():
         masterVolumeNodeID = self.getDefaultMasterVolumeNodeID()
-        self.ui.editor.setMasterVolumeNodeID(masterVolumeNodeID)
+        self.ui.editor.setSourceVolumeNodeID(masterVolumeNodeID)
 
     layoutManager = slicer.app.layoutManager()
     layoutManager.setLayout(6)
@@ -639,7 +647,14 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
         sliceLogic = layoutManager.sliceWidget('Red').sliceLogic()
         compositeNode = sliceLogic.GetSliceCompositeNode()
         compositeNode.SetBackgroundVolumeID(inputImageNode.GetID())
-        self.ui.editor.setMasterVolumeNode(inputImageNode)
+        self.ui.editor.setSourceVolumeNode(inputImageNode)
+
+    # Update export folder value if path is found in application settings
+
+    exportFolder = slicer.app.settings().value(self.EXPORT_FOLDER)
+    if exportFolder is not None:
+      self.ui.outputDirectoryButton.directory = exportFolder
+
 
 
 #
