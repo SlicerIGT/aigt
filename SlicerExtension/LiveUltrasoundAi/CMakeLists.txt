@@ -22,6 +22,7 @@ include(${Slicer_USE_FILE})
 add_subdirectory(SingleSliceSegmentation)
 add_subdirectory(SingleSliceSegmentation)
 add_subdirectory(SegmentationUNet)
+add_subdirectory(TorchLiveUs)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
