@@ -1,0 +1,10 @@
+# Example config file for train.py
+
+experiment_name: "simple_unet"
+in_channels: !!int 1
+out_channels: !!int 1
+save_frequency: !!int 0
+num_epochs: !!int 20
+batch_size: !!int 32
+learning_rate: !!float 0.001
+seed: !!int 42
