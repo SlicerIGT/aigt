@@ -148,13 +148,10 @@ class TorchLiveUsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
-        # (in the selected parameter node).
+        # These connections ensure that whenever user changes some settings on the GUI, that is saved in either the MRML scene
+        # (in the selected parameter node), or in the application settings (independent of the scene).
 
         self.ui.modelPathLineEdit.connect("currentPathChanged(QString)", self.updateParameterNodeFromGUI)
-        lastModelPath = self.logic.getLastModelPath()
-        if lastModelPath is not None:
-            self.ui.modelPathLineEdit.setCurrentPath(lastModelPath)
         self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
@@ -180,6 +177,10 @@ class TorchLiveUsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """
         # Make sure parameter node exists and observed
         self.initializeParameterNode()
+
+        lastModelPath = self.logic.getLastModelPath()
+        if lastModelPath is not None:
+            self.ui.modelPathLineEdit.currentPath = lastModelPath
 
     def exit(self):
         """
@@ -454,11 +455,9 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         input_tensor = torch.from_numpy(resized_array).unsqueeze(0).unsqueeze(0).float()
 
         # Run inference
-        with torch.no_grad():
+        with torch.inference_mode():
             output_logits = self.model(input_tensor)
-
-        # Convert logits to probabilities
-        output_tensor = torch.sigmoid(output_logits)
+            output_tensor = torch.sigmoid(output_logits)
 
         # Convert output to numpy array
         output_array = output_tensor.squeeze().numpy() * 255
