@@ -863,11 +863,15 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       logging.error("Export folder does not exist {}".format(outputFolder))
       return
 
-    # Grab the Image To Transducer Transform - we will get all applicable transforms from here.
-    imageToTrans = slicer.util.getFirstNodeByName("ImageToTransd*")
-    if imageToTrans is None:
-      logging.error("ImageToTransducer transform does not exist.")
+    # Find out if selectedImage is transformed by an transform node in the scene
+    # If so, we will use that transform to get the transform to world for each frame
+
+    imageTransformID = selectedImage.GetTransformNodeID()
+    if imageTransformID is None:
+      logging.warning("Image is not transformed; no transform to world will be exported.")
       return
+    else:
+      imageTransform = slicer.mrmlScene.GetNodeByID(imageTransformID)
 
     num_items = selectedImageSequence.GetNumberOfItems()
     selectedImageSequence.SelectFirstItem()
@@ -878,7 +882,7 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
 
       # Get landmarking scan transform, get TransformToWorld
       transformToWorld = vtk.vtkMatrix4x4()
-      imageToTrans.GetMatrixTransformToWorld(transformToWorld)
+      imageTransform.GetMatrixTransformToWorld(transformToWorld)
       transformToWorld_numpy = slicer.util.arrayFromVTKMatrix(transformToWorld)
       
       transforms_seq_numpy[i, ...] = transformToWorld_numpy
