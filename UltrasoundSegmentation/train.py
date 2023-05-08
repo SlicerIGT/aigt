@@ -77,7 +77,7 @@ experiment_name = f"{config['experiment_name']}_{timestamp}"
 
 run = wandb.init(
     # Set the project where this run will be logged
-    project="spine-segmentation",
+    project=config["wandb_project_name"],
     name=experiment_name,
     # Track hyperparameters and run metadata
     config={
@@ -176,3 +176,4 @@ for epoch in range(config["num_epochs"]):
 model_filename = "model.pt"
 torch.save(model.state_dict(), os.path.join(args.output_dir, model_filename))
 
+wandb.finish()

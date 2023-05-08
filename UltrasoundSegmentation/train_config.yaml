@@ -1,5 +1,6 @@
 # Example config file for train.py
 
+wandb_project_name: "kidney_segmentation"
 experiment_name: "simple_unet"
 in_channels: !!int 1
 out_channels: !!int 1
