@@ -791,9 +791,15 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       currentSegmentation = segmentationSequence.GetNthDataNode(itemIndex)
       slicer.modules.segmentations.logic().ExportAllSegmentsToLabelmapNode(
         currentSegmentation, labelmapVolumeNode, slicer.vtkSegmentation.EXTENT_REFERENCE_GEOMETRY)
+      # slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(
+      #   currentSegmentation, labelmapVolumeNode, ultrasoundNode)
       arrayLabelmap = slicer.util.array(labelmapVolumeNode.GetID())
-      arrayLabelmap[arrayLabelmap != 0] = 1
-      arrayLabelmap *= value
+      if arrayLabelmap is not None:
+        arrayLabelmap[arrayLabelmap != 0] = 1
+        arrayLabelmap *= value
+      else:
+        arrayLabelmap = slicer.util.array(ultrasoundNode.GetID())
+        arrayLabelmap[:, :, :] = 0
       slicer.util.updateVolumeFromArray(scalarVolumeNode, arrayLabelmap)
       indexValue = segmentationSequence.GetNthIndexValue(itemIndex)
       volumeSequenceNode.SetDataNodeAtValue(scalarVolumeNode, indexValue)
