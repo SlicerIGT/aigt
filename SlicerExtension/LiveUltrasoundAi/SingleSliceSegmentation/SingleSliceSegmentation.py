@@ -1,11 +1,12 @@
 from __future__ import print_function
 import os
-import unittest
 import vtk, qt, ctk, slicer
-from slicer.ScriptedLoadableModule import *
 import logging
-
 import numpy as np
+
+from slicer.ScriptedLoadableModule import *
+from slicer.util import VTKObservationMixin
+
 
 
 DEFAULT_INPUT_IMAGE_NAME = "Image_Image"
@@ -46,7 +47,7 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
 # SingleSliceSegmentationWidget
 #
 
-class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
+class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   """Uses ScriptedLoadableModuleWidget base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
@@ -64,6 +65,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
   def __init__(self, parent):
     ScriptedLoadableModuleWidget.__init__(self, parent)
+    VTKObservationMixin.__init__(self)
 
     self.logic = SingleSliceSegmentationLogic()
 
@@ -103,6 +105,9 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
 
     # connections
 
+    # Observe scene end import event and call onSceneEndImport when it happens
+    self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndImportEvent, self.onSceneEndImport)
+
     self.ui.inputSequenceBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputBrowserChanged)
     self.ui.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputVolumeChanged)
     self.ui.inputSegmentationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSegmentationChanged)
@@ -114,6 +119,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     self.ui.skipImageButton.connect('clicked(bool)', self.onSkipButton)
 
     self.ui.outputDirectoryButton.connect('directoryChanged(QString)', self.onExportFolderChanged)
+    self.ui.convertSegButton.connect('clicked(bool)', self.onConvertButton)
     self.ui.exportButton.connect('clicked(bool)', self.onExportButton)
     self.ui.layoutSelectButton.connect('clicked(bool)', self.onLayoutSelectButton)
     self.ui.overlayButton.connect('clicked(bool)', self.onOverlayClicked)
@@ -244,6 +250,7 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
     else:
       currentNode.SetAttribute(self.SEGMENTATION, "True")
 
+
   def onSegmentationBrowserChanged(self, currentNode):
     browserNodes = slicer.util.getNodesByClass('vtkMRMLSequenceBrowserNode')
     for browser in browserNodes:
@@ -370,7 +377,31 @@ class SingleSliceSegmentationWidget(ScriptedLoadableModuleWidget):
       msgBox.setStandardButtons(qt.QMessageBox.Ok)
       msgBox.setDefaultButton(qt.QMessageBox.Ok)
       msgBox.exec_()
-  
+
+  def onConvertButton(self):
+    """
+    Callback function for convert button.
+    Converts all segmentations in the segmentation sequence browser to a sequence of scalar volumes.
+    """
+    inputBrowserNode = self.ui.segmentationBrowserSelector.currentNode()
+    if inputBrowserNode is None:
+      logging.error("No browser node selected!")
+      return
+
+    segmentationNode = self.ui.inputSegmentationSelector.currentNode()
+    if segmentationNode is None:
+      logging.error("No segmentation selected!")
+      return
+
+    ultrasoundNode = self.ui.inputVolumeSelector.currentNode()
+    if ultrasoundNode is None:
+      logging.error("No ultrasound volume selected!")
+      return
+
+    value = self.ui.convertValueSpinBox.value
+
+    self.logic.convertSegmentationSequenceToVolumeSequence(inputBrowserNode, segmentationNode, ultrasoundNode, value)
+
   def onExportButton(self):
     selectedSegmentationSequence = self.ui.segmentationBrowserSelector.currentNode()
     selectedSegmentation = self.ui.inputSegmentationSelector.currentNode()
@@ -725,6 +756,49 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       labelMapRep.Initialize()
       labelMapRep.Modified()
       selectedSegmentation.Modified()
+
+  def convertSegmentationSequenceToVolumeSequence(self, inputBrowserNode, segmentationNode, ultrasoundNode, value):
+    """
+    Converts a segmentation sequence to a volume sequence
+    """
+    print(f"inputBrowserNode: {inputBrowserNode.GetName()}")
+    print(f"segmentationNode: {segmentationNode.GetName()}")
+    print(f"ultrasoundNode: {ultrasoundNode.GetName()}")
+    print(f"value: {value}")
+
+    # Add a new sequence node to the scene and add it to the inputBrowserNode
+
+    volumeSequenceNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", "SegmentationVolumeSequence")
+    inputBrowserNode.AddSynchronizedSequenceNode(volumeSequenceNode)
+
+    # Iterate through ever item in the inputBrowserNode and convert the segmentation to a volume
+
+    labelmapVolumeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
+    scalarVolumeNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode', "SegmentationVolume")
+    scalarVolumeNode.CreateDefaultDisplayNodes()
+
+    inputBrowserNode.AddProxyNode(scalarVolumeNode, volumeSequenceNode, False)
+
+    segmentationSequence = inputBrowserNode.GetSequenceNode(segmentationNode)
+    if segmentationSequence is None:
+      logging.error(f"No segmentation sequence found for segmentation {segmentationNode.GetName()}")
+      return
+
+    # Iterate through every item in the inputBrowserNode and convert the segmentation to a volume
+
+    for itemIndex in range(inputBrowserNode.GetNumberOfItems()):
+      inputBrowserNode.SetSelectedItemNumber(itemIndex)
+      currentSegmentation = segmentationSequence.GetNthDataNode(itemIndex)
+      slicer.modules.segmentations.logic().ExportAllSegmentsToLabelmapNode(
+        currentSegmentation, labelmapVolumeNode, slicer.vtkSegmentation.EXTENT_REFERENCE_GEOMETRY)
+      arrayLabelmap = slicer.util.array(labelmapVolumeNode.GetID())
+      arrayLabelmap[arrayLabelmap != 0] = 1
+      arrayLabelmap *= value
+      slicer.util.updateVolumeFromArray(scalarVolumeNode, arrayLabelmap)
+      indexValue = segmentationSequence.GetNthIndexValue(itemIndex)
+      volumeSequenceNode.SetDataNodeAtValue(scalarVolumeNode, indexValue)
+      slicer.app.processEvents()
+
 
 
   def exportNumpySlice(self,
