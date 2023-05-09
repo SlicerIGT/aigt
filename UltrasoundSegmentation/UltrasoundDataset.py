@@ -107,4 +107,4 @@ class UltrasoundDataset(Dataset):
         if self.transform_data_files is not None:
             return ultrasound_data, segmentation_data, self.transform_data[index]
         else:
-            return ultrasound_data, segmentation_data, None        
+            return ultrasound_data, segmentation_data    
