@@ -1,0 +1,19 @@
+name: AIGT-US-Segmentation
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - anaconda
+dependencies:
+  - pip
+  - python=3.9
+  - matplotlib
+  - pytorch-cuda=11.8
+  - torchvision
+  - monai
+  - tqdm
+  - wandb
+  - pip: 
+    - requests
+    - pyyaml
+    - opencv-python
