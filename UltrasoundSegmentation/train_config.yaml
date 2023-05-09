@@ -1,7 +1,8 @@
 # Example config file for train.py
 
-wandb_project_name: "kidney_segmentation"
+wandb_project_name: "breast_segmentation"
 experiment_name: "simple_unet"
+image_size: 128
 in_channels: !!int 1
 out_channels: !!int 1
 save_frequency: !!int 0
