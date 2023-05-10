@@ -1,12 +1,14 @@
 # Example config file for train.py
 
-wandb_project_name: "breast_segmentation"
+wandb_project_name: "spine_segmentation"
 experiment_name: "simple_unet"
 image_size: 128
 in_channels: !!int 1
 out_channels: !!int 1
 save_frequency: !!int 0
-num_epochs: !!int 20
+num_epochs: !!int 30
 batch_size: !!int 32
 learning_rate: !!float 0.001
+learning_rate_decay_factor: !!float 0.5
+learning_rate_decay_frequency: !!int 10
 seed: !!int 42

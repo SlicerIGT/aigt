@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
@@ -86,6 +87,9 @@ def main(args):
             "epochs": config["num_epochs"],
         })
 
+    # Log values of the config dictionary on Weights & Biases
+    wandb.config.update(config)
+
     # Set seed for reproducibility
     random.seed(config["seed"])
     torch.manual_seed(config["seed"])
@@ -108,6 +112,20 @@ def main(args):
     loss_function = BCEWithLogitsLoss()
     optimizer = Adam(model.parameters(), config["learning_rate"])
 
+    try:
+        learning_rate_decay_frequency = int(config["learning_rate_decay_frequency"])
+    except ValueError:
+        learning_rate_decay_frequency = 100
+    try:
+        learning_rate_decay_factor = float(config["learning_rate_decay_factor"])
+    except ValueError:
+        learning_rate_decay_factor = 1.0 # No decay
+    logging.info(f"Learning rate decay frequency: {learning_rate_decay_frequency}")
+    logging.info(f"Learning rate decay factor: {learning_rate_decay_factor}")
+
+    # Train model
+
+    scheduler = StepLR(optimizer, step_size=learning_rate_decay_frequency, gamma=learning_rate_decay_factor)
     for epoch in range(config["num_epochs"]):
         logging.info(f"Epoch {epoch+1}/{config['num_epochs']}")
         model.train()
@@ -123,6 +141,7 @@ def main(args):
             train_losses.append(loss.item())
         train_loss = sum(train_losses) / len(train_losses)
         logging.info(f"Training loss: {train_loss}")
+        scheduler.step()
 
         # Validation step
         model.eval()
@@ -141,6 +160,11 @@ def main(args):
         logging.info(f"Val loss: {test_loss}")
         logging.info(f"Val IoU: {test_iou}")
         wandb.log({"train_loss": train_loss, "val_loss": test_loss, "val_iou": test_iou})
+
+        # Log current learning rate
+        for param_group in optimizer.param_groups:
+            current_lr = param_group["lr"]
+            logging.info(f"Current learning rate: {current_lr}")
 
         # Save model after every Nth epoch as specified in the config file
         if config["save_frequency"]>0 and (epoch + 1) % config["save_frequency"] == 0:
