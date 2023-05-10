@@ -8,6 +8,7 @@ For experiment tracking:
 
 import argparse
 import logging
+import monai
 import random
 import traceback
 import torch
@@ -97,20 +98,42 @@ def main(args):
         torch.cuda.manual_seed(config["seed"])
 
     # Create dataloaders using UltrasoundDataset
+
     resize_transform = transforms.Resize((config["image_size"], config["image_size"]), antialias=True)
     train_dataset = UltrasoundDataset(args.train_data_folder, transform=resize_transform)
     train_dataloader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=False)
     val_dataset = UltrasoundDataset(args.val_data_folder, transform=resize_transform)
     val_dataloader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False)
 
-    model = UNet(in_channels=config["in_channels"], out_channels=config["out_channels"])
+    # Construct model
+
+    if config["model_name"] == "monai_unet":
+        model = monai.networks.nets.UNet(
+            spatial_dims=2,
+            in_channels=1,
+            out_channels=1,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2),
+            num_res_units=2,
+        )
+    else:
+        model = UNet(in_channels=config["in_channels"], out_channels=config["out_channels"])
+    
+    # Construct loss function
+
+    if config["loss_function"] == "monai_dice":
+        loss_function = monai.losses.DiceLoss(sigmoid=True)
+    else:
+        loss_function = BCEWithLogitsLoss()
+
     model = model.to(device=device)
 
     # from torchinfo import summary
     # summary(model, input_size=(1, config["in_channels"], 128, 128))
 
-    loss_function = BCEWithLogitsLoss()
     optimizer = Adam(model.parameters(), config["learning_rate"])
+
+    # Set up learning rate decay
 
     try:
         learning_rate_decay_frequency = int(config["learning_rate_decay_frequency"])
@@ -172,7 +195,7 @@ def main(args):
 
         # Log a random sample of 3 test images along with their ground truth and predictions
         random.seed(config["seed"])
-        sample = random.sample(range(len(val_dataset)), 3)
+        sample = random.sample(range(len(val_dataset)), 5)
 
         inputs = torch.stack([val_dataset[i][0] for i in sample])
         labels = torch.stack([val_dataset[i][1] for i in sample])
