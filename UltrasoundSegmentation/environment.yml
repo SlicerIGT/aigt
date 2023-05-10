@@ -1,4 +1,3 @@
-name: AIGT-US-Segmentation
 channels:
   - pytorch
   - nvidia
