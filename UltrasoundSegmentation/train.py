@@ -9,8 +9,10 @@ For experiment tracking:
 import argparse
 import logging
 import random
+import traceback
 import torch
 import os
+import sys
 import yaml
 import wandb
 import matplotlib.pyplot as plt
@@ -36,7 +38,11 @@ def parse_args():
     parser.add_argument("--output-dir", type=str)
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--log-file", type=str)
-    return parser.parse_args()
+    try:
+        return parser.parse_args()
+    except SystemExit as err:
+        traceback.print_exc()
+        sys.exit(err.code)
 
 
 def main(args):
@@ -141,6 +147,7 @@ def main(args):
             torch.save(model.state_dict(), os.path.join(args.output_dir, f"model_{epoch+1}.pt"))
 
         # Log a random sample of 3 test images along with their ground truth and predictions
+        random.seed(config["seed"])
         sample = random.sample(range(len(val_dataset)), 3)
 
         inputs = torch.stack([val_dataset[i][0] for i in sample])
