@@ -12,25 +12,27 @@ learning_rate_decay_factor: !!float 0.5
 learning_rate_decay_frequency: !!int 10
 seed: !!int 42
 transforms:
-  # Basic transforms, do not modify
-  - name: "Transposed"
-    params:
-      keys: ["image", "label"]
-      indices: [2, 0, 1]
-  - name: "ToTensord"
-  - name: "EnsureTyped"
-    params:
-      keys: ["image", "label"]
-      dtype: "float32"
-  
-  # Add additional transforms here
-  - name: "Resized"
-    params:
-      keys: ["image", "label"]
-      spatial_size: [128, 128]
-  - name: "RandGaussianNoised"
-    params:
-      keys: ["image"]
-      prob: 0.15
-      mean: 0.0
-      std: 0.1
+  general:
+    # Basic transforms, do not modify
+    - name: "Transposed"
+      params:
+        keys: ["image", "label"]
+        indices: [2, 0, 1]
+    - name: "ToTensord"
+    - name: "EnsureTyped"
+      params:
+        keys: ["image", "label"]
+        dtype: "float32"
+    
+    # Add additional transforms here
+    - name: "Resized"
+      params:
+        keys: ["image", "label"]
+        spatial_size: [128, 128]
+  train:
+    - name: "RandGaussianNoised"
+      params:
+        keys: ["image"]
+        prob: 0.15
+        mean: 0.0
+        std: 0.1

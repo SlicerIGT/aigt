@@ -122,19 +122,29 @@ def main(args):
     g.manual_seed(config["seed"])
 
     # Create transforms
-    transform_list = []
-    if config["transforms"]:
-        for tfm in config["transforms"]:
+    train_transform_list = []
+    val_transform_list = []
+    if config["transforms"]["general"]:
+        for tfm in config["transforms"]["general"]:
             try:
-                transform_list.append(getattr(transforms, tfm["name"])(**tfm["params"]))
+                train_transform_list.append(getattr(transforms, tfm["name"])(**tfm["params"]))
+                val_transform_list.append(getattr(transforms, tfm["name"])(**tfm["params"]))
             except KeyError:  # Apply transform to both image and label by default
-                transform_list.append(getattr(transforms, tfm["name"])(keys=["image", "label"]))
-    transform = Compose(transform_list)
+                train_transform_list.append(getattr(transforms, tfm["name"])(keys=["image", "label"]))
+                val_transform_list.append(getattr(transforms, tfm["name"])(keys=["image", "label"]))
+    if config["transforms"]["train"]:
+        for tfm in config["transforms"]["train"]:
+            try:
+                train_transform_list.append(getattr(transforms, tfm["name"])(**tfm["params"]))
+            except KeyError:
+                train_transform_list.append(getattr(transforms, tfm["name"])(keys=["image", "label"]))
+    train_transform = Compose(train_transform_list)
+    val_transform = Compose(val_transform_list)
 
     # Create dataloaders using UltrasoundDataset
-    train_dataset = UltrasoundDataset(args.train_data_folder, transform=transform)
+    train_dataset = UltrasoundDataset(args.train_data_folder, transform=train_transform)
     train_dataloader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=False, generator=g)
-    val_dataset = UltrasoundDataset(args.val_data_folder, transform=transform)
+    val_dataset = UltrasoundDataset(args.val_data_folder, transform=val_transform)
     val_dataloader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False, generator=g)
 
     # Construct model
