@@ -38,7 +38,6 @@ from monai.metrics import (
     ConfusionMatrixMetric
 )
 
-from metrics import soft_iou
 from UltrasoundDataset import UltrasoundDataset
 from UNet import UNet
 
@@ -50,6 +49,8 @@ def parse_args():
     parser.add_argument("--val-data-folder", type=str)
     parser.add_argument("--config-file", type=str)
     parser.add_argument("--output-dir", type=str)
+    parser.add_argument("--wandb-project-name", type=str, default="aigt_ultrasound_segmentation")
+    parser.add_argument("--wandb-exp-name", type=str)
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--log-file", type=str)
     try:
@@ -89,10 +90,13 @@ def main(args):
     # Initialize Weights & Biases
     wandb.login()
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    experiment_name = f"{config['experiment_name']}_{timestamp}"
+    if args.wandb_exp_name is not None:
+        experiment_name = f"{args.wandb_exp_name}_{timestamp}"
+    else:
+        experiment_name = f"{config['model_name']}_{timestamp}"
     run = wandb.init(
         # Set the project where this run will be logged
-        project=config["wandb_project_name"],
+        project=args.wandb_project_name,
         name=experiment_name,
         # Track hyperparameters and run metadata
         config={

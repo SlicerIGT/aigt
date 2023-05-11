@@ -1,7 +1,5 @@
 # Example config file for train.py
 
-wandb_project_name: "spine_monai_unet"
-experiment_name: "monai_unet"
 model_name: "monai_unet"
 loss_function: "monai_dice"
 image_size: 128
