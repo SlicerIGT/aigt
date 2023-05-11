@@ -67,11 +67,13 @@ def main(args):
 
     # Set up logging into file or console
     if args.log_file is not None:
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
         log_file = os.path.join(args.output_dir, args.log_file)
         logging.basicConfig(filename=log_file, filemode="w", level=args.log_level)
         print(f"Logging to file {log_file}.")
     else:
-        logging.basicConfig(level=args.log_level)  # Log to console
+        logging.basicConfig(stream=sys.stdout, level=logging.INFO)  # Log to console
 
     # Read config file
     if args.config_file is None:
