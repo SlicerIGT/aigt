@@ -28,3 +28,9 @@ transforms:
     params:
       keys: ["image", "label"]
       spatial_size: [128, 128]
+  - name: "RandGaussianNoised"
+    params:
+      keys: ["image"]
+      prob: 0.15
+      mean: 0.0
+      std: 0.1
