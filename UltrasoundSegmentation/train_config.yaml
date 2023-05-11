@@ -1,14 +1,16 @@
 # Example config file for train.py
 
-wandb_project_name: "spine_segmentation"
-experiment_name: "simple_unet"
+wandb_project_name: "spine_monai_unet"
+experiment_name: "monai_unet"
+model_name: "monai_unet"
+loss_function: "monai_dice"
 image_size: 128
 in_channels: !!int 1
 out_channels: !!int 1
 save_frequency: !!int 0
-num_epochs: !!int 30
+num_epochs: !!int 40
 batch_size: !!int 32
-learning_rate: !!float 0.001
+learning_rate: !!float 0.004
 learning_rate_decay_factor: !!float 0.5
 learning_rate_decay_frequency: !!int 10
 seed: !!int 42
