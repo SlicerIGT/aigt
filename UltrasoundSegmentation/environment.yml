@@ -6,13 +6,10 @@ channels:
 dependencies:
   - pip
   - python=3.9
-  - matplotlib
   - pytorch-cuda=11.8
   - torchvision
-  - monai
-  - tqdm
   - wandb
-  - pip: 
+  - pip:
     - requests
-    - pyyaml
     - opencv-python
+    - monai[scikit-image, tqdm, pyyaml, matplotlib]
