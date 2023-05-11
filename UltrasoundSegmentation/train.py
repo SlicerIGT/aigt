@@ -17,13 +17,25 @@ import yaml
 import wandb
 import matplotlib.pyplot as plt
 
+from tqdm import tqdm
 from datetime import datetime
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from tqdm import tqdm
+
+from monai.data.utils import decollate_batch
+from monai.transforms import (
+    Compose,
+    Activations,
+    AsDiscrete
+)
+from monai.metrics import (
+    DiceMetric, 
+    MeanIoU,  
+    ConfusionMatrixMetric
+)
 
 from metrics import soft_iou
 from UltrasoundDataset import UltrasoundDataset
@@ -86,6 +98,8 @@ def main(args):
             "learning_rate": config["learning_rate"],
             "epochs": config["num_epochs"],
         })
+    run.define_metric("val_loss", summary="min")
+    run.define_metric("accuracy", summary="max")
 
     # Log values of the config dictionary on Weights & Biases
     wandb.config.update(config)
@@ -123,14 +137,25 @@ def main(args):
     logging.info(f"Learning rate decay frequency: {learning_rate_decay_frequency}")
     logging.info(f"Learning rate decay factor: {learning_rate_decay_factor}")
 
-    # Train model
+    # Metrics
+    dice_metric = DiceMetric(include_background=True, reduction="mean")
+    iou_metric = MeanIoU(include_background=True, reduction="mean")
+    confusion_matrix_metric = ConfusionMatrixMetric(
+        include_background=True, 
+        metric_name=["accuracy", "precision", "sensitivity", "specificity", "f1_score"],
+        reduction="mean"
+    )
+    post_pred = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
 
+    # Train model
     scheduler = StepLR(optimizer, step_size=learning_rate_decay_frequency, gamma=learning_rate_decay_factor)
     for epoch in range(config["num_epochs"]):
         logging.info(f"Epoch {epoch+1}/{config['num_epochs']}")
         model.train()
-        train_losses = []
+        epoch_loss = 0
+        step = 0
         for batch in tqdm(train_dataloader):
+            step += 1
             inputs = batch[0].to(device=device)
             labels = batch[1].to(device=device)
             optimizer.zero_grad()
@@ -138,28 +163,58 @@ def main(args):
             loss = loss_function(outputs, labels)
             loss.backward()
             optimizer.step()
-            train_losses.append(loss.item())
-        train_loss = sum(train_losses) / len(train_losses)
-        logging.info(f"Training loss: {train_loss}")
+            epoch_loss += loss.item()
+        epoch_loss /= step
+        logging.info(f"Training loss: {epoch_loss}")
         scheduler.step()
 
         # Validation step
         model.eval()
-        test_losses = []
-        test_ious = []
+        val_loss = 0
+        val_step = 0
         with torch.no_grad():
             for batch in tqdm(val_dataloader):
-                inputs = batch[0].to(device=device)
-                labels = batch[1].to(device=device)
-                outputs = model(inputs)
-                loss = loss_function(outputs, labels)
-                test_losses.append(loss.item())
-                test_ious.append(soft_iou(outputs, labels))
-        test_loss = sum(test_losses) / len(test_losses)
-        test_iou = sum(test_ious) / len(test_ious)
-        logging.info(f"Val loss: {test_loss}")
-        logging.info(f"Val IoU: {test_iou}")
-        wandb.log({"train_loss": train_loss, "val_loss": test_loss, "val_iou": test_iou})
+                val_step += 1
+                val_inputs = batch[0].to(device=device)
+                val_labels = batch[1].to(device=device)
+                val_outputs = model(val_inputs)
+                loss = loss_function(val_outputs, val_labels)
+                val_loss += loss.item()
+                
+                # Compute metrics for current iteration
+                val_post_preds = [post_pred(i) for i in decollate_batch(val_outputs)]
+                dice_metric(y_pred=val_post_preds, y=val_labels)
+                iou_metric(y_pred=val_post_preds, y=val_labels)
+                confusion_matrix_metric(y_pred=val_post_preds, y=val_labels)
+
+            val_loss /= val_step
+            dice = dice_metric.aggregate().item()
+            iou = iou_metric.aggregate().item()
+            cm = confusion_matrix_metric.aggregate()
+
+            # reset status for next validation round
+            dice_metric.reset()
+            iou_metric.reset()
+            confusion_matrix_metric.reset()
+
+            logging.info(f"Val loss: {val_loss}")
+            logging.info(f"Dice: {dice}\n"
+                        f"IoU: {iou}\n"
+                        f"Accuracy: {(acc := cm[0].item())}\n"
+                        f"Precision: {(pre := cm[1].item())}\n"
+                        f"Sensitivity: {(sen := cm[2].item())}\n"
+                        f"Specificity: {(spe := cm[3].item())}\n"
+                        f"F1 score: {(f1 := cm[4].item())}")
+            run.log({
+                "train_loss": epoch_loss, 
+                "val_loss": val_loss,
+                "dice": dice,
+                "iou": iou,
+                "accuracy": acc,
+                "precision": pre,
+                "sensitivity": sen,
+                "specificity": spe,
+                "f1_score": f1})
 
         # Log current learning rate
         for param_group in optimizer.param_groups:
@@ -192,7 +247,15 @@ def main(args):
                                 0.02,
                                 axes[i, 2].get_position().height])
             fig.colorbar(im, cax=cax)
-        wandb.log({"examples": wandb.Image(fig)})
+        run.log({"examples": wandb.Image(fig)})
+        plt.close(fig)
+    
+    # Log final metrics
+    metric_table = wandb.Table(
+        columns=["acc", "pre", "sen", "spe", "f1", "dice", "iou"], 
+        data=[[acc, pre, sen, spe, f1, dice, iou]]
+    )
+    run.log({"metrics": metric_table})
         
     # Save final trained model in a self-contained way.
     # Generate a filename for the saved model that contains the run ID so that we can easily find the model corresponding to a given run.
@@ -205,7 +268,7 @@ def main(args):
 
     model_filename = "model.pt"
     torch.save(model.state_dict(), os.path.join(args.output_dir, model_filename))
-    wandb.finish()
+    run.finish()
 
 
 if __name__ == "__main__":
