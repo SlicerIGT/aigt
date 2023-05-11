@@ -2,10 +2,7 @@ import numpy as np
 import os
 import torch
 
-from PIL import Image
 from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-from torchvision import transforms
 
 class UltrasoundDataset(Dataset):
     """
@@ -44,7 +41,6 @@ class UltrasoundDataset(Dataset):
         self.ultrasound_data = np.load(self.ultrasound_data_files[self.data_file_index])
         if self.transform_data_files is not None:
             self.transform_data = np.load(self.transform_data_files[self.data_file_index])
-
 
     def __len__(self):
         """
@@ -99,12 +95,14 @@ class UltrasoundDataset(Dataset):
         # If segmentation_data only has 3 dimensions, expand it
         if segmentation_data.ndim == 3:
             np.expand_dims(segmentation_data, -1)
+        
+        data = {
+            "image": ultrasound_data,
+            "label": segmentation_data,
+            "transform": self.transform_data[index] if self.transform_data_files else np.identity(4)
+        }
 
         if self.transform is not None:
-            ultrasound_data = self.transform(torch.from_numpy(np.transpose(ultrasound_data, (2,0,1)))).float()
-            segmentation_data = self.transform(torch.from_numpy(np.transpose(segmentation_data, (2,0,1)))).float()
+            data = self.transform(data)
 
-        if self.transform_data_files is not None:
-            return ultrasound_data, segmentation_data, self.transform_data[index]
-        else:
-            return ultrasound_data, segmentation_data    
+        return data

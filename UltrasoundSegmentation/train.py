@@ -16,6 +16,7 @@ import os
 import sys
 import yaml
 import wandb
+import numpy as np
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
@@ -23,10 +24,10 @@ from datetime import datetime
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
-from torch.utils.data import DataLoader
-from torchvision import transforms
 
+from monai.data import DataLoader
 from monai.data.utils import decollate_batch
+from monai import transforms
 from monai.transforms import (
     Compose,
     Activations,
@@ -113,20 +114,30 @@ def main(args):
 
     # Set seed for reproducibility
     random.seed(config["seed"])
+    np.random.seed(config["seed"])
     torch.manual_seed(config["seed"])
     if device == "cuda":
         torch.cuda.manual_seed(config["seed"])
+    g = torch.Generator()
+    g.manual_seed(config["seed"])
+
+    # Create transforms
+    transform_list = []
+    if config["transforms"]:
+        for tfm in config["transforms"]:
+            try:
+                transform_list.append(getattr(transforms, tfm["name"])(**tfm["params"]))
+            except KeyError:  # Apply transform to both image and label by default
+                transform_list.append(getattr(transforms, tfm["name"])(keys=["image", "label"]))
+    transform = Compose(transform_list)
 
     # Create dataloaders using UltrasoundDataset
-
-    resize_transform = transforms.Resize((config["image_size"], config["image_size"]), antialias=True)
-    train_dataset = UltrasoundDataset(args.train_data_folder, transform=resize_transform)
-    train_dataloader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=False)
-    val_dataset = UltrasoundDataset(args.val_data_folder, transform=resize_transform)
-    val_dataloader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False)
+    train_dataset = UltrasoundDataset(args.train_data_folder, transform=transform)
+    train_dataloader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=False, generator=g)
+    val_dataset = UltrasoundDataset(args.val_data_folder, transform=transform)
+    val_dataloader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False, generator=g)
 
     # Construct model
-
     if config["model_name"] == "monai_unet":
         model = monai.networks.nets.UNet(
             spatial_dims=2,
@@ -140,7 +151,6 @@ def main(args):
         model = UNet(in_channels=config["in_channels"], out_channels=config["out_channels"])
     
     # Construct loss function
-
     if config["loss_function"] == "monai_dice":
         loss_function = monai.losses.DiceLoss(sigmoid=True)
     else:
@@ -154,7 +164,6 @@ def main(args):
     optimizer = Adam(model.parameters(), config["learning_rate"])
 
     # Set up learning rate decay
-
     try:
         learning_rate_decay_frequency = int(config["learning_rate_decay_frequency"])
     except ValueError:
@@ -185,8 +194,8 @@ def main(args):
         step = 0
         for batch in tqdm(train_dataloader):
             step += 1
-            inputs = batch[0].to(device=device)
-            labels = batch[1].to(device=device)
+            inputs = batch["image"].to(device=device)
+            labels = batch["label"].to(device=device)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = loss_function(outputs, labels)
@@ -204,8 +213,8 @@ def main(args):
         with torch.no_grad():
             for batch in tqdm(val_dataloader):
                 val_step += 1
-                val_inputs = batch[0].to(device=device)
-                val_labels = batch[1].to(device=device)
+                val_inputs = batch["image"].to(device=device)
+                val_labels = batch["label"].to(device=device)
                 val_outputs = model(val_inputs)
                 loss = loss_function(val_outputs, val_labels)
                 val_loss += loss.item()
@@ -234,32 +243,13 @@ def main(args):
                         f"Sensitivity: {(sen := cm[2].item())}\n"
                         f"Specificity: {(spe := cm[3].item())}\n"
                         f"F1 score: {(f1 := cm[4].item())}")
-            run.log({
-                "train_loss": epoch_loss, 
-                "val_loss": val_loss,
-                "dice": dice,
-                "iou": iou,
-                "accuracy": acc,
-                "precision": pre,
-                "sensitivity": sen,
-                "specificity": spe,
-                "f1_score": f1})
-
-        # Log current learning rate
-        for param_group in optimizer.param_groups:
-            current_lr = param_group["lr"]
-            logging.info(f"Current learning rate: {current_lr}")
-
-        # Save model after every Nth epoch as specified in the config file
-        if config["save_frequency"]>0 and (epoch + 1) % config["save_frequency"] == 0:
-            torch.save(model.state_dict(), os.path.join(args.output_dir, f"model_{epoch+1}.pt"))
-
+        
         # Log a random sample of 3 test images along with their ground truth and predictions
         random.seed(config["seed"])
         sample = random.sample(range(len(val_dataset)), 5)
 
-        inputs = torch.stack([val_dataset[i][0] for i in sample])
-        labels = torch.stack([val_dataset[i][1] for i in sample])
+        inputs = torch.stack([val_dataset[i]["image"] for i in sample])
+        labels = torch.stack([val_dataset[i]["label"] for i in sample])
         with torch.no_grad():
             logits = model(inputs.to(device=device))
         outputs = torch.sigmoid(logits)
@@ -276,9 +266,31 @@ def main(args):
                                 0.02,
                                 axes[i, 2].get_position().height])
             fig.colorbar(im, cax=cax)
-        run.log({"examples": wandb.Image(fig)})
+
+        # Log metrics and examples together to maintain global step == epoch
+        run.log({
+            "train_loss": epoch_loss, 
+            "val_loss": val_loss,
+            "dice": dice,
+            "iou": iou,
+            "accuracy": acc,
+            "precision": pre,
+            "sensitivity": sen,
+            "specificity": spe,
+            "f1_score": f1,
+            "examples": wandb.Image(fig)})
+
         plt.close(fig)
-    
+
+        # Log current learning rate
+        for param_group in optimizer.param_groups:
+            current_lr = param_group["lr"]
+            logging.info(f"Current learning rate: {current_lr}")
+
+        # Save model after every Nth epoch as specified in the config file
+        if config["save_frequency"]>0 and (epoch + 1) % config["save_frequency"] == 0:
+            torch.save(model.state_dict(), os.path.join(args.output_dir, f"model_{epoch+1}.pt"))
+
     # Log final metrics
     metric_table = wandb.Table(
         columns=["acc", "pre", "sen", "spe", "f1", "dice", "iou"], 
