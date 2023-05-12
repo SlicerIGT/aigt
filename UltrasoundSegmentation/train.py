@@ -76,9 +76,16 @@ def main(args):
     else:
         logging.basicConfig(stream=sys.stdout, level=logging.INFO)  # Log to console
 
-    # Read config file
+    # If config file is not given, use default train_config.yaml.
+    # If config file is given but not an absolute path, assume it is in the same folder as train.py.
+
     if args.config_file is None:
         args.config_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "train_config.yaml")
+    else:
+        if not os.path.isabs(args.config_file):
+            args.config_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), args.config_file)
+    
+    # Load config file and save a copy in the output folder where the trained model will be saved
 
     with open(args.config_file, "r") as f:
         config = yaml.safe_load(f)
@@ -87,6 +94,7 @@ def main(args):
         yaml.dump(config, f)
 
     # Set up device
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f"Using device {device}.")
 
