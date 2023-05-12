@@ -3,13 +3,14 @@
 model_name: "monai_unet"
 loss_function: "monai_dice"
 in_channels: !!int 1
-out_channels: !!int 1
+out_channels: !!int 16
 save_frequency: !!int 0
-num_epochs: !!int 40
+num_epochs: !!int 100
 batch_size: !!int 32
 learning_rate: !!float 0.004
 learning_rate_decay_factor: !!float 0.5
 learning_rate_decay_frequency: !!int 10
+weight_decay: 0.00005
 seed: !!int 42
 transforms:
   general:
@@ -30,9 +31,3 @@ transforms:
         keys: ["image", "label"]
         spatial_size: [128, 128]
   train:
-    - name: "RandGaussianNoised"
-      params:
-        keys: ["image"]
-        prob: 0.15
-        mean: 0.0
-        std: 0.1
