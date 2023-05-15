@@ -333,13 +333,6 @@ def main(args):
         # Save model after every Nth epoch as specified in the config file
         if config["save_frequency"]>0 and (epoch + 1) % config["save_frequency"] == 0:
             torch.save(model.state_dict(), os.path.join(args.output_dir, f"model_{epoch+1}.pt"))
-
-    # Log final metrics
-    metric_table = wandb.Table(
-        columns=["run", "acc", "pre", "sen", "spe", "f1", "dice", "iou"], 
-        data=[[experiment_name, acc, pre, sen, spe, f1, dice, iou]]
-    )
-    run.log({"metrics": metric_table})
         
     # Save final trained model in a self-contained way.
     # Generate a filename for the saved model that contains the run ID so that we can easily find the model corresponding to a given run.
