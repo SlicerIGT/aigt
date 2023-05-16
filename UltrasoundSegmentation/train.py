@@ -23,7 +23,7 @@ from tqdm import tqdm
 from datetime import datetime
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
-from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import StepLR
 
 from monai.data import DataLoader
 from monai.data.utils import decollate_batch
@@ -192,7 +192,10 @@ def main(args):
     
     # Construct loss function
     if config["loss_function"] == "monai_dice":
-        loss_function = monai.losses.DiceLoss(to_onehot_y=True, softmax=True)
+        if config["out_channels"] == 1:
+            loss_function = monai.losses.DiceLoss(sigmoid=True)
+        else:
+            loss_function = monai.losses.DiceLoss(to_onehot_y=True, softmax=True)
     else:
         loss_function = BCEWithLogitsLoss()
 
@@ -217,15 +220,21 @@ def main(args):
     scheduler = StepLR(optimizer, step_size=learning_rate_decay_frequency, gamma=learning_rate_decay_factor)
 
     # Metrics
-    dice_metric = DiceMetric(include_background=False, reduction="mean")
-    iou_metric = MeanIoU(include_background=False, reduction="mean")
+    include_background = True if config["out_channels"] == 1 else False
+    dice_metric = DiceMetric(include_background=include_background, reduction="mean")
+    iou_metric = MeanIoU(include_background=include_background, reduction="mean")
     confusion_matrix_metric = ConfusionMatrixMetric(
-        include_background=False, 
+        include_background=include_background, 
         metric_name=["accuracy", "precision", "sensitivity", "specificity", "f1_score"],
         reduction="mean"
     )
-    post_pred = Compose([AsDiscrete(argmax=True, to_onehot=config["out_channels"])])
-    post_label = Compose([AsDiscrete(to_onehot=config["out_channels"])])
+
+    if config["out_channels"] == 1:
+        post_pred = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
+        post_label = Compose([])
+    else:
+        post_pred = Compose([AsDiscrete(argmax=True, to_onehot=config["out_channels"])])
+        post_label = Compose([AsDiscrete(to_onehot=config["out_channels"])])
 
     # Train model
     for epoch in range(config["num_epochs"]):
@@ -299,8 +308,10 @@ def main(args):
         for i in range(3):
             axes[i, 0].imshow(inputs[i, 0, :, :], cmap="gray")
             axes[i, 1].imshow(labels[i].squeeze(), cmap="gray")
-            # im = axes[i, 2].imshow(torch.argmax(outputs[i], dim=0).detach().cpu(), vmin=0, vmax=1, cmap="viridis")
-            im = axes[i, 2].imshow(torch.argmax(outputs[i], dim=0).detach().cpu(), cmap="gray")
+            if config["out_channels"] == 1:
+                im = axes[i, 2].imshow(torch.sigmoid(outputs[i]).squeeze().detach().cpu(), cmap="gray")
+            else:
+                im = axes[i, 2].imshow(torch.argmax(outputs[i], dim=0).detach().cpu(), cmap="gray")
             
             # Create an additional axis for the colorbar
             cax = fig.add_axes([axes[i, 2].get_position().x1 + 0.01,
