@@ -1,5 +1,7 @@
 import os
 import glob
+import atexit
+import shutil
 import logging
 import numpy as np
 from tqdm import tqdm
@@ -30,7 +32,7 @@ class UltrasoundDataset(Dataset):
         logger.info("Saving individual images, segmentations, and transforms to temporary directory...")
         for pt_idx in tqdm(range(len(ultrasound_data_files))):
             # Create new tmp directory for individual images
-            pt_tmp_dir = os.path.join(data_folder, "tmp", f"{str(pt_idx):04d}")
+            pt_tmp_dir = os.path.join(data_folder, "tmp", f"{pt_idx:04d}")
             os.makedirs(pt_tmp_dir, exist_ok=True)
 
             # Read images, segmentations, and transforms
@@ -41,21 +43,31 @@ class UltrasoundDataset(Dataset):
 
             for frame_idx in range(ultrasound_arr.shape[0]):
                 # Save individual images
-                image_fn = os.path.join(pt_tmp_dir, f"{str(frame_idx):04d}_ultrasound.npy")
+                image_fn = os.path.join(pt_tmp_dir, f"{frame_idx:04d}_ultrasound.npy")
                 np.save(image_fn, ultrasound_arr[frame_idx])
                 self.images.append(image_fn)
 
                 # Save individual segmentations
-                seg_fn = os.path.join(pt_tmp_dir, f"{str(frame_idx):04d}_segmentation.npy")
+                seg_fn = os.path.join(pt_tmp_dir, f"{frame_idx:04d}_segmentation.npy")
                 np.save(seg_fn, segmentation_arr[frame_idx])
                 self.segmentations.append(seg_fn)
 
                 # Save individual transforms
                 if transform_data_files:
-                    tfm_fn = os.path.join(pt_tmp_dir, f"{str(frame_idx):04d}_transform.npy")
+                    tfm_fn = os.path.join(pt_tmp_dir, f"{frame_idx:04d}_transform.npy")
                     np.save(tfm_fn, transform_arr[frame_idx])
                     self.tfm_matrices.append(tfm_fn)
-        logger.info(f"Done. Data stored in {pt_tmp_dir}.")
+        logger.info(f"Done. Data stored in {os.path.join(data_folder, 'tmp')}.")
+
+        def cleanup():
+            """
+            Remove temporary directory with individual images, segmentations, and transforms.
+            """
+            logger.info(f"Removing temporary directory {os.path.join(data_folder, 'tmp')}...")
+            shutil.rmtree(os.path.join(data_folder, "tmp"))
+            logger.info(f"Done.")
+            
+        atexit.register(cleanup)
 
     def __len__(self):
         """
@@ -90,16 +102,12 @@ class UltrasoundDataset(Dataset):
         # Read the image and segmentation from temp directory
         ultrasound_data = np.load(self.images[index])
         segmentation_data = np.load(self.segmentations[index])
-
-        # If segmentation_data only has 3 dimensions, expand it
-        if segmentation_data.ndim == 3:
-            np.expand_dims(segmentation_data, -1)
         
         data = {
             "image": ultrasound_data,
             "label": segmentation_data,
-            "transform": (np.load(self.transform_data[index]) 
-                          if self.transform_data_files else np.identity(4))
+            "transform": (np.load(self.tfm_matrices[index]) 
+                          if self.tfm_matrices else np.identity(4))
         }
 
         if self.transform is not None:
