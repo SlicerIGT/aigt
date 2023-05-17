@@ -1,8 +1,12 @@
-import numpy as np
 import os
-import torch
-
+import glob
+import logging
+import numpy as np
+from tqdm import tqdm
 from torch.utils.data import Dataset
+
+logger = logging.getLogger(__name__)
+
 
 class UltrasoundDataset(Dataset):
     """
@@ -15,32 +19,43 @@ class UltrasoundDataset(Dataset):
         self.transform = transform
 
         # Find all data segmentation files and matching ultrasound files in input directory
-        segmentation_data_files = []
-        ultrasound_data_files = []
-        transform_data_files = []
-        for filename in os.listdir(data_folder):
-            if filename.endswith(".npy") and "_segmentation" in filename:
-                segmentation_data_files.append(os.path.join(data_folder, filename))
-                ultrasound_data_files.append(os.path.join(data_folder, filename.replace("_segmentation", "_ultrasound")))
-                transform_data_files.append(os.path.join(data_folder, filename.replace("_segmentation", "_transform")))
-        
-        # Check if all trasnform files exist, and if not, disable transforms
-        if not all(os.path.exists(transform_file) for transform_file in transform_data_files):
-            transform_data_files = None
+        ultrasound_data_files = sorted(glob.glob(os.path.join(data_folder, "*_ultrasound*.npy")))
+        segmentation_data_files = sorted(glob.glob(os.path.join(data_folder, "*_segmentation*.npy")))
+        transform_data_files = sorted(glob.glob(os.path.join(data_folder, "*_transform*.npy")))
 
-        self.segmentation_data_files = segmentation_data_files
-        self.ultrasound_data_files = ultrasound_data_files
-        self.transform_data_files = transform_data_files
+        # Save each slice as a separate file temporarily
+        self.images = []
+        self.segmentations = []
+        self.tfm_matrices = []
+        logger.info("Saving individual images, segmentations, and transforms to temporary directory...")
+        for pt_idx in tqdm(range(len(ultrasound_data_files))):
+            # Create new tmp directory for individual images
+            pt_tmp_dir = os.path.join(data_folder, "tmp", f"{str(pt_idx):04d}")
+            os.makedirs(pt_tmp_dir, exist_ok=True)
 
-        # Save the lengths of each data file so we can find the correct file when we need to load data
-        self.data_file_lengths = [np.load(data_file).shape[0] for data_file in self.segmentation_data_files]
+            # Read images, segmentations, and transforms
+            ultrasound_arr = np.load(ultrasound_data_files[pt_idx])
+            segmentation_arr = np.load(segmentation_data_files[pt_idx])
+            if transform_data_files:
+                transform_arr = np.load(transform_data_files[pt_idx])
 
-        # Load the first datafile into memory
-        self.data_file_index = 0
-        self.segmentation_data = np.load(self.segmentation_data_files[self.data_file_index])
-        self.ultrasound_data = np.load(self.ultrasound_data_files[self.data_file_index])
-        if self.transform_data_files is not None:
-            self.transform_data = np.load(self.transform_data_files[self.data_file_index])
+            for frame_idx in range(ultrasound_arr.shape[0]):
+                # Save individual images
+                image_fn = os.path.join(pt_tmp_dir, f"{str(frame_idx):04d}_ultrasound.npy")
+                np.save(image_fn, ultrasound_arr[frame_idx])
+                self.images.append(image_fn)
+
+                # Save individual segmentations
+                seg_fn = os.path.join(pt_tmp_dir, f"{str(frame_idx):04d}_segmentation.npy")
+                np.save(seg_fn, segmentation_arr[frame_idx])
+                self.segmentations.append(seg_fn)
+
+                # Save individual transforms
+                if transform_data_files:
+                    tfm_fn = os.path.join(pt_tmp_dir, f"{str(frame_idx):04d}_transform.npy")
+                    np.save(tfm_fn, transform_arr[frame_idx])
+                    self.tfm_matrices.append(tfm_fn)
+        logger.info(f"Done. Data stored in {pt_tmp_dir}.")
 
     def __len__(self):
         """
@@ -51,8 +66,7 @@ class UltrasoundDataset(Dataset):
         int
             Total number of segmented images in the dataset
         """
-        return sum(self.data_file_lengths)
-    
+        return len(self.images)
 
     def __getitem__(self, index):
         """
@@ -73,29 +87,19 @@ class UltrasoundDataset(Dataset):
         transform : numpy array
             Transform of the ultrasound image
         """
+        # Read the image and segmentation from temp directory
+        ultrasound_data = np.load(self.images[index])
+        segmentation_data = np.load(self.segmentations[index])
 
-        # Find the datafile that contains the index
-        data_file_index = 0
-        while index >= self.data_file_lengths[data_file_index]:
-            index -= self.data_file_lengths[data_file_index]
-            data_file_index += 1
-
-        # Load the datafile if it is not already loaded
-        if data_file_index != self.data_file_index:
-            self.segmentation_data = np.load(self.segmentation_data_files[data_file_index])
-            self.ultrasound_data = np.load(self.ultrasound_data_files[data_file_index])
-            if self.transform_data_files is not None:
-                self.transform_data = np.load(self.transform_data_files[data_file_index])
-            self.data_file_index = data_file_index
-
-        # Return the image, segmentation, and transform if exists
-        ultrasound_data = self.ultrasound_data[index]
-        segmentation_data = self.segmentation_data[index]
+        # If segmentation_data only has 3 dimensions, expand it
+        if segmentation_data.ndim == 3:
+            np.expand_dims(segmentation_data, -1)
         
         data = {
             "image": ultrasound_data,
             "label": segmentation_data,
-            "transform": self.transform_data[index] if self.transform_data_files else np.identity(4)
+            "transform": (np.load(self.transform_data[index]) 
+                          if self.transform_data_files else np.identity(4))
         }
 
         if self.transform is not None:
