@@ -91,10 +91,6 @@ class UltrasoundDataset(Dataset):
         # Return the image, segmentation, and transform if exists
         ultrasound_data = self.ultrasound_data[index]
         segmentation_data = self.segmentation_data[index]
-
-        # If segmentation_data only has 3 dimensions, expand it
-        if segmentation_data.ndim == 3:
-            np.expand_dims(segmentation_data, -1)
         
         data = {
             "image": ultrasound_data,
