@@ -50,11 +50,12 @@ def parse_args():
     parser.add_argument("--val-data-folder", type=str)
     parser.add_argument("--output-dir", type=str)
     parser.add_argument("--config-file", type=str, default="train_config.yaml")
+    parser.add_argument("--save-torchscript", action="store_true")
+    parser.add_argument("--save-ckpt-freq", type=int, default=0)
     parser.add_argument("--wandb-project-name", type=str, default="aigt_ultrasound_segmentation")
     parser.add_argument("--wandb-exp-name", type=str)
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--save-log", action="store_true")
-    parser.add_argument("--save-ckpt-freq", type=int, default=0)
     try:
         return parser.parse_args()
     except SystemExit as err:
@@ -361,6 +362,17 @@ def main(args):
     model_path = os.path.join(run_dir, "model.pt")
     torch.save(model.state_dict(), model_path)
     logging.info(f"Saved model to {model_path}.")
+
+    # Save model as TorchScript
+    if args.save_torchscript:
+        ts_model_path = os.path.join(run_dir, "model_traced.pt")
+        model = model.to("cpu")
+        model.eval()
+        example_input = torch.rand(1, config["in_channels"], config["image_size"], config["image_size"])
+        traced_script_module = torch.jit.trace(model, example_input)
+        traced_script_module.save(ts_model_path)
+        logging.info(f"Saved traced model to {ts_model_path}.")
+
     run.finish()
 
 
