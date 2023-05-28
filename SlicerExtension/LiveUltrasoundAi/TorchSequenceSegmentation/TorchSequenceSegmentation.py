@@ -631,7 +631,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         # Flip image vertically if specified by user
         parameterNode = self.getParameterNode()
-        if parameterNode.GetParameter("FlipVertical").lower() == "true":
+        toFlip = parameterNode.GetParameter("FlipVertical").lower() == "true"
+        if toFlip:
             imageArray = torch.flip(imageArray, dims=[1])  # axis 0 is channel dimension
 
         # Resize input to match model input size
@@ -642,12 +643,22 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         # Run prediction
         with torch.inference_mode():
             output = self.model(inputTensor)
-            output = torch.argmax(output, dim=1).detach().cpu() * 255
+            output = torch.argmax(output, dim=1).detach().cpu()
             # output = output[0].detach().cpu() * 255  # TODO: multi-class rendering?
 
         # Resize output to match original image size
-        output = torchvision.transforms.functional.resize(output, (imageArray.shape[1], imageArray.shape[2]), antialias=True)
-        output = output.numpy().astype(np.uint8)
+        output = torchvision.transforms.functional.resize(
+            output, 
+            (imageArray.shape[1], imageArray.shape[2]), 
+            interpolation=torchvision.transforms.InterpolationMode.NEAREST_EXACT,
+            antialias=True
+        )
+        output = output.numpy().astype(np.uint8) * 255
+
+        # Flip output back if needed
+        if toFlip:
+            output = np.flip(output, axis=1)
+
         return output
     
     def segmentSequence(self):
@@ -707,7 +718,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         # Set volume reconstruction parameters
         reconstructionNode.SetAndObserveInputSequenceBrowserNode(sequenceBrowser)
         reconstructionNode.SetAndObserveInputVolumeNode(predictionVolume)
-        reconstructionNode.SetInterpolationMode(reconstructionNode.LINEAR_INTERPOLATION)
+        # reconstructionNode.SetInterpolationMode(reconstructionNode.LINEAR_INTERPOLATION)
 
         roiNode = self.addROINode()
         reconstructionNode.SetAndObserveInputROINode(roiNode)
