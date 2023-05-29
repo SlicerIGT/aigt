@@ -57,7 +57,38 @@ This will add a configuration option so that you can select it as a debug config
 
 With the output of this script, you can separate your data into different folders. Create a folder for a training set, validation set, and testing set. Pick a few participants' data from the output folder and move them to the testing set folder. Pick another few and move them to the validation set folder. The remaining data in the folder can be used to train the model.
 
-## Train.py
+## convert_to_slice.py
+---
+The 3D patient arrays need to be converted into individual 2D slices for training. This can be done using the [convert_to_slice.py](convert_to_slice.py) script with the following command-line arguments:
+
+* `--data-folder`: path to directory containing the 3D patient .npy files
+* `--output-dir`: path to directory to save 2D slices (as .npy files)
+* `--use-file-prefix`: include this argument to use the 3D patient file prefixes as folder names
+
+The output files will be saved in the following folder structure:
+
+```
+output-dir   
+└───images
+│   └───0000 (default, can be replaced using --use-file-prefix)
+│   │   └───0000_ultrasound.npy
+│   │   └───0001_ultrasound.npy
+│   │   └───...
+│   
+└───labels
+│   └───0000
+│   │   └───0000_segmentation.npy
+│   │   └───0001_segmentation.npy
+│   │   └───...
+|
+└───transforms
+│   └───0000 (folder will be empty if no transforms exist)
+│   │   └───0000_transform.npy
+│   │   └───0001_transform.npy
+│   │   └───...
+```
+
+## train.py
 ---
 This script takes prepared data as input and trains an AI model for ultrasound segmentation prediction. The results of scores like f1 score, accuracy, train loss, validation loss, etc. are plotted on a graph on **_Weights and Biases_**. The first time the script is ran, it will ask you for your _Weights and Biases_ API key. Create an account at _Weights and Biases_ and your API key can be found in the "User Settings" tab. The model can be customized, as well as the graphs to display on _Weights and Biases_.
 

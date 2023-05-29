@@ -10,6 +10,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-folder", type=str)
     parser.add_argument("--output-dir", type=str)
+    parser.add_argument("--use-file-prefix", action="store_true")
     return parser.parse_args()
 
 
@@ -30,9 +31,14 @@ def main(args):
     logging.info(f"Saving individual images, segmentations, and transforms to {args.output_dir}...")
     for pt_idx in tqdm(range(len(ultrasound_data_files))):
         # Create new directory for individual images
-        pt_image_dir = os.path.join(image_dir, f"{pt_idx:04d}")
-        pt_label_dir = os.path.join(label_dir, f"{pt_idx:04d}")
-        pt_tfm_dir = os.path.join(tfm_dir, f"{pt_idx:04d}")
+        if args.use_file_prefix:
+            pt_image_dir = os.path.join(image_dir, os.path.basename(ultrasound_data_files[pt_idx]).split("_")[0])
+            pt_label_dir = os.path.join(label_dir, os.path.basename(ultrasound_data_files[pt_idx]).split("_")[0])
+            pt_tfm_dir = os.path.join(tfm_dir, os.path.basename(ultrasound_data_files[pt_idx]).split("_")[0])
+        else:
+            pt_image_dir = os.path.join(image_dir, f"{pt_idx:04d}")
+            pt_label_dir = os.path.join(label_dir, f"{pt_idx:04d}")
+            pt_tfm_dir = os.path.join(tfm_dir, f"{pt_idx:04d}")
         os.makedirs(pt_image_dir, exist_ok=True)
         os.makedirs(pt_label_dir, exist_ok=True)
         os.makedirs(pt_tfm_dir, exist_ok=True)
