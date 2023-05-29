@@ -374,8 +374,8 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.outputTransformSelector.blockSignals(wasBlocked)
             
         # Enable/disable buttons
-        self.ui.segmentButton.setEnabled(sequenceBrowser and inputVolume)
-        self.ui.reconstructButton.setEnabled(volumeReconstructionNode and sequenceBrowser and predictionVolume)
+        self.ui.segmentButton.setEnabled(sequenceBrowser and inputVolume and not self.logic.isProcessing)
+        self.ui.reconstructButton.setEnabled(volumeReconstructionNode and sequenceBrowser and predictionVolume and not self.logic.isProcessing)
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -453,8 +453,10 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         Generate segmentations for each frame and add to sequence browser.
         """
         # Update progress bar and GUI
-        segmentButtonBlocked = self.ui.segmentButton.blockSignals(True)
-        reconstructButtonBlocked = self.ui.reconstructButton.blockSignals(True)
+        # segmentButtonBlocked = self.ui.segmentButton.blockSignals(True)
+        # reconstructButtonBlocked = self.ui.reconstructButton.blockSignals(True)
+        self.ui.segmentButton.setEnabled(False)
+        self.ui.reconstructButton.setEnabled(False)
         self.ui.statusLabel.setText("Generating predictions...")
         self.ui.modelPathLineEdit.setEnabled(False)
         self.ui.sequenceBrowserSelector.setEnabled(False)
@@ -467,6 +469,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.statusProgressBar.setMaximum(sequenceBrowser.GetNumberOfItems() - 1)
         # Progress bar callback
         self.logic.progressCallback = self.updatePredictionProgressBar
+        slicer.app.processEvents()
         
         try:
             # Run predictions
@@ -477,8 +480,10 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             logging.error(e)
             self.ui.statusLabel.setText("Error")
         finally:
-            self.ui.segmentButton.blockSignals(segmentButtonBlocked)
-            self.ui.reconstructButton.blockSignals(reconstructButtonBlocked)
+            # self.ui.segmentButton.blockSignals(segmentButtonBlocked)
+            # self.ui.reconstructButton.blockSignals(reconstructButtonBlocked)
+            self.ui.segmentButton.setEnabled(True)
+            self.ui.reconstructButton.setEnabled(True)
             self.ui.modelPathLineEdit.setEnabled(True)
             self.ui.sequenceBrowserSelector.setEnabled(True)
             self.ui.inputVolumeSelector.setEnabled(True)
@@ -507,8 +512,10 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         Render volume reconstruction when user clicks "Render" button.
         """
         # Update progress bar and GUI
-        reconstructButtonBlocked = self.ui.reconstructButton.blockSignals(True)
-        segmentButtonBlocked = self.ui.segmentButton.blockSignals(True)
+        # reconstructButtonBlocked = self.ui.reconstructButton.blockSignals(True)
+        # segmentButtonBlocked = self.ui.segmentButton.blockSignals(True)
+        self.ui.segmentButton.setEnabled(False)
+        self.ui.reconstructButton.setEnabled(False)
         self.ui.statusLabel.setText("Reconstructing volume...")
         self.ui.predictionVolumeSelector.setEnabled(False)
         self.ui.volumeReconstructionSelector.setEnabled(False)
@@ -517,6 +524,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.statusProgressBar.setMaximum(100)
         reconstructionNode = self._parameterNode.GetNodeReference("VolumeReconstruction")
         reconstructionNode.AddObserver(reconstructionNode.VolumeAddedToReconstruction, self.updateReconstructionProgressBar)
+        slicer.app.processEvents()
 
         try:
             self.logic.runVolumeReconstruction()
@@ -525,8 +533,10 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             logging.error(e)
             self.ui.statusLabel.setText("Error")
         finally:
-            self.ui.reconstructButton.blockSignals(reconstructButtonBlocked)
-            self.ui.segmentButton.blockSignals(segmentButtonBlocked)
+            # self.ui.reconstructButton.blockSignals(reconstructButtonBlocked)
+            # self.ui.segmentButton.blockSignals(segmentButtonBlocked)
+            self.ui.segmentButton.setEnabled(True)
+            self.ui.reconstructButton.setEnabled(True)
             self.ui.predictionVolumeSelector.setEnabled(True)
             self.ui.volumeReconstructionSelector.setEnabled(True)
             self.ui.reconstructionVolumeSelector.setEnabled(True)
@@ -558,6 +568,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
 
         self.progressCallback = None
+        self.isProcessing = False
         self.model = None
         self.volRecLogic = slicer.modules.volumereconstruction.logic()
     
@@ -661,6 +672,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         return output
     
     def segmentSequence(self):
+        self.isProcessing = True
+
         parameterNode = self.getParameterNode()
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
         inputVolume = parameterNode.GetNodeReference("InputVolume")
@@ -682,6 +695,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             predictionSequenceNode.SetDataNodeAtValue(predictionVolume, indexValue)
             if self.progressCallback:
                 self.progressCallback(itemIndex)
+
+        self.isProcessing = False
     
     def addROINode(self):
         parameterNode = self.getParameterNode()
@@ -707,6 +722,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         return reconstructionVolume
 
     def runVolumeReconstruction(self):
+        self.isProcessing = True
+
         volRenLogic = slicer.modules.volumerendering.logic()
 
         parameterNode = self.getParameterNode()
@@ -734,6 +751,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         # Run volume reconstruction
         self.volRecLogic.ReconstructVolumeFromSequence(reconstructionNode)
+
+        self.isProcessing = False
 
 
 #
