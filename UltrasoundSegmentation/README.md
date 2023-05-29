@@ -2,7 +2,7 @@
 This folder includes scripts to prepare data exported from 3D Slicer and utilize that data to train an AI model that predicts ultrasound segmentations.
 
 ## Exporting Data
----
+
 In 3D Slicer, segmented data can be exported in the Single Slice Segmentation module under Ultrasound, which can be loaded from the aigt repository. 
 
 * Click the checkbox on "Export as .npy" 
@@ -12,7 +12,7 @@ In 3D Slicer, segmented data can be exported in the Single Slice Segmentation mo
 
 
 ## prepare_data.py
----
+
 This script takes the exported data from 3D Slicer, filters the data to what is needed to train the model, then resizes the image to what is specified in prepare_data_config.yaml. The prepare_data_config.yaml file contains settings that can be altered to fit the needs of the study.
 
 To run this script, you can use the command line or configure a JSON file if you are on Visual Studio Code. Both methods are below.
@@ -42,10 +42,10 @@ In Visual Studio Code, a launch.json configuration can be used to define the deb
     "console": "integratedTerminal",
     "justMyCode": "true",
     "args": ["--input_dir", "D:/SegmentationOutput",
-            "--output_dir", "D:/PatientArrays",
-            "--config_file", "prepare_data_config.yaml",
-            "--log_level", "INFO",
-            "--log_file", "PrepareData.log",]
+             "--output_dir", "D:/PatientArrays",
+             "--config_file", "prepare_data_config.yaml",
+             "--log_level", "INFO",
+             "--log_file", "PrepareData.log",]
 }
 ```
 
@@ -58,7 +58,7 @@ This will add a configuration option so that you can select it as a debug config
 With the output of this script, you can separate your data into different folders. Create a folder for a training set, validation set, and testing set. Pick a few participants' data from the output folder and move them to the testing set folder. Pick another few and move them to the validation set folder. The remaining data in the folder can be used to train the model.
 
 ## convert_to_slice.py
----
+
 The 3D patient arrays need to be converted into individual 2D slices for training. This can be done using the [convert_to_slice.py](convert_to_slice.py) script:
 
 ```
@@ -93,7 +93,7 @@ output-dir
 ```
 
 ## train.py
----
+
 This script takes prepared data as input and trains an AI model for ultrasound segmentation prediction. The results of scores like f1 score, accuracy, train loss, validation loss, etc. are plotted on a graph on **_Weights and Biases_**. The first time the script is ran, it will ask you for your _Weights and Biases_ API key. Create an account at _Weights and Biases_ and your API key can be found in the "User Settings" tab. The model can be customized, as well as the graphs to display on _Weights and Biases_.
 
 Training hyperparameters can be modified on train_config.yaml.
@@ -122,19 +122,17 @@ To configure the JSON file for train.py, open the launch.json again. Copy and pa
 
 ```
 {
-    "name": "Kidney: train_128",
+    "name": "train",
     "type": "python",
     "request": "launch",
     "program": "${file}",
     "console": "integratedTerminal",
     "justMyCode": "true",
-    "args": ["--train-data-folder", "C:/KidneyTrainingData_128",
-            "--val-data-folder", "C:/KidneyValidation_128",
-            "--output-dir", "C:/KidneyRuns_128",
-            "--config-file", "train_config.yaml",
-            "--save-log",
-            "--wandb-project-name", "KidneySegmentation_128",
-            "--save-torchscript"]
+    "args": ["--train-data-folder", "D:/data/train",
+             "--val-data-folder", "D:/data/val",
+             "--output-dir", "D:/runs",
+             "--save-torchscript", 
+             "--save-log"]
 }
 ```
 
