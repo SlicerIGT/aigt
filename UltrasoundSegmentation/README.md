@@ -28,25 +28,25 @@ For the command line method, open command line and navigate to the working direc
 
 Example command line code to run prepare_data.py looks like this:
 ```
-python prepare_data.py --input_dir "C:/Users/Andrew/Desktop/Andrew USRA 2023/KidneySegmentationOutput" --output_dir "C:/Users/Andrew/Desktop/Andrew USRA 2023/KidneyTrainingData_128" --config_file "prepare_data_config.yaml" --log_file "PrepareData.log"
+python prepare_data.py --input_dir d:/SegmentationOutput --output_dir d:/PatientArrays --config_file prepare_data_config.yaml --log_file "PrepareData.log"
 ```
 
 In Visual Studio Code, a launch.json configuration can be used to define the debug configuration, rather than running the scripts on command line. To open the JSON configuration, navigate to the "Debug and Run" menu option on the left taskbar of VSCode. Click the gear cog/the settings symbol in the top next to "RUN AND DEBUG". This will open a launch.json file. prepare_data.py can be configured with the following structure:
 
 ```
 {
-    "name": "Kidney: prepare_data_128",
+    "name": "prepare_data",
     "type": "python",
     "request": "launch",
     "program": "${file}",
     "console": "integratedTerminal",
     "justMyCode": "true",
-    "args": ["--input_dir", "C:/Users/Bob/Desktop/KidneySegmentationOutput",
-            "--output_dir", "C:/Users/Bob/Desktop/TrainingData",
+    "args": ["--input_dir", "D:/SegmentationOutput",
+            "--output_dir", "D:/PatientArrays",
             "--config_file", "prepare_data_config.yaml",
             "--log_level", "INFO",
             "--log_file", "PrepareData.log",]
-        }
+}
 ```
 
 Copy and paste the above dictionary into the configurations list.
@@ -59,7 +59,11 @@ With the output of this script, you can separate your data into different folder
 
 ## convert_to_slice.py
 ---
-The 3D patient arrays need to be converted into individual 2D slices for training. This can be done using the [convert_to_slice.py](convert_to_slice.py) script with the following command-line arguments:
+The 3D patient arrays need to be converted into individual 2D slices for training. This can be done using the [convert_to_slice.py](convert_to_slice.py) script:
+
+```
+python convert_to_slice.py --data-folder d:/PatientArrays --output-dir d:/data/train
+```
 
 * `--data-folder`: path to directory containing the 3D patient .npy files
 * `--output-dir`: path to directory to save 2D slices (as .npy files)
@@ -96,41 +100,42 @@ Training hyperparameters can be modified on train_config.yaml.
 
 Similar to running the prepare_data.py script, train.py can be run from command line or by configuring a JSON file.
 
-The output for this script is a PyTorch model that is trained from your training data.
-
 * `--train-data-folder` should be the path of the folder with the training set (which should be a subset of the output of prepare_data.py)
 * `--val-data-folder` should be the path of the folder with validation set 
+* `--output-dir` is the name of the directory in which to save the run
 * `--config-file` is by default `"train_config.yaml"`
 * `--save-torchscript` saves the model as a torchscript
 * `--save-ckpt-freq` is the integer value for how often (number of epochs) the model saves and is 0 by default
 * `--wandb-project-name` should be the name of the project in _Weights and Biases_ and has a default name
-* `--wandb-exp-name` is the experiment name in _Weights and Biases_ and is by default the timestamp of the experiment
+* `--wandb-exp-name` is the experiment name in _Weights and Biases_ and is by default the model name and timestamp of the experiment
 * `--log-level` is by default `"INFO"`
 * `--save-log` saves the log to a file named train.log.
 
+The output of this script is a PyTorch model that is trained from your training data. For using the trained model for 3D volume reconstruction with the [Slicer module](../SlicerExtension/LiveUltrasoundAi/TorchSequenceSegmentation/), it is necessary to include the `--save-torchscript` flag.
+
 Example command line code to run train.py looks like this:
 ```
-python train.py --train-data-folder "C:/Users/Andrew/Desktop/Andrew USRA 2023/KidneyTrainingData_128" --val-data-folder "C:/Users/Andrew/Desktop/Andrew USRA 2023/KidneyValidation_128" --output-dir "C:/Users/Andrew/Desktop/Andrew USRA 2023/KidneyRuns_128" --config file --wandb-project-name "KidneySegmentation_128" --save-log
+python train.py --train-data-folder d:/data/train --val-data-folder d:/data/val --output-dir d:/runs --save-torchscript --save-log
 ```
 
 To configure the JSON file for train.py, open the launch.json again. Copy and paste the following block of code after a comma after the previous configuration dictionary:
 
 ```
 {
-            "name": "Kidney: train_128",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "justMyCode": "true",
-            "args": ["--train-data-folder", "C:/KidneyTrainingData_128",
-                     "--val-data-folder", "C:/KidneyValidation_128",
-                     "--output-dir", "C:/KidneyRuns_128",
-                     "--config-file", "train_config.yaml",
-                     "--save-log",
-                     "--wandb-project-name", "KidneySegmentation_128",
-                     "--save-torchscript"]
-        }
+    "name": "Kidney: train_128",
+    "type": "python",
+    "request": "launch",
+    "program": "${file}",
+    "console": "integratedTerminal",
+    "justMyCode": "true",
+    "args": ["--train-data-folder", "C:/KidneyTrainingData_128",
+            "--val-data-folder", "C:/KidneyValidation_128",
+            "--output-dir", "C:/KidneyRuns_128",
+            "--config-file", "train_config.yaml",
+            "--save-log",
+            "--wandb-project-name", "KidneySegmentation_128",
+            "--save-torchscript"]
+}
 ```
 
 Similar to the configuration for prepare_data.py, `"name"` can be changed, but `"type"`, `"request"`, `"program"`, `"console"`, and `"justmycode"` should be untouched. Argument parameters are outlined above, but should be in string format and separated by commas in the configuration.
