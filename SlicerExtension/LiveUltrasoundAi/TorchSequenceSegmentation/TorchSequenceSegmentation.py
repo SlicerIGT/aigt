@@ -643,17 +643,16 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         # Run prediction
         with torch.inference_mode():
             output = self.model(inputTensor)
-            output = torch.argmax(output, dim=1).detach().cpu()
-            # output = output[0].detach().cpu() * 255  # TODO: multi-class rendering?
+            output = torch.nn.functional.softmax(output, dim=1).detach().cpu()
 
         # Resize output to match original image size
         output = torchvision.transforms.functional.resize(
             output, 
             (imageArray.shape[1], imageArray.shape[2]), 
-            interpolation=torchvision.transforms.InterpolationMode.NEAREST_EXACT,
+            interpolation=torchvision.transforms.InterpolationMode.BILINEAR,
             antialias=True
         )
-        output = output.numpy().astype(np.uint8) * 255
+        output = (output.numpy()[:, 1, :, :] * 255).astype(np.uint8)
 
         # Flip output back if needed
         if toFlip:
