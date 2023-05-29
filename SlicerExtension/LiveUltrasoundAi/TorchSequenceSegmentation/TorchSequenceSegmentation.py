@@ -13,15 +13,15 @@ INSTALL_PYTORCHUTILS = False
 try:
     import torch
     import torchvision
+    DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 except (ImportError, OSError):
     try:
         import PyTorchUtils
         torch = PyTorchUtils.PyTorchUtilsLogic().torch
         import torchvision
+        DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     except (ImportError, OSError):
         INSTALL_PYTORCHUTILS = True
-
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 #
