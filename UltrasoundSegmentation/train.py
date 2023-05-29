@@ -171,11 +171,11 @@ def main(args):
     val_transform = Compose(val_transform_list)
 
     # Create dataloaders using UltrasoundDataset
-    train_dataset = UltrasoundDataset(args.train_data_folder, transform=train_transform, shuffle=True)
+    train_dataset = UltrasoundDataset(args.train_data_folder, transform=train_transform)
     train_dataloader = DataLoader(
         train_dataset, 
         batch_size=config["batch_size"], 
-        shuffle=True, 
+        shuffle=config["shuffle"], 
         generator=g
     )
     val_dataset = UltrasoundDataset(args.val_data_folder, transform=val_transform)

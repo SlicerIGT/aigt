@@ -5,12 +5,13 @@ loss_function: "monai_dice"
 image_size: 128
 in_channels: !!int 1
 out_channels: !!int 2
-num_epochs: !!int 40
+num_epochs: !!int 50
 batch_size: !!int 32
 learning_rate: !!float 0.004
 learning_rate_decay_factor: !!float 0.5
 learning_rate_decay_frequency: !!int 10
 weight_decay: 0.01
+shuffle: !!bool true  # true/false
 seed: !!int 42
 transforms:
   general:
