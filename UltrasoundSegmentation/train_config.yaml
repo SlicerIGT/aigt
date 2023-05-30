@@ -1,7 +1,9 @@
 # Example config file for train.py
 
 model_name: "monai_unet"
-loss_function: "monai_dice"
+loss_function: "monai_DiceCE"
+lambda_ce: 0.5  # 0.0 for dice, 1.0 for cross-entropy
+class_weights: [0.25, 0.75]  # must be same length as out_channels
 image_size: 128
 in_channels: !!int 1
 out_channels: !!int 2

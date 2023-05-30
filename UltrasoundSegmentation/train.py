@@ -206,20 +206,35 @@ def main(args):
         model = UNet(in_channels=config["in_channels"], out_channels=config["out_channels"])
     
     # Construct loss function
-    if config["loss_function"] == "monai_dice":
-        if config["out_channels"] == 1:
-            loss_function = monai.losses.DiceLoss(sigmoid=True)
-        else:
-            loss_function = monai.losses.DiceLoss(to_onehot_y=False, softmax=True)
-    elif config["loss_function"] == "monai_DiceCELoss":
-        if config["out_channels"] == 1:
-            loss_function = monai.losses.DiceCELoss(sigmoid=True)
-        else:
-            loss_function = monai.losses.DiceCELoss(to_onehot_y=False, softmax=True, lambda_dice=(1.0 - config["lambda_ce"]), lambda_ce=config["lambda_ce"])
-    elif config["loss_function"] == "CrossEntropyLoss":
-        loss_function = torch.nn.CrossEntropyLoss()
-    else:
-        loss_function = torch.nn.BCEWithLogitsLoss()
+    use_sigmoid = True if config["out_channels"] == 1 else False
+    use_softmax = True if config["out_channels"] > 1 else False
+    ce_weight = torch.tensor(config["class_weights"], device=device) \
+                    if config["out_channels"] > 1 else None
+    if config["loss_function"] == "monai_DiceFocal":
+        loss_function = monai.losses.DiceFocalLoss(
+            to_onehot_y=False, 
+            sigmoid=use_sigmoid,
+            softmax=use_softmax,
+            lambda_dice=(1.0 - config["lambda_ce"]),
+            lambda_focal=config["lambda_ce"]
+        )
+    elif config["loss_function"] == "monai_tversky":
+        loss_function = monai.losses.TverskyLoss(
+            to_onehot_y=False, 
+            sigmoid=use_sigmoid,
+            softmax=use_softmax,
+            alpha=0.3,
+            beta=0.7  # best values from original paper
+        )
+    else:  # default to dice + cross entropy
+        loss_function = monai.losses.DiceCELoss(
+            to_onehot_y=False, 
+            sigmoid=use_sigmoid,
+            softmax=use_softmax,
+            lambda_dice=(1.0 - config["lambda_ce"]), 
+            lambda_ce=config["lambda_ce"],
+            ce_weight=ce_weight
+        )
 
     model = model.to(device=device)
 
