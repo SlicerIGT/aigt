@@ -211,6 +211,11 @@ def main(args):
             loss_function = monai.losses.DiceLoss(sigmoid=True)
         else:
             loss_function = monai.losses.DiceLoss(to_onehot_y=False, softmax=True)
+    elif config["loss_function"] == "monai_DiceCELoss":
+        if config["out_channels"] == 1:
+            loss_function = monai.losses.DiceCELoss(sigmoid=True)
+        else:
+            loss_function = monai.losses.DiceCELoss(to_onehot_y=False, softmax=True, lambda_dice=0.2, lambda_ce=0.8)
     elif config["loss_function"] == "CrossEntropyLoss":
         loss_function = torch.nn.CrossEntropyLoss()
     else:
