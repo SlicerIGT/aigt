@@ -66,6 +66,13 @@ def parse_args():
 
 def main(args):
     # Load config file
+    # If config file is not given, use default config
+    # If path is not specified, look for config file in the same folder as this script
+    if args.config_file is None:
+        args.config_file = os.path.join(os.path.dirname(__file__), "train_config.yaml")
+    else:
+        if not os.path.isabs(args.config_file):
+            args.config_file = os.path.join(os.path.dirname(__file__), args.config_file)
     with open(args.config_file, "r") as f:
         config = yaml.safe_load(f)
     
