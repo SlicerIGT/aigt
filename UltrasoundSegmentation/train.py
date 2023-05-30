@@ -22,7 +22,6 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 from datetime import datetime
-from torch.nn import BCEWithLogitsLoss
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 
@@ -211,9 +210,11 @@ def main(args):
         if config["out_channels"] == 1:
             loss_function = monai.losses.DiceLoss(sigmoid=True)
         else:
-            loss_function = monai.losses.DiceLoss(to_onehot_y=True, softmax=True)
+            loss_function = monai.losses.DiceLoss(to_onehot_y=False, softmax=True)
+    elif config["loss_function"] == "CrossEntropyLoss":
+        loss_function = torch.nn.CrossEntropyLoss()
     else:
-        loss_function = BCEWithLogitsLoss()
+        loss_function = torch.nn.BCEWithLogitsLoss()
 
     model = model.to(device=device)
 
@@ -247,10 +248,8 @@ def main(args):
 
     if config["out_channels"] == 1:
         post_pred = Compose([Activations(sigmoid=True), AsDiscrete(threshold=0.5)])
-        post_label = Compose([])
     else:
         post_pred = Compose([AsDiscrete(argmax=True, to_onehot=config["out_channels"])])
-        post_label = Compose([AsDiscrete(to_onehot=config["out_channels"])])
 
     # Train model
     for epoch in range(config["num_epochs"]):
@@ -262,6 +261,8 @@ def main(args):
             step += 1
             inputs = batch["image"].to(device=device)
             labels = batch["label"].to(device=device)
+            if config["out_channels"] > 1:
+                labels = monai.networks.one_hot(labels, num_classes=config["out_channels"])
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = loss_function(outputs, labels)
@@ -281,13 +282,19 @@ def main(args):
                 val_step += 1
                 val_inputs = batch["image"].to(device=device)
                 val_labels = batch["label"].to(device=device)
+                if config["out_channels"] > 1:
+                    val_labels = monai.networks.one_hot(val_labels, num_classes=config["out_channels"])
                 val_outputs = model(val_inputs)
+                
                 loss = loss_function(val_outputs, val_labels)
                 val_loss += loss.item()
                 
                 # Compute metrics for current iteration
+                if config["loss_function"] == "CrossEntropyLoss":
+                    val_outputs = torch.softmax(val_outputs, dim=1)
                 val_outputs = [post_pred(i) for i in decollate_batch(val_outputs)]
-                val_labels = [post_label(i) for i in decollate_batch(val_labels)]
+                val_labels = decollate_batch(val_labels)
+                
                 dice_metric(y_pred=val_outputs, y=val_labels)
                 iou_metric(y_pred=val_outputs, y=val_labels)
                 confusion_matrix_metric(y_pred=val_outputs, y=val_labels)
