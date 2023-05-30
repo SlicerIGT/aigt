@@ -215,7 +215,7 @@ def main(args):
         if config["out_channels"] == 1:
             loss_function = monai.losses.DiceCELoss(sigmoid=True)
         else:
-            loss_function = monai.losses.DiceCELoss(to_onehot_y=False, softmax=True, lambda_dice=0.2, lambda_ce=0.8)
+            loss_function = monai.losses.DiceCELoss(to_onehot_y=False, softmax=True, lambda_dice=(1.0 - config["lambda_ce"]), lambda_ce=config["lambda_ce"])
     elif config["loss_function"] == "CrossEntropyLoss":
         loss_function = torch.nn.CrossEntropyLoss()
     else:
@@ -339,7 +339,7 @@ def main(args):
             if config["out_channels"] == 1:
                 im = axes[i, 2].imshow(torch.sigmoid(outputs[i]).squeeze().detach().cpu(), cmap="gray")
             else:
-                im = axes[i, 2].imshow(torch.argmax(outputs[i], dim=0).detach().cpu(), cmap="gray")
+                im = axes[i, 2].imshow(torch.softmax(outputs[i], dim=0).detach().cpu()[1, :, :], cmap="gray")  # Show only first segmentation class
             
             # Create an additional axis for the colorbar
             cax = fig.add_axes([axes[i, 2].get_position().x1 + 0.01,
