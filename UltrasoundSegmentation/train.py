@@ -294,9 +294,6 @@ def main(args):
                 loss = loss_function(val_outputs, val_labels)
                 val_loss += loss.item()
                 
-                # Compute metrics for current iteration
-                if config["loss_function"] == "CrossEntropyLoss":
-                    val_outputs = torch.softmax(val_outputs, dim=1)
                 val_outputs = [post_pred(i) for i in decollate_batch(val_outputs)]
                 val_labels = decollate_batch(val_labels)
                 
