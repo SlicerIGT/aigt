@@ -81,7 +81,7 @@ def main(args):
     if args.wandb_exp_name is not None:
         experiment_name = f"{args.wandb_exp_name}_{timestamp}"
     else:
-        experiment_name = f"{config['model_name']}_{timestamp}"
+        experiment_name = f"{config['model_name']}_{config['loss_function']}_{timestamp}"
     run = wandb.init(
         # Set the project where this run will be logged
         project=args.wandb_project_name,
@@ -91,8 +91,8 @@ def main(args):
             "learning_rate": config["learning_rate"],
             "epochs": config["num_epochs"],
         })
-    run.define_metric("val_loss", summary="min")
-    run.define_metric("accuracy", summary="max")
+    run.define_metric("dice", summary="max")
+    run.define_metric("sensitivity", summary="max")
 
     # Log values of the config dictionary on Weights & Biases
     wandb.config.update(config)
@@ -182,6 +182,7 @@ def main(args):
         train_dataset, 
         batch_size=config["batch_size"], 
         shuffle=config["shuffle"], 
+        num_workers=4,
         generator=g
     )
     val_dataset = UltrasoundDataset(args.val_data_folder, transform=val_transform)
@@ -189,6 +190,7 @@ def main(args):
         val_dataset, 
         batch_size=config["batch_size"], 
         shuffle=False, 
+        num_workers=0,
         generator=g
     )
 
@@ -212,7 +214,6 @@ def main(args):
                     if config["out_channels"] > 1 else None
     if config["loss_function"] == "monai_DiceFocal":
         loss_function = monai.losses.DiceFocalLoss(
-            to_onehot_y=False, 
             sigmoid=use_sigmoid,
             softmax=use_softmax,
             lambda_dice=(1.0 - config["lambda_ce"]),
@@ -220,7 +221,6 @@ def main(args):
         )
     elif config["loss_function"] == "monai_tversky":
         loss_function = monai.losses.TverskyLoss(
-            to_onehot_y=False, 
             sigmoid=use_sigmoid,
             softmax=use_softmax,
             alpha=0.3,
@@ -228,7 +228,6 @@ def main(args):
         )
     else:  # default to dice + cross entropy
         loss_function = monai.losses.DiceCELoss(
-            to_onehot_y=False, 
             sigmoid=use_sigmoid,
             softmax=use_softmax,
             lambda_dice=(1.0 - config["lambda_ce"]), 
