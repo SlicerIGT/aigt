@@ -195,31 +195,63 @@ def main(args):
     )
 
     # Construct model
-    if config["model_name"] == "monai_unet":
+    if config["model_name"].lower() == "attentionunet":
+        model = monai.networks.nets.AttentionUnet(
+            spatial_dims=2,
+            in_channels=config["in_channels"],
+            out_channels=config["out_channels"],
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2)
+        )
+    elif config["model_name"].lower() == "effnetunet":
+        model = monai.networks.nets.FlexibleUNet(
+            in_channels=config["in_channels"],
+            out_channels=config["out_channels"],
+            backbone="efficientnet-b4",
+            pretrained=True
+        )
+    elif config["model_name"].lower() == "unetplusplus":
+        model = monai.networks.nets.BasicUNetPlusPlus(
+            spatial_dims=2,
+            in_channels=config["in_channels"],
+            out_channels=config["out_channels"]
+        )
+    elif config["model_name"].lower() == "unetr":
+        model = monai.networks.nets.UNETR(
+            in_channels=config["in_channels"],
+            out_channels=config["out_channels"],
+            img_size=config["image_size"],
+            spatial_dims=2
+        )
+    elif config["model_name"].lower() == "segresnet":
+        model = monai.networks.nets.SegResNet(
+            spatial_dims=2,
+            in_channels=config["in_channels"],
+            out_channels=config["out_channels"]
+        )
+    else:  # default to unet
         model = monai.networks.nets.UNet(
             spatial_dims=2,
             in_channels=config["in_channels"],
             out_channels=config["out_channels"],
             channels=(16, 32, 64, 128, 256),
             strides=(2, 2, 2, 2),
-            num_res_units=2,
+            num_res_units=2
         )
-    else:
-        model = UNet(in_channels=config["in_channels"], out_channels=config["out_channels"])
     
     # Construct loss function
     use_sigmoid = True if config["out_channels"] == 1 else False
     use_softmax = True if config["out_channels"] > 1 else False
     ce_weight = torch.tensor(config["class_weights"], device=device) \
                     if config["out_channels"] > 1 else None
-    if config["loss_function"] == "monai_DiceFocal":
+    if config["loss_function"].lower() == "dicefocal":
         loss_function = monai.losses.DiceFocalLoss(
             sigmoid=use_sigmoid,
             softmax=use_softmax,
             lambda_dice=(1.0 - config["lambda_ce"]),
             lambda_focal=config["lambda_ce"]
         )
-    elif config["loss_function"] == "monai_tversky":
+    elif config["loss_function"].lower() == "tversky":
         loss_function = monai.losses.TverskyLoss(
             sigmoid=use_sigmoid,
             softmax=use_softmax,
@@ -284,6 +316,8 @@ def main(args):
                 labels = monai.networks.one_hot(labels, num_classes=config["out_channels"])
             optimizer.zero_grad()
             outputs = model(inputs)
+            if isinstance(outputs, list):  # for unet++ output
+                outputs = outputs[0]
             loss = loss_function(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -304,6 +338,8 @@ def main(args):
                 if config["out_channels"] > 1:
                     val_labels = monai.networks.one_hot(val_labels, num_classes=config["out_channels"])
                 val_outputs = model(val_inputs)
+                if isinstance(val_outputs, list):
+                    val_outputs = val_outputs[0]
                 
                 loss = loss_function(val_outputs, val_labels)
                 val_loss += loss.item()
@@ -342,6 +378,8 @@ def main(args):
         labels = torch.stack([val_dataset[i]["label"] for i in sample])
         with torch.no_grad():
             outputs = model(inputs.to(device=device))
+        if isinstance(outputs, list):
+            outputs = outputs[0]
 
         fig, axes = plt.subplots(3, 3, figsize=(9, 9))
         for i in range(3):

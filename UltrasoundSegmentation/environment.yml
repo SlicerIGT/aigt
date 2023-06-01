@@ -12,4 +12,4 @@ dependencies:
   - pip:
     - requests
     - opencv-python
-    - monai[scikit-image, tqdm, pyyaml, matplotlib]
+    - monai[scikit-image, tqdm, pyyaml, matplotlib, einops]
