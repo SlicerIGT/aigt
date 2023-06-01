@@ -1,7 +1,37 @@
 # Ultrasound Segmentation
 This folder includes scripts to prepare data exported from 3D Slicer and utilize that data to train an AI model that predicts ultrasound segmentations.
 
-## Exporting Data
+## Installing required packages
+The required dependencies can be found in the [environment.yml](environment.yml) file. The following section describes the installation process using Anaconda.
+
+* Install Anaconda if it is not already installed on your computer from the [Anaconda Download Page](https://www.anaconda.com/download)
+* Clone this repository to your computer
+* Open Anaconda Prompt
+* Navigate to the "Ultrasound Segmentation" folder of your local clone. The Anaconda Prompt uses the same syntax as the Window Command Prompt.
+* Type in the terminal the following code: 
+```
+conda create -n environmentName -f environment.yml
+```
+  * You can change `environmentName` to any name you would like the environment to have
+  * Anaconda will create the environment and start loading the dependencies from environment.yml. This may take a while.
+* There are two methods to running the scripts and are outlined under the description of each script on this readme:
+  * From Anaconda Prompt using terminal commands
+  * From Microsoft Visual Studio Code (VS Code) using debug configurations
+* To run scripts from Anaconda prompt, the environment must be activated every time Anaconda Prompt is booted. You can see which environment is active from the text in parentheses before the current location. "base" will always be the default upon start up.
+  * To activate your environment, enter the following code (replacing name as necessary): 
+
+```
+conda activate environmentName
+```
+
+  * You will see that the text in the parentheses changes to your environment name
+  * To deactivate your environment, enter the following into terminal: 
+
+```
+conda deactivate
+```
+
+## Exporting data
 
 In 3D Slicer, segmented data can be exported in the Single Slice Segmentation module under Ultrasound, which can be loaded from the aigt repository. 
 
