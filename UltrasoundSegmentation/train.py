@@ -386,7 +386,7 @@ def main(args):
         if isinstance(outputs, list):
             outputs = outputs[0]
 
-        fig, axes = plt.subplots(args.num_sample_images, 3, figsize=(9, 9))
+        fig, axes = plt.subplots(args.num_sample_images, 3, figsize=(9, 3 * args.num_sample_images))
         for i in range(args.num_sample_images):
             axes[i, 0].imshow(inputs[i, 0, :, :], cmap="gray")
             axes[i, 1].imshow(labels[i].squeeze(), cmap="gray")
