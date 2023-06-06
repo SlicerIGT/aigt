@@ -51,6 +51,7 @@ def parse_args():
     parser.add_argument("--val-data-folder", type=str)
     parser.add_argument("--output-dir", type=str)
     parser.add_argument("--config-file", type=str, default="train_config.yaml")
+    parser.add_argument("--num-sample-images", type=int, default=3)
     parser.add_argument("--save-torchscript", action="store_true")
     parser.add_argument("--save-ckpt-freq", type=int, default=0)
     parser.add_argument("--wandb-project-name", type=str, default="aigt_ultrasound_segmentation")
@@ -376,7 +377,7 @@ def main(args):
         
         # Log a random sample of 3 test images along with their ground truth and predictions
         random.seed(config["seed"])
-        sample = random.sample(range(len(val_dataset)), 5)
+        sample = random.sample(range(len(val_dataset)), args.num_sample_images)
 
         inputs = torch.stack([val_dataset[i]["image"] for i in sample])
         labels = torch.stack([val_dataset[i]["label"] for i in sample])
@@ -385,8 +386,8 @@ def main(args):
         if isinstance(outputs, list):
             outputs = outputs[0]
 
-        fig, axes = plt.subplots(3, 3, figsize=(9, 9))
-        for i in range(3):
+        fig, axes = plt.subplots(args.num_sample_images, 3, figsize=(9, 9))
+        for i in range(args.num_sample_images):
             axes[i, 0].imshow(inputs[i, 0, :, :], cmap="gray")
             axes[i, 1].imshow(labels[i].squeeze(), cmap="gray")
             if config["out_channels"] == 1:
