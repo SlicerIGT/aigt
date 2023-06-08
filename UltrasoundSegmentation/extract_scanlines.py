@@ -127,19 +127,27 @@ def main(args):
         num_lines = scanconvert_config["num_lines"]
         num_samples_along_lines = scanconvert_config["num_samples_along_lines"]
 
-        scanconverted_ultrasound_data = np.zeros((ultrasound_data.shape[0], num_lines, num_samples_along_lines))
-        scanconverted_segmentation_data = np.zeros((segmentation_data.shape[0], num_lines, num_samples_along_lines))
+        scanconverted_ultrasound_data = np.zeros((ultrasound_data.shape[0], num_lines, num_samples_along_lines, ultrasound_data.shape[-1]))
+        scanconverted_segmentation_data = np.zeros((segmentation_data.shape[0], num_lines, num_samples_along_lines, segmentation_data.shape[-1]))
 
         # Print some info on the console
 
         logging.info(f"Loaded {ultrasound_data_file} with shape {ultrasound_data.shape} and value range {np.min(ultrasound_data)} - {np.max(ultrasound_data)}")
         logging.info(f"Loaded {segmentation_data_file} with shape {segmentation_data.shape} and value range {np.min(segmentation_data)} - {np.max(segmentation_data)}")
 
-        # Loop over all frames in the data file and perform scan conversion
+        # Loop over all frames and all channels in the ultrasound file and perform scan conversion
 
         for frame_idx in range(ultrasound_data.shape[0]):
-            scanconverted_ultrasound_data[frame_idx, :, :] = map_coordinates(ultrasound_data[frame_idx, :, :, 0], [x_cart, y_cart], order=3, mode="nearest")
-            scanconverted_segmentation_data[frame_idx, :, :] = map_coordinates(segmentation_data[frame_idx, :, :, 0], [x_cart, y_cart], order=0, mode="nearest")
+            for channel_idx in range(ultrasound_data.shape[-1]):
+                scanconverted_ultrasound_data[frame_idx, :, :, channel_idx] =\
+                        map_coordinates(ultrasound_data[frame_idx, :, :, channel_idx], [x_cart, y_cart], order=3, mode="nearest")
+        
+        # Loop over all frames and all channels in the segmentation file and perform scan conversion
+
+        for frame_idx in range(segmentation_data.shape[0]):
+            for channel_idx in range(segmentation_data.shape[-1]):
+                scanconverted_segmentation_data[frame_idx, :, :, channel_idx] =\
+                        map_coordinates(segmentation_data[frame_idx, :, :, channel_idx], [x_cart, y_cart], order=0, mode="nearest")
         
         # Save scan converted data to disk
 
