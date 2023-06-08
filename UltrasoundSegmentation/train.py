@@ -375,7 +375,8 @@ def main(args):
                 f"\tF1 score: {(f1 := cm[4].item())}"
             )
         
-        # Log a random sample of 3 test images along with their ground truth and predictions
+        # Log a random sample of test images along with their ground truth and predictions
+        
         random.seed(config["seed"])
         sample = random.sample(range(len(val_dataset)), args.num_sample_images)
 
