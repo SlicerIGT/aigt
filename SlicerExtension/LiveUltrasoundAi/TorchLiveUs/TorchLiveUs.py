@@ -424,6 +424,8 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         self.x_cart = None
         self.y_cart = None
 
+        self.grid_x, self.grid_y = None, None
+
     def setDefaultParameters(self, parameterNode):
         """
         Initialize parameter node with default settings.
@@ -470,6 +472,7 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         if self.scanConversionDict is not None:
             initial_radius = np.deg2rad(self.scanConversionDict["angle_min_degrees"])
             final_radius = np.deg2rad(self.scanConversionDict["angle_max_degrees"])
+            input_image_size = self.scanConversionDict["curvilinear_image_size"]
             radius_start_px = self.scanConversionDict["radius_start_pixels"]
             radius_end_px = self.scanConversionDict["radius_end_pixels"]
             num_samples_along_lines = self.scanConversionDict["num_samples_along_lines"]
@@ -483,6 +486,8 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
             self.x_cart = r * np.cos(theta) + center_coordinate_pixel[0]
             self.y_cart = r * np.sin(theta) + center_coordinate_pixel[1]
+
+            self.grid_x, self.grid_y = np.mgrid[0:input_image_size, 0:input_image_size]
 
     def togglePrediction(self, toggled):
         """
@@ -558,9 +563,8 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         # If scan conversion given, map image accordingly. Otherwise, resize output to match input size
 
         if self.scanConversionDict is not None:
-            grid_x, grid_y = np.mgrid[0:input_array.shape[1], 0:input_array.shape[2]]
             resized_output_array = griddata((self.x_cart.flatten(), self.y_cart.flatten()), output_array[1, :, :].flatten(),
-                                    (grid_x, grid_y), method="linear", fill_value=0)
+                                    (self.grid_x, self.grid_y), method="linear", fill_value=0)
         else:
             resized_output_array = cv2.resize(output_array, (input_array.shape[2], input_array.shape[1]), interpolation=cv2.INTER_LINEAR)
 
