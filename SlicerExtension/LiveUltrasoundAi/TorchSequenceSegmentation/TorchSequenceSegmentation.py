@@ -224,6 +224,14 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         layoutManager = slicer.app.layoutManager()
         layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
 
+        viewToolBar = slicer.util.mainWindow().findChild('QToolBar', 'ViewToolBar')
+        layoutMenu = viewToolBar.widgetForAction(viewToolBar.actions()[0]).menu()
+        layoutSwitchActionParent = layoutMenu
+        layoutSwitchAction = layoutSwitchActionParent.addAction("red + 3D side by side")  # add inside layout list
+        layoutSwitchAction.setData(customLayoutId)
+        layoutSwitchAction.setToolTip('3D and slice view')
+        layoutSwitchAction.connect('triggered()', lambda layoutId=customLayoutId: slicer.app.layoutManager().setLayout(layoutId))
+
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
