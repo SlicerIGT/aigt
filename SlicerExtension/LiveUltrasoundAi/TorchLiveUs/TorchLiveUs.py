@@ -17,10 +17,12 @@ except:
 try:
     from scipy.ndimage import map_coordinates
     from scipy.interpolate import griddata
+    from scipy.spatial import Delaunay
 except:
     slicer.util.pip_install('scipy')
     from scipy.ndimage import map_coordinates
     from scipy.interpolate import griddata
+    from scipy.spatial import Delaunay
 
 import slicer
 from slicer.ScriptedLoadableModule import *
@@ -30,6 +32,9 @@ try:
     import torch
 except:
     logging.error('TorchLiveUs module requires PyTorch to be installed')
+
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 try:
     import cv2
@@ -423,8 +428,10 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         self.scanConversionDict = None
         self.x_cart = None
         self.y_cart = None
-
+        self.input_image_size = None
         self.grid_x, self.grid_y = None, None
+        self.vertices, self.weights = None, None
+        self.curvilinear_mask = None
 
     def setDefaultParameters(self, parameterNode):
         """
@@ -451,7 +458,7 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             logging.error("Model file does not exist: "+modelPath)
             self.model = None
         else:
-            self.model = torch.jit.load(modelPath)
+            self.model = torch.jit.load(modelPath).to(DEVICE)
             logging.info(f"Model loaded from {modelPath}")
 
     def loadScanConversion(self, scanConversionPath):
@@ -472,7 +479,7 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         if self.scanConversionDict is not None:
             initial_radius = np.deg2rad(self.scanConversionDict["angle_min_degrees"])
             final_radius = np.deg2rad(self.scanConversionDict["angle_max_degrees"])
-            input_image_size = self.scanConversionDict["curvilinear_image_size"]
+            self.input_image_size = self.scanConversionDict["curvilinear_image_size"]
             radius_start_px = self.scanConversionDict["radius_start_pixels"]
             radius_end_px = self.scanConversionDict["radius_end_pixels"]
             num_samples_along_lines = self.scanConversionDict["num_samples_along_lines"]
@@ -482,12 +489,40 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             theta, r = np.meshgrid(np.linspace(initial_radius, final_radius, num_samples_along_lines),
                                    np.linspace(radius_start_px, radius_end_px, num_lines))
 
-            # Convert the polar coordinates to cartesian coordinates
+            # Precompute mapping parameters between scan converted and curvilinear images
 
             self.x_cart = r * np.cos(theta) + center_coordinate_pixel[0]
             self.y_cart = r * np.sin(theta) + center_coordinate_pixel[1]
 
-            self.grid_x, self.grid_y = np.mgrid[0:input_image_size, 0:input_image_size]
+            self.grid_x, self.grid_y = np.mgrid[0:self.input_image_size, 0:self.input_image_size]
+
+            triangulation = Delaunay(np.vstack((self.x_cart.flatten(), self.y_cart.flatten())).T)
+
+            simplices = triangulation.find_simplex(np.vstack((self.grid_x.flatten(), self.grid_y.flatten())).T)
+            self.vertices = triangulation.simplices[simplices]
+
+            X = triangulation.transform[simplices, :2]
+            Y = np.vstack((self.grid_x.flatten(), self.grid_y.flatten())).T - triangulation.transform[simplices, 2]
+            b = np.einsum('ijk,ik->ij', X, Y)
+            self.weights = np.c_[b, 1 - b.sum(axis=1)]
+
+            # Compute curvilinear mask, one pixel tighter to avoid artifacts
+
+            angle1 = 90.0 + (self.scanConversionDict["angle_min_degrees"] + 1)
+            angle2 = 90.0 + (self.scanConversionDict["angle_max_degrees"] - 1)
+
+            self.curvilinear_mask = np.zeros((self.input_image_size, self.input_image_size), dtype=np.int8)
+            self.curvilinear_mask = cv2.ellipse(self.curvilinear_mask,
+                                                (center_coordinate_pixel[1], center_coordinate_pixel[0]),
+                                                (radius_end_px - 1, radius_end_px - 1), 0.0, angle1, angle2, 1, -1)
+            self.curvilinear_mask = cv2.circle(self.curvilinear_mask,
+                                               (center_coordinate_pixel[1], center_coordinate_pixel[0]),
+                                               radius_start_px + 1, 0, -1)
+
+    def scanConvert(self, linear_array):
+        z = linear_array.flatten()
+        zi = np.einsum('ij,ij->i', np.take(z, self.vertices), self.weights)
+        return zi.reshape(self.input_image_size, self.input_image_size)
 
     def togglePrediction(self, toggled):
         """
@@ -553,19 +588,22 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         # Run inference
 
         with torch.inference_mode():
-            output_logits = self.model(input_tensor)
-            output_tensor = torch.sigmoid(output_logits)
+            output_logits = self.model(input_tensor.to(DEVICE))
+        if isinstance(output_logits, list):
+            output_logits = outputs[0]
 
-        # Convert output to numpy array
-
-        output_array = output_tensor.squeeze().numpy() * 255
+        output_tensor = torch.softmax(output_logits, dim=1)
 
         # If scan conversion given, map image accordingly. Otherwise, resize output to match input size
 
         if self.scanConversionDict is not None:
-            resized_output_array = griddata((self.x_cart.flatten(), self.y_cart.flatten()), output_array[1, :, :].flatten(),
-                                    (self.grid_x, self.grid_y), method="linear", fill_value=0)
+            # resized_output_array = griddata((self.x_cart.flatten(), self.y_cart.flatten()), output_array[1, :, :].flatten(),
+            #                         (self.grid_x, self.grid_y), method="linear", fill_value=0)
+            output_array = output_tensor.detach().cpu().numpy() * 255
+            resized_output_array = self.scanConvert(output_array[0, 1, :, :])
+            resized_output_array = resized_output_array * self.curvilinear_mask
         else:
+            output_array = output_tensor.squeeze().detach().cpu().numpy() * 255
             resized_output_array = cv2.resize(output_array, (input_array.shape[2], input_array.shape[1]), interpolation=cv2.INTER_LINEAR)
 
         # Set output volume image data
