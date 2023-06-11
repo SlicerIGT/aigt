@@ -190,16 +190,12 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.volumeReconstructionSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.sequenceBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.predictionVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.reconstructionVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.roiNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.verticalFlipCheckbox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.modelInputSizeSpinbox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
 
         # Buttons
         self.ui.inputResliceButton.connect("clicked(bool)", self.onInputResliceButton)
-        self.ui.predictionResliceButton.connect("clicked(bool)", self.onPredictionResliceButton)
         self.ui.segmentButton.connect("clicked(bool)", self.onSegmentButton)
         self.ui.reconstructButton.connect("clicked(bool)", self.onReconstructButton)
 
@@ -349,21 +345,6 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.inputVolumeSelector.setCurrentNode(inputVolume)
         self.ui.inputVolumeSelector.blockSignals(wasBlocked)
 
-        predictionVolume = self._parameterNode.GetNodeReference("PredictionVolume")
-        wasBlocked = self.ui.predictionVolumeSelector.blockSignals(True)
-        self.ui.predictionVolumeSelector.setCurrentNode(predictionVolume)
-        self.ui.predictionVolumeSelector.blockSignals(wasBlocked)
-
-        reconstructionVolume = self._parameterNode.GetNodeReference("ReconstructionVolume")
-        wasBlocked = self.ui.reconstructionVolumeSelector.blockSignals(True)
-        self.ui.reconstructionVolumeSelector.setCurrentNode(reconstructionVolume)
-        self.ui.reconstructionVolumeSelector.blockSignals(wasBlocked)
-
-        roiNode = self._parameterNode.GetNodeReference("ROI")
-        wasBlocked = self.ui.roiNodeSelector.blockSignals(True)
-        self.ui.roiNodeSelector.setCurrentNode(roiNode)
-        self.ui.roiNodeSelector.blockSignals(wasBlocked)
-
         flipVertical = self._parameterNode.GetParameter("FlipVertical").lower() == "true"
         self.ui.verticalFlipCheckbox.setChecked(flipVertical)
 
@@ -383,7 +364,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             
         # Enable/disable buttons
         self.ui.segmentButton.setEnabled(sequenceBrowser and inputVolume and not self.logic.isProcessing)
-        self.ui.reconstructButton.setEnabled(volumeReconstructionNode and sequenceBrowser and predictionVolume and not self.logic.isProcessing)
+        self.ui.reconstructButton.setEnabled(volumeReconstructionNode and sequenceBrowser and not self.logic.isProcessing)
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -403,10 +384,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode.SetNodeReferenceID("VolumeReconstruction", self.ui.volumeReconstructionSelector.currentNodeID)
         self._parameterNode.SetNodeReferenceID("SequenceBrowser", self.ui.sequenceBrowserSelector.currentNodeID)
         self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputVolumeSelector.currentNodeID)
-        self._parameterNode.SetNodeReferenceID("PredictionVolume", self.ui.predictionVolumeSelector.currentNodeID)
-        self._parameterNode.SetNodeReferenceID("ReconstructionVolume", self.ui.reconstructionVolumeSelector.currentNodeID)
         self._parameterNode.SetNodeReferenceID("OutputTransform", self.ui.outputTransformSelector.currentNodeID)
-        self._parameterNode.SetNodeReferenceID("ROI", self.ui.roiNodeSelector.currentNodeID)
 
         # Update other parameters
         self._parameterNode.SetParameter("FlipVertical", "true" if self.ui.verticalFlipCheckbox.checked else "false")
@@ -469,7 +447,6 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.modelPathLineEdit.setEnabled(False)
         self.ui.sequenceBrowserSelector.setEnabled(False)
         self.ui.inputVolumeSelector.setEnabled(False)
-        self.ui.predictionVolumeSelector.setEnabled(False)
         self.ui.verticalFlipCheckbox.setEnabled(False)
         self.ui.modelInputSizeSpinbox.setEnabled(False)
         self.ui.outputTransformSelector.setEnabled(False)
@@ -495,7 +472,6 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.modelPathLineEdit.setEnabled(True)
             self.ui.sequenceBrowserSelector.setEnabled(True)
             self.ui.inputVolumeSelector.setEnabled(True)
-            self.ui.predictionVolumeSelector.setEnabled(True)
             self.ui.verticalFlipCheckbox.setEnabled(True)
             self.ui.modelInputSizeSpinbox.setEnabled(True)
             self.ui.outputTransformSelector.setEnabled(True)
@@ -525,10 +501,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.segmentButton.setEnabled(False)
         self.ui.reconstructButton.setEnabled(False)
         self.ui.statusLabel.setText("Reconstructing volume...")
-        self.ui.predictionVolumeSelector.setEnabled(False)
         self.ui.volumeReconstructionSelector.setEnabled(False)
-        self.ui.reconstructionVolumeSelector.setEnabled(False)
-        self.ui.roiNodeSelector.setEnabled(False)
         self.ui.statusProgressBar.setMaximum(100)
         reconstructionNode = self._parameterNode.GetNodeReference("VolumeReconstruction")
         reconstructionNode.AddObserver(reconstructionNode.VolumeAddedToReconstruction, self.updateReconstructionProgressBar)
@@ -545,10 +518,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             # self.ui.segmentButton.blockSignals(segmentButtonBlocked)
             self.ui.segmentButton.setEnabled(True)
             self.ui.reconstructButton.setEnabled(True)
-            self.ui.predictionVolumeSelector.setEnabled(True)
             self.ui.volumeReconstructionSelector.setEnabled(True)
-            self.ui.reconstructionVolumeSelector.setEnabled(True)
-            self.ui.roiNodeSelector.setEnabled(True)
             self.ui.statusProgressBar.setValue(0)
             reconstructionNode.RemoveObservers(reconstructionNode.VolumeAddedToReconstruction)
 
@@ -611,12 +581,28 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         settings = qt.QSettings()
         settings.setValue(self.LAST_MODEL_PATH_SETTING, modelPath)
+
+    def getUniqueName(self, node, baseName):
+        newName = baseName
+        if node:
+            className = node.GetClassName()
+            nodes = slicer.util.getNodesByClass(className)
+            names = sorted([node.GetName() for node in nodes if node.GetName().startswith(baseName)])
+            if names:
+                try:
+                    lastNumber = int(names[-1][-1])
+                    newName += f"_{str(lastNumber + 1)}"
+                except ValueError:
+                    newName += "_1"
+        return newName
     
     def addPredictionVolume(self):
         parameterNode = self.getParameterNode()
 
         # Make new prediction volume to not overwrite existing one
-        predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Prediction")
+        predictionVolume = parameterNode.GetNodeReference("PredictionVolume")
+        volumeName = self.getUniqueName(predictionVolume, "Prediction")
+        predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", volumeName)
         predictionVolume.CreateDefaultDisplayNodes()
         parameterNode.SetNodeReferenceID("PredictionVolume", predictionVolume.GetID())
         
@@ -632,7 +618,9 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
 
         # Add a new sequence node to the sequence browser
-        predictionSequenceNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", "PredictionSequence")
+        masterSequenceNode = sequenceBrowser.GetMasterSequenceNode()
+        sequenceName = self.getUniqueName(masterSequenceNode, "PredictionSequence")
+        predictionSequenceNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", sequenceName)
         sequenceBrowser.AddSynchronizedSequenceNode(predictionSequenceNode)
         sequenceBrowser.AddProxyNode(predictionVolume, predictionSequenceNode, False)
 
@@ -691,10 +679,17 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         predictionVolume = self.addPredictionVolume()
         predictionSequenceNode = self.addPredictionSequenceNode(predictionVolume)
 
+        # Overlay prediction volume in slice view
+        predictionDisplayNode = predictionVolume.GetDisplayNode()
+        predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGreen")
+        slicer.util.setSliceViewerLayers(foreground=predictionVolume, foregroundOpacity=0.3)
+
         # Iterate through each item in sequence browser and add generated segmentation
+        selectedItemNumber = sequenceBrowser.GetSelectedItemNumber()  # for restoring later
         for itemIndex in range(sequenceBrowser.GetNumberOfItems()):
             # Generate segmentation
             currentImage = inputSequence.GetNthDataNode(itemIndex)
+            sequenceBrowser.SetSelectedItemNumber(itemIndex)
             prediction = self.getPrediction(currentImage)
             slicer.util.updateVolumeFromArray(predictionVolume, prediction)
 
@@ -703,6 +698,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             predictionSequenceNode.SetDataNodeAtValue(predictionVolume, indexValue)
             if self.progressCallback:
                 self.progressCallback(itemIndex)
+        sequenceBrowser.SetSelectedItemNumber(selectedItemNumber)
 
         self.isProcessing = False
     
@@ -712,7 +708,9 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         predictionVolume = parameterNode.GetNodeReference("PredictionVolume")
 
         # Create new ROI node
-        roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", "ROI")
+        roiNode = parameterNode.GetNodeReference("ROI")
+        roiName = self.getUniqueName(roiNode, "ROI")
+        roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", roiName)
         parameterNode.SetNodeReferenceID("ROI", roiNode.GetID())
         roiNode.SetDisplayVisibility(False)
         
@@ -723,7 +721,9 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
     def addReconstructionVolume(self):
         parameterNode = self.getParameterNode()
 
-        reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "ReconstructionVolume")
+        reconstructionVolume = parameterNode.GetNodeReference("ReconstructionVolume")
+        reconstructionName = self.getUniqueName(reconstructionVolume, "ReconstructionVolume")
+        reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", reconstructionName)
         reconstructionVolume.CreateDefaultDisplayNodes()
         parameterNode.SetNodeReferenceID("ReconstructionVolume", reconstructionVolume.GetID())
         

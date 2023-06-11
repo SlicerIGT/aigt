@@ -74,6 +74,13 @@
         </property>
        </widget>
       </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>Input volume:</string>
+        </property>
+       </widget>
+      </item>
       <item row="3" column="1">
        <layout class="QHBoxLayout" name="horizontalLayout_2">
         <item>
@@ -127,14 +134,14 @@
         </item>
        </layout>
       </item>
-      <item row="7" column="0">
+      <item row="6" column="0">
        <widget class="QLabel" name="label_3">
         <property name="text">
          <string>Volume reconstruction node:</string>
         </property>
        </widget>
       </item>
-      <item row="7" column="1">
+      <item row="6" column="1">
        <widget class="qMRMLNodeComboBox" name="volumeReconstructionSelector">
         <property name="enabled">
          <bool>true</bool>
@@ -154,7 +161,7 @@
          <stringlist notr="true"/>
         </property>
         <property name="noneEnabled">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
         <property name="addEnabled">
          <bool>true</bool>
@@ -167,110 +174,6 @@
         </property>
         <property name="noneDisplay">
          <string>None</string>
-        </property>
-       </widget>
-      </item>
-      <item row="8" column="0">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>Reconstruction volume:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="8" column="1">
-       <widget class="qMRMLNodeComboBox" name="reconstructionVolumeSelector">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="toolTip">
-         <string>Select an output volume for the volume reconstruction.</string>
-        </property>
-        <property name="nodeTypes">
-         <stringlist notr="true">
-          <string>vtkMRMLScalarVolumeNode</string>
-         </stringlist>
-        </property>
-        <property name="hideChildNodeTypes">
-         <stringlist notr="true"/>
-        </property>
-        <property name="noneEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="removeEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="interactionNodeSingletonTag">
-         <string notr="true"/>
-        </property>
-        <property name="noneDisplay">
-         <string>Select a Volume</string>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Input volume:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
-       <layout class="QHBoxLayout" name="horizontalLayout_3">
-        <item>
-         <widget class="qMRMLNodeComboBox" name="predictionVolumeSelector">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="toolTip">
-           <string>Select a volume for the model prediction output.</string>
-          </property>
-          <property name="nodeTypes">
-           <stringlist notr="true">
-            <string>vtkMRMLScalarVolumeNode</string>
-           </stringlist>
-          </property>
-          <property name="hideChildNodeTypes">
-           <stringlist notr="true"/>
-          </property>
-          <property name="noneEnabled">
-           <bool>false</bool>
-          </property>
-          <property name="addEnabled">
-           <bool>false</bool>
-          </property>
-          <property name="removeEnabled">
-           <bool>true</bool>
-          </property>
-          <property name="renameEnabled">
-           <bool>true</bool>
-          </property>
-          <property name="interactionNodeSingletonTag">
-           <string notr="true"/>
-          </property>
-          <property name="noneDisplay">
-           <string>Select a Volume</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="predictionResliceButton">
-          <property name="text">
-           <string>Reslice</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="label_12">
-        <property name="text">
-         <string>Prediction volume:</string>
         </property>
        </widget>
       </item>
@@ -453,40 +356,6 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="label_5">
-        <property name="text">
-         <string>ROI node:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
-       <widget class="qMRMLNodeComboBox" name="roiNodeSelector">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="nodeTypes">
-         <stringlist notr="true">
-          <string>vtkMRMLAnnotationROINode</string>
-         </stringlist>
-        </property>
-        <property name="hideChildNodeTypes">
-         <stringlist notr="true"/>
-        </property>
-        <property name="noneEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="interactionNodeSingletonTag">
-         <string notr="true"/>
-        </property>
-       </widget>
-      </item>
      </layout>
     </widget>
    </item>
@@ -550,22 +419,6 @@
   <connection>
    <sender>TorchSequenceSegmentation</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>reconstructionVolumeSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>274</x>
-     <y>309</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>306</x>
-     <y>196</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>TorchSequenceSegmentation</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>sequenceBrowserSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
@@ -598,22 +451,6 @@
   <connection>
    <sender>TorchSequenceSegmentation</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>roiNodeSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>134</x>
-     <y>416</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>279</x>
-     <y>288</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>TorchSequenceSegmentation</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>outputTransformSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
@@ -624,22 +461,6 @@
     <hint type="destinationlabel">
      <x>231</x>
      <y>284</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>TorchSequenceSegmentation</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>predictionVolumeSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>293</x>
-     <y>438</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>279</x>
-     <y>166</y>
     </hint>
    </hints>
   </connection>
