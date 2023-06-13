@@ -9,6 +9,28 @@ import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
+try:
+    import yaml
+except:
+    slicer.util.pip_install("pyyaml")
+    import yaml
+
+try:
+    import cv2
+except:
+    slicer.util.pip_install("opencv-python")
+    import cv2
+
+try:
+    from scipy.ndimage import map_coordinates
+    from scipy.interpolate import griddata
+    from scipy.spatial import Delaunay
+except:
+    slicer.util.pip_install('scipy')
+    from scipy.ndimage import map_coordinates
+    from scipy.interpolate import griddata
+    from scipy.spatial import Delaunay
+
 INSTALL_PYTORCHUTILS = False
 try:
     import torch
@@ -193,6 +215,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.verticalFlipCheckbox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.modelInputSizeSpinbox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.scanConversionPathLineEdit.connect("currentPathChanged(const QString)", self.updateParameterNodeFromGUI)
 
         # Buttons
         self.ui.inputResliceButton.connect("clicked(bool)", self.onInputResliceButton)
@@ -254,8 +277,13 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Set last model path in UI
         lastModelPath = slicer.util.settingsValue(self.logic.LAST_MODEL_PATH_SETTING, "")
-        if lastModelPath is not None:
+        if lastModelPath:
             self.ui.modelPathLineEdit.currentPath = lastModelPath
+        
+        # Set last scan conversion path in UI
+        lastScanConversionPath = slicer.util.settingsValue(self.logic.LAST_SCAN_CONVERSION_PATH_SETTING, "")
+        if lastScanConversionPath:
+            self.ui.scanConversionPathLineEdit.currentPath = lastScanConversionPath
 
         # Create and select volume reconstruction node, if not done yet
         if not self.ui.volumeReconstructionSelector.currentNode():
@@ -361,6 +389,8 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             wasBlocked = self.ui.outputTransformSelector.blockSignals(True)
             self.ui.outputTransformSelector.setCurrentNode(inputVolumeParent)
             self.ui.outputTransformSelector.blockSignals(wasBlocked)
+
+        self.ui.scanConversionPathLineEdit.setCurrentPath(self._parameterNode.GetParameter("ScanConversionPath"))
             
         # Enable/disable buttons
         self.ui.segmentButton.setEnabled(sequenceBrowser and inputVolume and not self.logic.isProcessing)
@@ -398,6 +428,15 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             if modelPath != self._parameterNode.GetParameter("ModelPath"):
                 self._parameterNode.SetParameter("ModelPath", modelPath)
                 self.logic.loadModel(modelPath)
+
+        # Update scan conversion path
+        scanConversionPath = self.ui.scanConversionPathLineEdit.currentPath
+        if not scanConversionPath:
+            self._parameterNode.SetParameter("ScanConversionPath", "")
+        else:
+            if scanConversionPath != self._parameterNode.GetParameter("ScanConversionPath"):
+                self._parameterNode.SetParameter("ScanConversionPath", scanConversionPath)
+                self.logic.loadScanConversion(scanConversionPath)
 
         self._parameterNode.EndModify(wasModified)
     
@@ -538,6 +577,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
     """
 
     LAST_MODEL_PATH_SETTING = "TorchSequenceSegmentation/LastModelPath"
+    LAST_SCAN_CONVERSION_PATH_SETTING = "TorchSequenceSegmentation/LastScanConversionPath"
 
     def __init__(self):
         """
@@ -548,6 +588,15 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         self.progressCallback = None
         self.isProcessing = False
         self.model = None
+        self.scanConversionDict = None
+        self.cart_x = None
+        self.cart_y = None
+        self.grid_x = None
+        self.grid_y = None
+        self.vertices = None
+        self.weights = None
+        self.curvilinear_size = None
+        self.curvilinear_mask = None
         self.volRecLogic = slicer.modules.volumereconstruction.logic()
     
     def setDefaultParameters(self, parameterNode):
@@ -567,7 +616,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             logging.warning("Model path is empty")
             self.model = None
         elif not os.path.isfile(modelPath):
-            logging.error("Model file does not exist: "+ modelPath)
+            logging.error("Model file does not exist: " + modelPath)
             self.model = None
         else:
             extra_files = {"config.json": ""}
@@ -581,6 +630,71 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         settings = qt.QSettings()
         settings.setValue(self.LAST_MODEL_PATH_SETTING, modelPath)
+    
+    def loadScanConversion(self, scanConversionPath):
+        if not scanConversionPath:
+            logging.warning("Scan conversion path is empty")
+            self.scanConversionDict = None
+            self.cart_x = None
+            self.cart_y = None
+        elif not os.path.isfile(scanConversionPath):
+            logging.error("Scan conversion file does not exist: " + scanConversionPath)
+            self.scanConversionDict = None
+            self.cart_x = None
+            self.cart_y = None
+        else:
+            with open(scanConversionPath, "r") as f:
+                self.scanConversionDict = yaml.safe_load(f)
+        
+        if self.scanConversionDict:
+            # Load scan conversion parameters
+            self.curvilinear_size = self.scanConversionDict["curvilinear_image_size"]
+            initial_radius = np.deg2rad(self.scanConversionDict["angle_min_degrees"])
+            final_radius = np.deg2rad(self.scanConversionDict["angle_max_degrees"])
+            radius_start_px = self.scanConversionDict["radius_start_pixels"]
+            radius_end_px = self.scanConversionDict["radius_end_pixels"]
+            num_samples_along_lines = self.scanConversionDict["num_samples_along_lines"]
+            num_lines = self.scanConversionDict["num_lines"]
+            center_coordinate_pixel = self.scanConversionDict["center_coordinate_pixel"]
+
+            theta, r = np.meshgrid(np.linspace(initial_radius, final_radius, num_samples_along_lines),
+                                   np.linspace(radius_start_px, radius_end_px, num_lines))
+
+            # Precompute mapping parameters between scan converted and curvilinear images
+            self.cart_x = r * np.cos(theta) + center_coordinate_pixel[0]
+            self.cart_y = r * np.sin(theta) + center_coordinate_pixel[1]
+
+            self.grid_x, self.grid_y = np.mgrid[0:self.curvilinear_size, 0:self.curvilinear_size]
+
+            triangulation = Delaunay(np.vstack((self.cart_x.flatten(), self.cart_y.flatten())).T)
+
+            simplices = triangulation.find_simplex(np.vstack((self.grid_x.flatten(), self.grid_y.flatten())).T)
+            self.vertices = triangulation.simplices[simplices]
+
+            X = triangulation.transform[simplices, :2]
+            Y = np.vstack((self.grid_x.flatten(), self.grid_y.flatten())).T - triangulation.transform[simplices, 2]
+            b = np.einsum('ijk,ik->ij', X, Y)
+            self.weights = np.c_[b, 1 - b.sum(axis=1)]
+
+            # Compute curvilinear mask, one pixel tighter to avoid artifacts
+            angle1 = 90.0 + (self.scanConversionDict["angle_min_degrees"] + 1)
+            angle2 = 90.0 + (self.scanConversionDict["angle_max_degrees"] - 1)
+
+            self.curvilinear_mask = np.zeros((self.curvilinear_size, self.curvilinear_size), dtype=np.int8)
+            self.curvilinear_mask = cv2.ellipse(self.curvilinear_mask,
+                                                (center_coordinate_pixel[1], center_coordinate_pixel[0]),
+                                                (radius_end_px - 1, radius_end_px - 1), 0.0, angle1, angle2, 1, -1)
+            self.curvilinear_mask = cv2.circle(self.curvilinear_mask,
+                                               (center_coordinate_pixel[1], center_coordinate_pixel[0]),
+                                               radius_start_px + 1, 0, -1)
+        
+        settings = qt.QSettings()
+        settings.setValue(self.LAST_SCAN_CONVERSION_PATH_SETTING, scanConversionPath)
+    
+    def scanConvert(self, linearArray):
+        z = linearArray.flatten()
+        zi = np.einsum("ij,ij->i", np.take(z, self.vertices), self.weights)
+        return zi.reshape(self.curvilinear_size, self.curvilinear_size)
 
     def getUniqueName(self, node, baseName):
         newName = baseName
@@ -634,38 +748,44 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             return
         
         imageArray = slicer.util.arrayFromVolume(image)
-        imageArray = torch.from_numpy(imageArray).float()  # convert to tensor
 
         # Flip image vertically if specified by user
         parameterNode = self.getParameterNode()
         toFlip = parameterNode.GetParameter("FlipVertical").lower() == "true"
         if toFlip:
-            imageArray = torch.flip(imageArray, dims=[1])  # axis 0 is channel dimension
+            imageArray = np.flip(imageArray, axis=0)  # axis 0 is channel dimension
+        
+        # Use inverse scan conversion if specified by user, otherwise resize
+        if self.scanConversionDict:
+            inputArray = map_coordinates(imageArray[0, :, :], [self.cart_x, self.cart_y], order=1)
+        else:
+            inputSize = int(parameterNode.GetParameter("ModelInputSize"))
+            inputArray = cv2.resize(imageArray[0, :, :], (inputSize, inputSize), antialias=True)  # default is bilinear
 
-        # Resize input to match model input size
-        inputSize = int(parameterNode.GetParameter("ModelInputSize"))
-        inputTensor = torchvision.transforms.functional.resize(imageArray, (inputSize, inputSize), antialias=True)  # default is bilinear
-        inputTensor = inputTensor.unsqueeze(0).to(DEVICE)  # add batch dimension
+        # Convert to tensor and add batch dimension
+        inputTensor = torch.from_numpy(inputArray).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
 
         # Run prediction
         with torch.inference_mode():
             output = self.model(inputTensor)
-            output = torch.nn.functional.softmax(output, dim=1).detach().cpu()
+            output = torch.nn.functional.softmax(output, dim=1)
 
-        # Resize output to match original image size
-        output = torchvision.transforms.functional.resize(
-            output, 
-            (imageArray.shape[1], imageArray.shape[2]), 
-            interpolation=torchvision.transforms.InterpolationMode.BILINEAR,
-            antialias=True
-        )
-        output = (output.numpy()[:, 1, :, :] * 255).astype(np.uint8)
+        # Scan convert or resize
+        if self.scanConversionDict:
+            outputArray = output.detach().cpu().numpy() * 255
+            outputArray = self.scanConvert(outputArray[0, 1, :, :])
+            outputArray *= self.curvilinear_mask
+        else:
+            outputArray = output.squeeze().detach().cpu().numpy() * 255
+            outputArray = cv2.resize(outputArray, (imageArray.shape[2], imageArray.shape[1]))
+
+        outputArray = outputArray.astype(np.uint8)[np.newaxis, ...]
 
         # Flip output back if needed
         if toFlip:
-            output = np.flip(output, axis=1)
+            outputArray = np.flip(outputArray, axis=1)
 
-        return output
+        return outputArray
     
     def segmentSequence(self):
         self.isProcessing = True
@@ -755,7 +875,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         volRenDisplayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(reconstructionVolume)
         volRenDisplayNode.SetAndObserveROINodeID(roiNode.GetID())
         volPropertyNode = volRenDisplayNode.GetVolumePropertyNode()
-        volPropertyNode.Copy(volRenLogic.GetPresetByName("US-Fetal"))
+        volPropertyNode.Copy(volRenLogic.GetPresetByName("MR-Default"))
 
         # Run volume reconstruction
         self.volRecLogic.ReconstructVolumeFromSequence(reconstructionNode)
