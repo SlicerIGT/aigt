@@ -10,7 +10,7 @@ The required dependencies can be found in the [environment.yml](environment.yml)
 * Navigate to the "Ultrasound Segmentation" folder of your local clone. The Anaconda Prompt uses the same syntax as the Window Command Prompt.
 * Type in the terminal the following code: 
 ```
-conda create -n environmentName -f environment.yml
+conda env create -n environmentName -f environment.yml
 ```
   * You can change `environmentName` to any name you would like the environment to have
   * Anaconda will create the environment and start loading the dependencies from environment.yml. This may take a while.
