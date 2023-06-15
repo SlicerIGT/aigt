@@ -1,5 +1,6 @@
 import logging
 import os
+import glob
 import json
 import qt
 import vtk
@@ -63,8 +64,7 @@ class TorchSequenceSegmentation(ScriptedLoadableModule):
         self.parent.contributors = ["Chris Yeung (Queen's Univ.)"]  # TODO: replace with "Firstname Lastname (Organization)"
         # TODO: update with short description of the module and a link to online module documentation
         self.parent.helpText = """
-This is an example of scripted loadable module bundled in an extension.
-See more information in <a href="https://github.com/organization/projectname#TorchSequenceSegmentation">module documentation</a>.
+See more information in <a href="https://github.com/SlicerIGT/aigt/tree/master/SlicerExtension/LiveUltrasoundAi/TorchSequenceSegmentation">module documentation</a>.
 """
         # TODO: replace with organization, grant and thanks
         self.parent.acknowledgementText = """
@@ -208,19 +208,38 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
         # (in the selected parameter node).
-        self.ui.modelPathLineEdit.connect("currentPathChanged(const QString)", self.updateParameterNodeFromGUI)
+        # Volume reconstruction parameters
+        self.ui.modelComboBox.connect("currentTextChanged(const QString)", self.updateParameterNodeFromGUI)
         self.ui.volumeReconstructionSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.sequenceBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.verticalFlipCheckbox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.modelInputSizeSpinbox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
-        self.ui.scanConversionPathLineEdit.connect("currentPathChanged(const QString)", self.updateParameterNodeFromGUI)
+
+        # File paths
+        # Set last model folder in UI
+        lastModelFolder = slicer.util.settingsValue(self.logic.LAST_MODEL_FOLDER_SETTING, "")
+        if lastModelFolder:
+            self.ui.modelDirectoryButton.directory = lastModelFolder
+            models = self.logic.getAllModelPaths()
+            self.ui.modelComboBox.clear()
+            for model in models:
+                self.ui.modelComboBox.addItem(model.split(os.sep)[-2], model)
+        self.ui.modelDirectoryButton.connect("directoryChanged(const QString)", self.updateSettingsFromGUI)
+        
+        # Set last scan conversion path in UI
+        lastScanConversionPath = slicer.util.settingsValue(self.logic.LAST_SCAN_CONVERSION_PATH_SETTING, "")
+        if lastScanConversionPath:
+            self.ui.scanConversionPathLineEdit.currentPath = lastScanConversionPath
+        self.ui.scanConversionPathLineEdit.connect("currentPathChanged(const QString)", self.updateSettingsFromGUI)
 
         # Buttons
-        self.ui.inputResliceButton.connect("clicked(bool)", self.onInputResliceButton)
-        self.ui.segmentButton.connect("clicked(bool)", self.onSegmentButton)
-        self.ui.reconstructButton.connect("clicked(bool)", self.onReconstructButton)
+        self.ui.useIndividualRadioButton.connect("toggled(bool)", self.onModelSelectionMethodChanged)
+        self.ui.useAllRadioButton.connect("toggled(bool)", self.onModelSelectionMethodChanged)
+        self.ui.inputResliceButton.connect("clicked()", self.onResliceVolume)
+        self.ui.startButton.connect("clicked()", self.onStartButton)
+        self.ui.clearScanConversionButton.connect("clicked()", self.onClearScanConversion)
 
         # Add custom 2D + 3D layout
         customLayout = """
@@ -275,15 +294,12 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Enable sequence browser toolbar
         slicer.modules.sequences.setToolBarVisible(True)
 
-        # Set last model path in UI
-        lastModelPath = slicer.util.settingsValue(self.logic.LAST_MODEL_PATH_SETTING, "")
-        if lastModelPath:
-            self.ui.modelPathLineEdit.currentPath = lastModelPath
-        
-        # Set last scan conversion path in UI
-        lastScanConversionPath = slicer.util.settingsValue(self.logic.LAST_SCAN_CONVERSION_PATH_SETTING, "")
-        if lastScanConversionPath:
-            self.ui.scanConversionPathLineEdit.currentPath = lastScanConversionPath
+        # Set models to use in parameter node
+        useIndividualModel = self.ui.useIndividualRadioButton.checked
+        if useIndividualModel:
+            self.logic.setModelsToUse([self.ui.modelComboBox.itemData(self.ui.modelComboBox.currentIndex)])
+        else:
+            self.logic.setModelsToUse(self.logic.getAllModelPaths())
 
         # Create and select volume reconstruction node, if not done yet
         if not self.ui.volumeReconstructionSelector.currentNode():
@@ -356,8 +372,6 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._updatingGUIFromParameterNode = True
 
         # Update node selectors and sliders
-        self.ui.modelPathLineEdit.setCurrentPath(self._parameterNode.GetParameter("ModelPath"))
-
         volumeReconstructionNode = self._parameterNode.GetNodeReference("VolumeReconstruction")
         wasBlocked = self.ui.volumeReconstructionSelector.blockSignals(True)
         self.ui.volumeReconstructionSelector.setCurrentNode(volumeReconstructionNode)
@@ -389,12 +403,19 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             wasBlocked = self.ui.outputTransformSelector.blockSignals(True)
             self.ui.outputTransformSelector.setCurrentNode(inputVolumeParent)
             self.ui.outputTransformSelector.blockSignals(wasBlocked)
-
-        self.ui.scanConversionPathLineEdit.setCurrentPath(self._parameterNode.GetParameter("ScanConversionPath"))
             
         # Enable/disable buttons
-        self.ui.segmentButton.setEnabled(sequenceBrowser and inputVolume and not self.logic.isProcessing)
-        self.ui.reconstructButton.setEnabled(volumeReconstructionNode and sequenceBrowser and not self.logic.isProcessing)
+        if self.ui.reconstructCheckBox.checked:
+            self.ui.startButton.setEnabled(sequenceBrowser
+                                            and inputVolume
+                                            and volumeReconstructionNode
+                                            and self.logic.getModelsToUse()
+                                            and not self.logic.isProcessing)
+        else:
+            self.ui.startButton.setEnabled(sequenceBrowser
+                                            and inputVolume
+                                            and self.logic.getModelsToUse()
+                                            and not self.logic.isProcessing)
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -420,146 +441,164 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode.SetParameter("FlipVertical", "true" if self.ui.verticalFlipCheckbox.checked else "false")
         self._parameterNode.SetParameter("ModelInputSize", str(self.ui.modelInputSizeSpinbox.value))
 
-        # Update model path and load model
-        modelPath = self.ui.modelPathLineEdit.currentPath
-        if not modelPath:
-            self._parameterNode.SetParameter("ModelPath", "")
-        else:
-            if modelPath != self._parameterNode.GetParameter("ModelPath"):
-                self._parameterNode.SetParameter("ModelPath", modelPath)
-                self.logic.loadModel(modelPath)
+        self._parameterNode.EndModify(wasModified)
+    
+    def updateSettingsFromGUI(self, caller=None, event=None):
+        settings = qt.QSettings()
 
         # Update scan conversion path
         scanConversionPath = self.ui.scanConversionPathLineEdit.currentPath
-        if not scanConversionPath:
-            self._parameterNode.SetParameter("ScanConversionPath", "")
-        else:
-            if scanConversionPath != self._parameterNode.GetParameter("ScanConversionPath"):
-                self._parameterNode.SetParameter("ScanConversionPath", scanConversionPath)
-                self.logic.loadScanConversion(scanConversionPath)
+        if scanConversionPath != slicer.util.settingsValue(self.logic.LAST_SCAN_CONVERSION_PATH_SETTING, ""):
+            settings.setValue(self.logic.LAST_SCAN_CONVERSION_PATH_SETTING, scanConversionPath)
+            self.logic.loadScanConversion(scanConversionPath)
 
-        self._parameterNode.EndModify(wasModified)
+        # Save to settings and update combo box
+        modelFolder = self.ui.modelDirectoryButton.directory
+        if modelFolder != slicer.util.settingsValue(self.logic.LAST_MODEL_FOLDER_SETTING, ""):
+            settings.setValue(self.logic.LAST_MODEL_FOLDER_SETTING, modelFolder)
+            models = self.logic.getAllModelPaths()
+            self.ui.modelComboBox.clear()
+            for model in models:
+                self.ui.modelComboBox.addItem(model.split(os.sep)[-2], model)
     
-    def onInputResliceButton(self):
+    def onClearScanConversion(self):
+        self.ui.scanConversionPathLineEdit.currentPath = ""
+        settings = qt.QSettings()
+        settings.setValue(self.logic.LAST_SCAN_CONVERSION_PATH_SETTING, "")
+    
+    def onModelSelectionMethodChanged(self, caller=None, event=None):
+        useIndividualModel = self.ui.useIndividualRadioButton.checked
+        if useIndividualModel:
+            self.ui.modelComboBox.setEnabled(True)
+            self.logic.setModelsToUse([self.ui.modelComboBox.itemData(self.ui.modelComboBox.currentIndex)])
+        else:
+            self.ui.modelComboBox.setEnabled(False)
+            self.logic.setModelsToUse(self.logic.getAllModelPaths())
+
+    def onResliceVolume(self):
         inputVolume = self._parameterNode.GetNodeReference("InputVolume")
         if inputVolume:
-            self.resliceVolume(inputVolume)
+            resliceDriverLogic = slicer.modules.volumereslicedriver.logic()
+            
+            # Get red slice node
+            layoutManager = slicer.app.layoutManager()
+            sliceWidget = layoutManager.sliceWidget("Red")
+            sliceNode = sliceWidget.mrmlSliceNode()
 
-    def onPredictionResliceButton(self):
-        predictionVolume = self._parameterNode.GetNodeReference("PredictionVolume")
-        if predictionVolume:
-            self.resliceVolume(predictionVolume)
+            # Update slice using reslice driver
+            resliceDriverLogic.SetDriverForSlice(inputVolume.GetID(), sliceNode)
+            resliceDriverLogic.SetModeForSlice(resliceDriverLogic.MODE_TRANSVERSE, sliceNode)
+            resliceDriverLogic.SetFlipForSlice(True, sliceNode)
 
-    def resliceVolume(self, volumeNode):
-        resliceDriverLogic = slicer.modules.volumereslicedriver.logic()
-        
-        # Get red slice node
-        layoutManager = slicer.app.layoutManager()
-        sliceWidget = layoutManager.sliceWidget("Red")
-        sliceNode = sliceWidget.mrmlSliceNode()
-
-        # Update slice using reslice driver
-        resliceDriverLogic.SetDriverForSlice(volumeNode.GetID(), sliceNode)
-        resliceDriverLogic.SetModeForSlice(resliceDriverLogic.MODE_TRANSVERSE, sliceNode)
-        resliceDriverLogic.SetFlipForSlice(True, sliceNode)
-
-        # Fit slice to background
-        sliceWidget.sliceController().fitSliceToBackground()
+            # Fit slice to background
+            sliceWidget.sliceController().fitSliceToBackground()
+    
+    def setPredictionProgressBar(self, numSteps):
+        self.ui.taskProgressBar.setMaximum(numSteps)
+        self.logic.progressCallback = self.updatePredictionProgressBar
     
     def updatePredictionProgressBar(self, step):
-        """
-        Update progress bar for prediction.
-        """
-        self.ui.statusProgressBar.setValue(step)
+        self.ui.taskProgressBar.setValue(step)
         slicer.app.processEvents()
-
-    def onSegmentButton(self):
-        """
-        Generate segmentations for each frame and add to sequence browser.
-        """
-        # Update progress bar and GUI
-        # segmentButtonBlocked = self.ui.segmentButton.blockSignals(True)
-        # reconstructButtonBlocked = self.ui.reconstructButton.blockSignals(True)
-        self.ui.segmentButton.setEnabled(False)
-        self.ui.reconstructButton.setEnabled(False)
-        self.ui.statusLabel.setText("Generating predictions...")
-        self.ui.modelPathLineEdit.setEnabled(False)
-        self.ui.sequenceBrowserSelector.setEnabled(False)
-        self.ui.inputVolumeSelector.setEnabled(False)
-        self.ui.verticalFlipCheckbox.setEnabled(False)
-        self.ui.modelInputSizeSpinbox.setEnabled(False)
-        self.ui.outputTransformSelector.setEnabled(False)
-        sequenceBrowser = self._parameterNode.GetNodeReference("SequenceBrowser")
-        self.ui.statusProgressBar.setMaximum(sequenceBrowser.GetNumberOfItems() - 1)
-        # Progress bar callback
-        self.logic.progressCallback = self.updatePredictionProgressBar
-        slicer.app.processEvents()
-        
-        try:
-            # Run predictions
-            self.logic.segmentSequence()
-            self.ui.statusLabel.setText("Ready")
-        except Exception as e:
-            # Restore GUI
-            logging.error(e)
-            self.ui.statusLabel.setText("Error")
-        finally:
-            # self.ui.segmentButton.blockSignals(segmentButtonBlocked)
-            # self.ui.reconstructButton.blockSignals(reconstructButtonBlocked)
-            self.ui.segmentButton.setEnabled(True)
-            self.ui.reconstructButton.setEnabled(True)
-            self.ui.modelPathLineEdit.setEnabled(True)
-            self.ui.sequenceBrowserSelector.setEnabled(True)
-            self.ui.inputVolumeSelector.setEnabled(True)
-            self.ui.verticalFlipCheckbox.setEnabled(True)
-            self.ui.modelInputSizeSpinbox.setEnabled(True)
-            self.ui.outputTransformSelector.setEnabled(True)
-            self.ui.statusProgressBar.setValue(0)
     
+    def setReconstructionProgressBar(self):
+        self.ui.taskProgressBar.setMaximum(100)
+        reconstructionNode = self._parameterNode.GetNodeReference("VolumeReconstruction")
+        reconstructionNode.AddObserver(reconstructionNode.VolumeAddedToReconstruction, self.updateReconstructionProgressBar)
+
     def updateReconstructionProgressBar(self, caller=None, event=None):
-        """
-        Update progress bar for volume reconstruction.
-        """
         reconstructionNode = self._parameterNode.GetNodeReference("VolumeReconstruction")
         sequenceBrowser = self._parameterNode.GetNodeReference("SequenceBrowser")
         if reconstructionNode and sequenceBrowser:
             numFrames = sequenceBrowser.GetMasterSequenceNode().GetNumberOfDataNodes()
             progress = (100 * reconstructionNode.GetNumberOfVolumesAddedToReconstruction()) // numFrames
-            self.ui.statusProgressBar.setValue(progress)
+            self.ui.taskProgressBar.setValue(progress)
             slicer.app.processEvents()
             slicer.app.resumeRender()
             slicer.app.pauseRender()
-
-    def onReconstructButton(self):
-        """
-        Render volume reconstruction when user clicks "Render" button.
-        """
-        # Update progress bar and GUI
-        # reconstructButtonBlocked = self.ui.reconstructButton.blockSignals(True)
-        # segmentButtonBlocked = self.ui.segmentButton.blockSignals(True)
-        self.ui.segmentButton.setEnabled(False)
-        self.ui.reconstructButton.setEnabled(False)
-        self.ui.statusLabel.setText("Reconstructing volume...")
-        self.ui.volumeReconstructionSelector.setEnabled(False)
-        self.ui.statusProgressBar.setMaximum(100)
+    
+    def resetTaskProgressBar(self):
+        self.ui.taskProgressBar.setValue(0)
+        self.logic.progressCallback = None
         reconstructionNode = self._parameterNode.GetNodeReference("VolumeReconstruction")
-        reconstructionNode.AddObserver(reconstructionNode.VolumeAddedToReconstruction, self.updateReconstructionProgressBar)
+        reconstructionNode.RemoveObservers(reconstructionNode.VolumeAddedToReconstruction)
+    
+    def onStartButton(self):
+        # Update GUI
+        self.ui.startButton.setEnabled(False)
+        self.ui.useIndividualRadioButton.setEnabled(False)
+        self.ui.useAllRadioButton.setEnabled(False)
+        self.ui.modelDirectoryButton.setEnabled(False)
+        self.ui.modelComboBox.setEnabled(False)
+        self.ui.sequenceBrowserSelector.setEnabled(False)
+        self.ui.inputVolumeSelector.setEnabled(False)
+        self.ui.volumeReconstructionSelector.setEnabled(False)
+        self.ui.reconstructCheckBox.setEnabled(False)
+
+        self.ui.verticalFlipCheckbox.setEnabled(False)
+        self.ui.modelInputSizeSpinbox.setEnabled(False)
+        self.ui.outputTransformSelector.setEnabled(False)
+        self.ui.scanConversionPathLineEdit.setEnabled(False)
+
+        # Overall progress bar
+        numModels = len(self.logic.getModelsToUse())
+        progressMax = numModels * 2 if self.ui.reconstructCheckBox.checked else numModels
+        self.ui.overallProgressBar.setMaximum(progressMax)
         slicer.app.processEvents()
 
-        try:
-            self.logic.runVolumeReconstruction()
-            self.ui.statusLabel.setText("Ready")
-        except Exception as e:
-            logging.error(e)
-            self.ui.statusLabel.setText("Error")
-        finally:
-            # self.ui.reconstructButton.blockSignals(reconstructButtonBlocked)
-            # self.ui.segmentButton.blockSignals(segmentButtonBlocked)
-            self.ui.segmentButton.setEnabled(True)
-            self.ui.reconstructButton.setEnabled(True)
-            self.ui.volumeReconstructionSelector.setEnabled(True)
-            self.ui.statusProgressBar.setValue(0)
-            reconstructionNode.RemoveObservers(reconstructionNode.VolumeAddedToReconstruction)
+        for model in self.logic.getModelsToUse():
+            modelName = model.split(os.sep)[-2]
+            self.ui.overallStatusLabel.setText(f"Using {modelName}...")
+            try:
+                # Generate predictions/reconstructions for each model
+                self.logic.loadModel(model)
+
+                # Generate predictions and add to sequence browser
+                self.ui.taskStatusLabel.setText("Generating predictions...")
+                sequenceBrowser = self._parameterNode.GetNodeReference("SequenceBrowser")
+                numFrames = sequenceBrowser.GetMasterSequenceNode().GetNumberOfDataNodes() - 1
+                self.setPredictionProgressBar(numFrames)
+                self.logic.segmentSequence(model)
+                self.resetTaskProgressBar()
+
+                if self.ui.reconstructCheckBox.checked:
+                    self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
+                    # Reconstruct volume
+                    self.ui.taskStatusLabel.setText("Reconstructing volume...")
+                    self.setReconstructionProgressBar()
+                    slicer.app.processEvents()
+                    self.logic.runVolumeReconstruction(model)
+                    self.resetTaskProgressBar()
+
+                self.ui.overallStatusLabel.setText(f"Done using {modelName}")
+            except Exception as e:
+                logging.info(f"Skipping {modelName} due to error: {e}")
+                continue
+            finally:
+                # Update overall progress bar
+                self.resetTaskProgressBar()
+                self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
+                slicer.app.processEvents()
+
+        # Restore UI
+        self.ui.startButton.setEnabled(True)
+        self.ui.overallProgressBar.setValue(0)
+        self.ui.taskStatusLabel.setText("Ready")
+        self.ui.overallStatusLabel.setText("Ready")
+        self.ui.useIndividualRadioButton.setEnabled(True)
+        self.ui.useAllRadioButton.setEnabled(True)
+        self.ui.modelDirectoryButton.setEnabled(True)
+        self.ui.modelComboBox.setEnabled(True)
+        self.ui.sequenceBrowserSelector.setEnabled(True)
+        self.ui.inputVolumeSelector.setEnabled(True)
+        self.ui.volumeReconstructionSelector.setEnabled(True)
+        self.ui.reconstructCheckBox.setEnabled(True)
+
+        self.ui.verticalFlipCheckbox.setEnabled(True)
+        self.ui.modelInputSizeSpinbox.setEnabled(True)
+        self.ui.outputTransformSelector.setEnabled(True)
+        self.ui.scanConversionPathLineEdit.setEnabled(True)
+        slicer.app.processEvents()
 
 
 #
@@ -576,7 +615,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    LAST_MODEL_PATH_SETTING = "TorchSequenceSegmentation/LastModelPath"
+    LAST_MODEL_FOLDER_SETTING = "TorchSequenceSegmentation/LastModelFolder"
     LAST_SCAN_CONVERSION_PATH_SETTING = "TorchSequenceSegmentation/LastScanConversionPath"
 
     def __init__(self):
@@ -608,6 +647,24 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         if not parameterNode.GetParameter("Invert"):
             parameterNode.SetParameter("Invert", "false")
     
+    def getAllModelPaths(self):
+        modelFolder = slicer.util.settingsValue(self.LAST_MODEL_FOLDER_SETTING, "")
+        if modelFolder:
+            models = glob.glob(os.path.join(modelFolder, "**", "*traced*.pt"), recursive=True)
+            normModels = [os.path.normpath(model) for model in models]  # normalize paths
+            return normModels
+        else:
+            return []
+    
+    def getModelsToUse(self):
+        modelListJSON = self.getParameterNode().GetParameter("ModelsToUse")
+        modelList = json.loads(modelListJSON)
+        return modelList
+    
+    def setModelsToUse(self, modelPaths):
+        modelListJSON = json.dumps(modelPaths)
+        self.getParameterNode().SetParameter("ModelsToUse", modelListJSON)
+    
     def loadModel(self, modelPath):
         """
         Load PyTorch model from file.
@@ -627,9 +684,6 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                 config = json.loads(extra_files["config.json"])
                 inputSize = config["shape"][-1]
                 self.getParameterNode().SetParameter("ModelInputSize", str(inputSize))
-
-        settings = qt.QSettings()
-        settings.setValue(self.LAST_MODEL_PATH_SETTING, modelPath)
     
     def loadScanConversion(self, scanConversionPath):
         if not scanConversionPath:
@@ -687,9 +741,6 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             self.curvilinear_mask = cv2.circle(self.curvilinear_mask,
                                                (center_coordinate_pixel[1], center_coordinate_pixel[0]),
                                                radius_start_px + 1, 0, -1)
-        
-        settings = qt.QSettings()
-        settings.setValue(self.LAST_SCAN_CONVERSION_PATH_SETTING, scanConversionPath)
     
     def scanConvert(self, linearArray):
         z = linearArray.flatten()
@@ -710,12 +761,12 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                     newName += "_1"
         return newName
     
-    def addPredictionVolume(self):
+    def addPredictionVolume(self, modelName):
         parameterNode = self.getParameterNode()
 
         # Make new prediction volume to not overwrite existing one
         predictionVolume = parameterNode.GetNodeReference("PredictionVolume")
-        volumeName = self.getUniqueName(predictionVolume, "Prediction")
+        volumeName = self.getUniqueName(predictionVolume, f"{modelName.split(os.sep)[-2]}_Prediction")
         predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", volumeName)
         predictionVolume.CreateDefaultDisplayNodes()
         parameterNode.SetNodeReferenceID("PredictionVolume", predictionVolume.GetID())
@@ -727,13 +778,13 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         
         return predictionVolume
     
-    def addPredictionSequenceNode(self, predictionVolume):
+    def addPredictionSequenceNode(self, predictionVolume, modelName):
         parameterNode = self.getParameterNode()
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
 
         # Add a new sequence node to the sequence browser
         masterSequenceNode = sequenceBrowser.GetMasterSequenceNode()
-        sequenceName = self.getUniqueName(masterSequenceNode, "PredictionSequence")
+        sequenceName = self.getUniqueName(masterSequenceNode, f"{modelName.split(os.sep)[-2]}_PredictionSequence")
         predictionSequenceNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", sequenceName)
         sequenceBrowser.AddSynchronizedSequenceNode(predictionSequenceNode)
         sequenceBrowser.AddProxyNode(predictionVolume, predictionSequenceNode, False)
@@ -753,14 +804,14 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         parameterNode = self.getParameterNode()
         toFlip = parameterNode.GetParameter("FlipVertical").lower() == "true"
         if toFlip:
-            imageArray = np.flip(imageArray, axis=0)  # axis 0 is channel dimension
+            imageArray = np.flip(imageArray, axis=0)
         
         # Use inverse scan conversion if specified by user, otherwise resize
         if self.scanConversionDict:
             inputArray = map_coordinates(imageArray[0, :, :], [self.cart_x, self.cart_y], order=1)
         else:
             inputSize = int(parameterNode.GetParameter("ModelInputSize"))
-            inputArray = cv2.resize(imageArray[0, :, :], (inputSize, inputSize), antialias=True)  # default is bilinear
+            inputArray = cv2.resize(imageArray[0, :, :], (inputSize, inputSize))  # default is bilinear
 
         # Convert to tensor and add batch dimension
         inputTensor = torch.from_numpy(inputArray).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
@@ -777,17 +828,17 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             outputArray *= self.curvilinear_mask
         else:
             outputArray = output.squeeze().detach().cpu().numpy() * 255
-            outputArray = cv2.resize(outputArray, (imageArray.shape[2], imageArray.shape[1]))
+            outputArray = cv2.resize(outputArray[1], (imageArray.shape[2], imageArray.shape[1]))
 
         outputArray = outputArray.astype(np.uint8)[np.newaxis, ...]
 
         # Flip output back if needed
         if toFlip:
-            outputArray = np.flip(outputArray, axis=1)
+            outputArray = np.flip(outputArray, axis=0)
 
         return outputArray
     
-    def segmentSequence(self):
+    def segmentSequence(self, modelName):
         self.isProcessing = True
 
         parameterNode = self.getParameterNode()
@@ -796,8 +847,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         inputSequence = sequenceBrowser.GetSequenceNode(inputVolume)
 
         # Create prediction sequence
-        predictionVolume = self.addPredictionVolume()
-        predictionSequenceNode = self.addPredictionSequenceNode(predictionVolume)
+        predictionVolume = self.addPredictionVolume(modelName)
+        predictionSequenceNode = self.addPredictionSequenceNode(predictionVolume, modelName)
 
         # Overlay prediction volume in slice view
         predictionDisplayNode = predictionVolume.GetDisplayNode()
@@ -822,14 +873,14 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         self.isProcessing = False
     
-    def addROINode(self):
+    def addROINode(self, modelName):
         parameterNode = self.getParameterNode()
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
         predictionVolume = parameterNode.GetNodeReference("PredictionVolume")
 
         # Create new ROI node
         roiNode = parameterNode.GetNodeReference("ROI")
-        roiName = self.getUniqueName(roiNode, "ROI")
+        roiName = self.getUniqueName(roiNode, f"{modelName.split(os.sep)[-2]}_ROI")
         roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", roiName)
         parameterNode.SetNodeReferenceID("ROI", roiNode.GetID())
         roiNode.SetDisplayVisibility(False)
@@ -838,18 +889,18 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         return roiNode
 
-    def addReconstructionVolume(self):
+    def addReconstructionVolume(self, modelName):
         parameterNode = self.getParameterNode()
 
         reconstructionVolume = parameterNode.GetNodeReference("ReconstructionVolume")
-        reconstructionName = self.getUniqueName(reconstructionVolume, "ReconstructionVolume")
+        reconstructionName = self.getUniqueName(reconstructionVolume, f"{modelName.split(os.sep)[-2]}_ReconstructionVolume")
         reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", reconstructionName)
         reconstructionVolume.CreateDefaultDisplayNodes()
         parameterNode.SetNodeReferenceID("ReconstructionVolume", reconstructionVolume.GetID())
         
         return reconstructionVolume
 
-    def runVolumeReconstruction(self):
+    def runVolumeReconstruction(self, modelName):
         self.isProcessing = True
 
         volRenLogic = slicer.modules.volumerendering.logic()
@@ -862,13 +913,12 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         # Set volume reconstruction parameters
         reconstructionNode.SetAndObserveInputSequenceBrowserNode(sequenceBrowser)
         reconstructionNode.SetAndObserveInputVolumeNode(predictionVolume)
-        # reconstructionNode.SetInterpolationMode(reconstructionNode.LINEAR_INTERPOLATION)
 
-        roiNode = self.addROINode()
+        roiNode = self.addROINode(modelName)
         reconstructionNode.SetAndObserveInputROINode(roiNode)
 
         # Set reconstruction output volume
-        reconstructionVolume = self.addReconstructionVolume()
+        reconstructionVolume = self.addReconstructionVolume(modelName)
         reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
 
         # Set volume rendering properties
@@ -876,6 +926,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         volRenDisplayNode.SetAndObserveROINodeID(roiNode.GetID())
         volPropertyNode = volRenDisplayNode.GetVolumePropertyNode()
         volPropertyNode.Copy(volRenLogic.GetPresetByName("MR-Default"))
+        reconstructionVolume.SetDisplayVisibility(False)
 
         # Run volume reconstruction
         self.volRecLogic.ReconstructVolumeFromSequence(reconstructionNode)
