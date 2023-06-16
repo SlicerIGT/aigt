@@ -297,7 +297,10 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Set models to use in parameter node
         useIndividualModel = self.ui.useIndividualRadioButton.checked
         if useIndividualModel:
-            self.logic.setModelsToUse([self.ui.modelComboBox.itemData(self.ui.modelComboBox.currentIndex)])
+            if self.ui.modelComboBox.count > 0:
+                self.logic.setModelsToUse([self.ui.modelComboBox.itemData(self.ui.modelComboBox.currentIndex)])
+            else:
+                self.logic.setModelsToUse([])
         else:
             self.logic.setModelsToUse(self.logic.getAllModelPaths())
 
@@ -441,6 +444,13 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode.SetParameter("FlipVertical", "true" if self.ui.verticalFlipCheckbox.checked else "false")
         self._parameterNode.SetParameter("ModelInputSize", str(self.ui.modelInputSizeSpinbox.value))
 
+        # Update individual model to use
+        if self.ui.useIndividualRadioButton.checked:
+            if self.ui.modelComboBox.count > 0:
+                self.logic.setModelsToUse([self.ui.modelComboBox.itemData(self.ui.modelComboBox.currentIndex)])
+            else:
+                self.logic.setModelsToUse([])
+
         self._parameterNode.EndModify(wasModified)
     
     def updateSettingsFromGUI(self, caller=None, event=None):
@@ -470,7 +480,10 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         useIndividualModel = self.ui.useIndividualRadioButton.checked
         if useIndividualModel:
             self.ui.modelComboBox.setEnabled(True)
-            self.logic.setModelsToUse([self.ui.modelComboBox.itemData(self.ui.modelComboBox.currentIndex)])
+            if self.ui.modelComboBox.count > 0:
+                self.logic.setModelsToUse([self.ui.modelComboBox.itemData(self.ui.modelComboBox.currentIndex)])
+            else:
+                self.logic.setModelsToUse([])
         else:
             self.ui.modelComboBox.setEnabled(False)
             self.logic.setModelsToUse(self.logic.getAllModelPaths())
@@ -539,6 +552,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.modelInputSizeSpinbox.setEnabled(False)
         self.ui.outputTransformSelector.setEnabled(False)
         self.ui.scanConversionPathLineEdit.setEnabled(False)
+        self.ui.clearScanConversionButton.setEnabled(False)
 
         # Overall progress bar
         numModels = len(self.logic.getModelsToUse())
@@ -598,6 +612,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.modelInputSizeSpinbox.setEnabled(True)
         self.ui.outputTransformSelector.setEnabled(True)
         self.ui.scanConversionPathLineEdit.setEnabled(True)
+        self.ui.clearScanConversionButton.setEnabled(True)
         slicer.app.processEvents()
 
 
