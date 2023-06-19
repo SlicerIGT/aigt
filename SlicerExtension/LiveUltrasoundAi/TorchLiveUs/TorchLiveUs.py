@@ -604,7 +604,7 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             resized_output_array = resized_output_array * self.curvilinear_mask
         else:
             output_array = output_tensor.squeeze().detach().cpu().numpy() * 255
-            resized_output_array = cv2.resize(output_array, (input_array.shape[2], input_array.shape[1]), interpolation=cv2.INTER_LINEAR)
+            resized_output_array = cv2.resize(output_array[1], (input_array.shape[2], input_array.shape[1]), interpolation=cv2.INTER_LINEAR)
 
         # Set output volume image data
 
