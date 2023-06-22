@@ -127,8 +127,10 @@ def main(args):
         num_lines = scanconvert_config["num_lines"]
         num_samples_along_lines = scanconvert_config["num_samples_along_lines"]
 
-        scanconverted_ultrasound_data = np.zeros((ultrasound_data.shape[0], num_lines, num_samples_along_lines, ultrasound_data.shape[-1]))
-        scanconverted_segmentation_data = np.zeros((segmentation_data.shape[0], num_lines, num_samples_along_lines, segmentation_data.shape[-1]))
+        scanconverted_ultrasound_data = np.zeros((ultrasound_data.shape[0], num_lines, num_samples_along_lines, ultrasound_data.shape[-1]),
+                                                 dtype=ultrasound_data.dtype)
+        scanconverted_segmentation_data = np.zeros((segmentation_data.shape[0], num_lines, num_samples_along_lines, segmentation_data.shape[-1]),
+                                                   dtype=segmentation_data.dtype)
 
         # Print some info on the console
 
