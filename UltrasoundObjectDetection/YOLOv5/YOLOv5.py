@@ -2,6 +2,7 @@ import sys
 import torch
 import sys
 import numpy as np
+import cv2
 
 from models.common import DetectMultiBackend
 from utils.general import non_max_suppression, scale_boxes
@@ -23,24 +24,28 @@ class YOLOv5():
         self.model = None
         self.class_names = None
         self.line_thickness = 1
+        self.resized_size = 512
 
     def loadModel(self,modelFolder,modelName):
         # Load model
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         weights = f'{modelFolder}/weights/best.pt'
 
         self.model = DetectMultiBackend(weights=weights, device=device)
         self.class_names = self.model.names
+        print(f'device: {self.model.device}')
 
     def predict(self,image):
         #Replace the following lines with whatever needs to be done to use the model to predict on new data
         # in this case the image needed to be recoloured and resized and our prediction returns the tool name and the
         # softmax output
         im = image.copy()
-        im = np.stack([im, im, im], axis=-1)
+        if len(im.shape) == 2:
+            im = np.stack([im, im, im], axis=-1)
+
+        im = self._format_image(im)
         
         im = torch.from_numpy(im).permute(2,0,1).to(self.model.device)
-
         
         im = im.half() if self.model.fp16 else im.float()  # uint8 to fp16/32
         im /= 255  # 0 - 255 to 0.0 - 1.0
@@ -73,3 +78,21 @@ class YOLOv5():
 
     def saveModel(self,trainedModel,saveLocation):
         pass
+    
+    def _format_image(self, image):
+        #interpolation = cv2.INTER_LINEAR
+        height, width, layer = image.shape
+        if width > height:
+            height = round(height*(self.resized_size/width))
+            width = self.resized_size
+        else:
+            width = round(width*(self.resized_size/height))
+            height = self.resized_size
+
+        padding_arr = np.zeros([round((self.resized_size-height)/2),self.resized_size,3], dtype='uint8')
+        resized = cv2.resize(image, dsize=(width,height))
+        stacked = np.vstack((padding_arr,resized,padding_arr))
+        if (self.resized_size-height) % 2 != 0:
+            stacked=np.delete(stacked,0,0)
+        
+        return stacked
