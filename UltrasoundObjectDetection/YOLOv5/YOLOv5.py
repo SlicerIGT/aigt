@@ -70,7 +70,6 @@ class YOLOv5():
                     label = (f'{self.class_names[c]} {conf:.2f}')
                     annotator.box_label(xyxy, label, color=colors(c, True))
 
-        im0 = np.transpose(im0, (2,0,1))
         return im0
 
 
