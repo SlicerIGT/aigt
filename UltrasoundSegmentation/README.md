@@ -87,6 +87,40 @@ This will add a configuration option so that you can select it as a debug config
 
 With the output of this script, you can separate your data into different folders. Create a folder for a training set, validation set, and testing set. Pick a few participants' data from the output folder and move them to the testing set folder. Pick another few and move them to the validation set folder. The remaining data in the folder can be used to train the model.
 
+## Extract scanlines (optional)
+
+If the ultrasound images are recorded usinga  curvilinear transducer, training and inference may be more efficient if the scan lines are extracted from the image and arranged in a rectangular array as one column for each scan line. Since the output image size can be controlled by the scan line configuration (see ```--scanconvert-config``` commandline argument), this step can also be used to resize input images.
+
+Example launch.json configuration for running extract_scanlines.py
+
+```
+        {
+            "name": "Extract scanlines: training 128",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--input-dir", "g:/Spine/TrainingData_0_512",
+                     "--output-dir", "g:/Spine/TrainingData_sc_0_128",
+                     "--scanconvert-config", "scanconvert_config.yaml",
+                     "--log-file", "extract_scanlines.log"]
+        },
+```
+
+Example content for ```scanconvert_config.yaml``` producing 128x128 linear scan images from 512x512 curved scan input images:
+
+```
+num_lines: !!int 128
+num_samples_along_lines: !!int 128
+curvilinear_image_size: !!int 512
+center_coordinate_pixel: [0, 256]
+radius_start_pixels: 100
+radius_end_pixels: 420
+angle_min_degrees: -36
+angle_max_degrees: 36
+```
+
 ## convert_to_slice.py
 
 The 3D patient arrays need to be converted into individual 2D slices for training. This can be done using the [convert_to_slice.py](convert_to_slice.py) script:
