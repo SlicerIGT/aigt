@@ -37,7 +37,7 @@ class YOLOv5():
         # in this case the image needed to be recoloured and resized and our prediction returns the tool name and the
         # softmax output
         im = image.copy()
-        im = np.expand_dims(im, axis=-1)
+        im = np.stack([im, im, im], axis=-1)
         
         im = torch.from_numpy(im).permute(2,0,1).to(self.model.device)
 
