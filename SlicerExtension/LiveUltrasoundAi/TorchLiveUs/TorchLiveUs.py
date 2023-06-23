@@ -590,7 +590,7 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         with torch.inference_mode():
             output_logits = self.model(input_tensor.to(DEVICE))
         if isinstance(output_logits, list):
-            output_logits = outputs[0]
+            output_logits = output_logits[0]
 
         output_tensor = torch.softmax(output_logits, dim=1)
 

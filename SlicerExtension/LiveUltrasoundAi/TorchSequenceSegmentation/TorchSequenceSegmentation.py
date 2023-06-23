@@ -834,7 +834,10 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         # Run prediction
         with torch.inference_mode():
             output = self.model(inputTensor)
-            output = torch.nn.functional.softmax(output, dim=1)
+        
+        if isinstance(output, list):
+            output = output[0]
+        output = torch.nn.functional.softmax(output, dim=1)
 
         # Scan convert or resize
         if self.scanConversionDict:
