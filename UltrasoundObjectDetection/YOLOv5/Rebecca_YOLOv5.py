@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 from models.common import DetectMultiBackend
 from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
 from utils.general import (LOGGER, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
-                           increment_path, non_max_suppression, print_args, scale_coords, strip_optimizer, xyxy2xywh)
+                           increment_path, non_max_suppression, print_args, scale_boxes, strip_optimizer, xyxy2xywh)
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 import pandas
@@ -30,6 +30,7 @@ class Rebecca_YOLOv5:
         self.iou_thres = 0.01
         self.agnostic_nms = False
         self.model = None
+        self.resized_size = 512
 
     def loadModel(self, modelFolder, modelName):
         weights = os.path.join(modelFolder,"weights","best.pt")
@@ -38,8 +39,9 @@ class Rebecca_YOLOv5:
 
     def predict(self,image):
         #image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
-        image = cv2.flip(image,0)
+        #image = cv2.flip(image,0)
         im = image.copy()
+        im = self._format_image(im)
         im = np.transpose(im, [2, 0, 1])
         im = torch.from_numpy(im).to(self.device)
         im = im.float()  # uint8 to fp16/32
@@ -64,7 +66,7 @@ class Rebecca_YOLOv5:
             bboxes = []
             if len(det):
                 # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(im.shape[2:], det[:, :4], image.shape).round()
+                det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], image.shape).round()
 
                 # Write results
 
@@ -82,4 +84,24 @@ class Rebecca_YOLOv5:
         #image = np.transpose(image, [2, 0, 1])
         image = np.expand_dims(image,axis=0)
         return image#str(bboxes)
+    
+    def _format_image(self, image):
+        if len(image.shape) == 2:
+            im = np.stack([image, image, image], axis=-1)
+            
+        height, width, layer = image.shape
+        if width > height:
+            height = round(height*(self.resized_size/width))
+            width = self.resized_size
+        else:
+            width = round(width*(self.resized_size/height))
+            height = self.resized_size
+
+        padding_arr = np.zeros([round((self.resized_size-height)/2),self.resized_size,3], dtype='uint8')
+        resized = cv2.resize(image, dsize=(width,height))
+        stacked = np.vstack((padding_arr,resized,padding_arr))
+        if (self.resized_size-height) % 2 != 0:
+            stacked=np.delete(stacked,0,0)
+        
+        return stacked
 

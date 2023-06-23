@@ -40,8 +40,6 @@ class YOLOv5():
         # in this case the image needed to be recoloured and resized and our prediction returns the tool name and the
         # softmax output
         im = image.copy()
-        if len(im.shape) == 2:
-            im = np.stack([im, im, im], axis=-1)
 
         im = self._format_image(im)
         
@@ -81,7 +79,9 @@ class YOLOv5():
         pass
     
     def _format_image(self, image):
-        #interpolation = cv2.INTER_LINEAR
+        if len(image.shape) == 2:
+            im = np.stack([image, image, image], axis=-1)
+            
         height, width, layer = image.shape
         if width > height:
             height = round(height*(self.resized_size/width))
