@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from time import perf_counter
 from datetime import datetime
+from torch import autocast
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 
@@ -41,7 +42,16 @@ from monai.metrics import (
 )
 
 from UltrasoundDataset import UltrasoundDataset
-from UNet import UNet
+
+from nnunet_utils import convert_to_nnunet_raw, generate_split_json
+from nnUNet.nnunetv2.paths import nnUNet_raw, nnUNet_preprocessed
+from nnUNet.nnunetv2.experiment_planning.plan_and_preprocess_api import (
+    extract_fingerprints,
+    plan_experiments,
+    preprocess
+)
+from nnUNet.nnunetv2.run.run_training import get_trainer_from_args
+from nnUNet.nnunetv2.utilities.helpers import dummy_context
 
 
 # Parse command line arguments
@@ -58,6 +68,8 @@ def parse_args():
     parser.add_argument("--wandb-exp-name", type=str)
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--save-log", action="store_true")
+    parser.add_argument("--nnunet-dataset-name", type=str)
+    parser.add_argument("--verify-nnunet_dataset", action="store_true")
     try:
         return parser.parse_args()
     except SystemExit as err:
@@ -178,23 +190,73 @@ def main(args):
     train_transform = Compose(train_transform_list)
     val_transform = Compose(val_transform_list)
 
-    # Create dataloaders using UltrasoundDataset
     train_dataset = UltrasoundDataset(args.train_data_folder, transform=train_transform)
-    train_dataloader = DataLoader(
-        train_dataset, 
-        batch_size=config["batch_size"], 
-        shuffle=config["shuffle"], 
-        num_workers=4,
-        generator=g
-    )
     val_dataset = UltrasoundDataset(args.val_data_folder, transform=val_transform)
-    val_dataloader = DataLoader(
-        val_dataset, 
-        batch_size=config["batch_size"], 
-        shuffle=False, 
-        num_workers=0,
-        generator=g
-    )
+
+    if config["model_name"].lower() == "nnunet":
+        # Convert dataset to nnUNet format
+        convert_to_nnunet_raw(
+            args.train_data_folder, 
+            args.val_data_folder, 
+            nnUNet_raw, 
+            args.nnunet_dataset_name, 
+            config["channel_names"], 
+            config["labels"], 
+            args.verify_nnunet_dataset
+        )
+
+        # Preprocessing
+        dataset_id = int(args.nnunet_dataset_name.split("_")[0][7:])
+        logging.info("Fingerprint extraction...")
+        extract_fingerprints([dataset_id], clean=False)  # don't override existing fingerprints
+        logging.info("Experiment planning...")
+        plan_experiments([dataset_id])
+        logging.info("Preprocessing...")
+        preprocess([dataset_id], configurations=("2d",), num_processes=(8,))  # Only 2D configuration
+
+        # Generate data split
+        generate_split_json(args.train_data_folder, args.val_data_folder, nnUNet_preprocessed)
+
+        # Initialize trainer and dataloaders
+        nnunet_trainer = get_trainer_from_args(
+            args.nnunet_dataset_name, "2d", 0, "nnUNetTrainer_50epochs", device=device
+        )
+        nnunet_trainer.on_train_start()
+        train_dataloader = nnunet_trainer.dataloader_train
+        val_dataloader = nnunet_trainer.dataloader_val
+
+        # Update config
+        config["lambda_ce"] = 0.5
+        config["num_epochs"] = nnunet_trainer.num_epochs
+        config["batch_size"] = nnunet_trainer.configuration_manager.batch_size
+        config["learning_rate"] = nnunet_trainer.initial_lr
+        config["learning_rate_decay_factor"] = nnunet_trainer.lr_scheduler.exponent
+        config["learning_rate_decay_frequency"] = 1
+        config["weight_decay"] = nnunet_trainer.weight_decay
+
+        # Log values of the config dictionary on Weights & Biases
+        wandb.config.update(config, allow_val_change=True)
+
+        # Save copy of config file in run folder
+        with open(config_copy_path, "w") as f:
+            yaml.dump(config, f)
+            logging.info(f"Updated config file at {config_copy_path}.")
+    else:
+        # Create dataloaders using UltrasoundDataset
+        train_dataloader = DataLoader(
+            train_dataset, 
+            batch_size=config["batch_size"], 
+            shuffle=config["shuffle"], 
+            num_workers=4,
+            generator=g
+        )
+        val_dataloader = DataLoader(
+            val_dataset, 
+            batch_size=config["batch_size"], 
+            shuffle=False, 
+            num_workers=0,
+            generator=g
+        )
 
     # Construct model
     if config["model_name"].lower() == "attentionunet":
@@ -231,6 +293,8 @@ def main(args):
             in_channels=config["in_channels"],
             out_channels=config["out_channels"]
         )
+    elif config["model_name"].lower() == "nnunet":
+        model = nnunet_trainer.network
     else:  # default to unet
         model = monai.networks.nets.UNet(
             spatial_dims=2,
@@ -240,54 +304,55 @@ def main(args):
             strides=(2, 2, 2, 2),
             num_res_units=2
         )
-    
-    # Construct loss function
-    use_sigmoid = True if config["out_channels"] == 1 else False
-    use_softmax = True if config["out_channels"] > 1 else False
-    ce_weight = torch.tensor(config["class_weights"], device=device) \
-                    if config["out_channels"] > 1 else None
-    if config["loss_function"].lower() == "dicefocal":
-        loss_function = monai.losses.DiceFocalLoss(
-            sigmoid=use_sigmoid,
-            softmax=use_softmax,
-            lambda_dice=(1.0 - config["lambda_ce"]),
-            lambda_focal=config["lambda_ce"]
-        )
-    elif config["loss_function"].lower() == "tversky":
-        loss_function = monai.losses.TverskyLoss(
-            sigmoid=use_sigmoid,
-            softmax=use_softmax,
-            alpha=0.3,
-            beta=0.7  # best values from original paper
-        )
-    else:  # default to dice + cross entropy
-        loss_function = monai.losses.DiceCELoss(
-            sigmoid=use_sigmoid,
-            softmax=use_softmax,
-            lambda_dice=(1.0 - config["lambda_ce"]), 
-            lambda_ce=config["lambda_ce"],
-            ce_weight=ce_weight
-        )
-
     model = model.to(device=device)
+    
+    if config["model_name"].lower() == "nnunet":
+        loss_function = nnunet_trainer.loss
+        optimizer = nnunet_trainer.optimizer
+        scheduler = nnunet_trainer.lr_scheduler
+    else:
+        # Construct loss function
+        use_sigmoid = True if config["out_channels"] == 1 else False
+        use_softmax = True if config["out_channels"] > 1 else False
+        ce_weight = torch.tensor(config["class_weights"], device=device) \
+                        if config["out_channels"] > 1 else None
+        if config["loss_function"].lower() == "dicefocal":
+            loss_function = monai.losses.DiceFocalLoss(
+                sigmoid=use_sigmoid,
+                softmax=use_softmax,
+                lambda_dice=(1.0 - config["lambda_ce"]),
+                lambda_focal=config["lambda_ce"]
+            )
+        elif config["loss_function"].lower() == "tversky":
+            loss_function = monai.losses.TverskyLoss(
+                sigmoid=use_sigmoid,
+                softmax=use_softmax,
+                alpha=0.3,
+                beta=0.7  # best values from original paper
+            )
+        else:  # default to dice + cross entropy
+            loss_function = monai.losses.DiceCELoss(
+                sigmoid=use_sigmoid,
+                softmax=use_softmax,
+                lambda_dice=(1.0 - config["lambda_ce"]), 
+                lambda_ce=config["lambda_ce"],
+                ce_weight=ce_weight
+            )
 
-    # from torchinfo import summary
-    # summary(model, input_size=(1, config["in_channels"], 128, 128))
+        optimizer = Adam(model.parameters(), config["learning_rate"], weight_decay=config["weight_decay"])
 
-    optimizer = Adam(model.parameters(), config["learning_rate"], weight_decay=config["weight_decay"])
-
-    # Set up learning rate decay
-    try:
-        learning_rate_decay_frequency = int(config["learning_rate_decay_frequency"])
-    except ValueError:
-        learning_rate_decay_frequency = 100
-    try:
-        learning_rate_decay_factor = float(config["learning_rate_decay_factor"])
-    except ValueError:
-        learning_rate_decay_factor = 1.0 # No decay
-    logging.info(f"Learning rate decay frequency: {learning_rate_decay_frequency}")
-    logging.info(f"Learning rate decay factor: {learning_rate_decay_factor}")
-    scheduler = StepLR(optimizer, step_size=learning_rate_decay_frequency, gamma=learning_rate_decay_factor)
+        # Set up learning rate decay
+        try:
+            learning_rate_decay_frequency = int(config["learning_rate_decay_frequency"])
+        except ValueError:
+            learning_rate_decay_frequency = 100
+        try:
+            learning_rate_decay_factor = float(config["learning_rate_decay_factor"])
+        except ValueError:
+            learning_rate_decay_factor = 1.0 # No decay
+        logging.info(f"Learning rate decay frequency: {learning_rate_decay_frequency}")
+        logging.info(f"Learning rate decay factor: {learning_rate_decay_factor}")
+        scheduler = StepLR(optimizer, step_size=learning_rate_decay_frequency, gamma=learning_rate_decay_factor)
 
     # Metrics
     include_background = True if config["out_channels"] == 1 else False
@@ -305,47 +370,87 @@ def main(args):
         post_pred = Compose([AsDiscrete(argmax=True, to_onehot=config["out_channels"])])
 
     # Train model
-    for epoch in range(config["num_epochs"]):
-        logging.info(f"Epoch {epoch+1}/{config['num_epochs']}")
+    epochs = nnunet_trainer.num_epochs if config["model_name"].lower() == "nnunet" else config["num_epochs"]
+    for epoch in range(epochs):
+        logging.info(f"Epoch {epoch+1}/{epochs}")
         model.train()
         epoch_loss = 0
         step = 0
-        for batch in tqdm(train_dataloader):
+        if config["model_name"].lower() == "nnunet":
+            scheduler.step(epoch)
+            num_batches = nnunet_trainer.num_iterations_per_epoch
+        else:
+            num_batches = len(train_dataloader)
+            train_iter = iter(train_dataloader)
+        for batch_id in tqdm(range(num_batches)):
             step += 1
-            inputs = batch["image"].to(device=device)
-            labels = batch["label"].to(device=device)
-            if config["out_channels"] > 1:
-                labels = monai.networks.one_hot(labels, num_classes=config["out_channels"])
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            if isinstance(outputs, list):  # for unet++ output
-                outputs = outputs[0]
-            loss = loss_function(outputs, labels)
-            loss.backward()
-            optimizer.step()
+            if config["model_name"].lower() == "nnunet":
+                loss = nnunet_trainer.train_step(next(train_dataloader))["loss"]
+            else:
+                batch = next(train_iter)
+                inputs = batch["image"].to(device=device)
+                labels = batch["label"].to(device=device)
+                if config["out_channels"] > 1:
+                    labels = monai.networks.one_hot(labels, num_classes=config["out_channels"])
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                if isinstance(outputs, list):  # for unet++ output
+                    outputs = outputs[0]
+                loss = loss_function(outputs, labels)
+                loss.backward()
+                optimizer.step()
             epoch_loss += loss.item()
         epoch_loss /= step
         logging.info(f"Training loss: {epoch_loss}")
-        scheduler.step()
+        if config["model_name"].lower() != "nnunet":
+            scheduler.step()
 
         # Validation step
         model.eval()
         val_loss = 0
         val_step = 0
         with torch.no_grad():
-            for batch in tqdm(val_dataloader):
+            if config["model_name"].lower() == "nnunet":
+                num_val_batches = nnunet_trainer.num_val_iterations_per_epoch
+            else:
+                num_val_batches = len(val_dataloader)
+                val_iter = iter(val_dataloader)
+            for i in tqdm(range(num_val_batches)):
                 val_step += 1
-                val_inputs = batch["image"].to(device=device)
-                val_labels = batch["label"].to(device=device)
-                if config["out_channels"] > 1:
-                    val_labels = monai.networks.one_hot(val_labels, num_classes=config["out_channels"])
-                val_outputs = model(val_inputs)
-                if isinstance(val_outputs, list):
-                    val_outputs = val_outputs[0]
-                
-                loss = loss_function(val_outputs, val_labels)
+                if config["model_name"].lower() == "nnunet":
+                    batch = next(val_dataloader)
+                    val_inputs = batch["data"]
+                    val_labels = batch["target"]
+
+                    # Send to device
+                    val_inputs = val_inputs.to(device, non_blocking=True)
+                    if isinstance(val_labels, list):
+                        val_labels = [i.to(device, non_blocking=True) for i in val_labels]
+                    else:
+                        val_labels = val_labels.to(device, non_blocking=True)
+
+                    # Generate predictions
+                    with autocast(device.type, enabled=True) if device.type == "cuda" else dummy_context():
+                        val_outputs = model(val_inputs)
+                        del val_inputs
+                        loss = nnunet_trainer.loss(val_outputs, val_labels)
+
+                    val_outputs = val_outputs[0]  # take highest resolution output
+                    val_labels = val_labels[0]
+                else:
+                    batch = next(val_iter)
+                    val_inputs = batch["image"].to(device=device)
+                    val_labels = batch["label"].to(device=device)
+                    if config["out_channels"] > 1:
+                        val_labels = monai.networks.one_hot(val_labels, num_classes=config["out_channels"])
+                    val_outputs = model(val_inputs)
+                    if isinstance(val_outputs, list):
+                        val_outputs = val_outputs[0]
+                    loss = loss_function(val_outputs, val_labels)
+
                 val_loss += loss.item()
                 
+                # Post processing
                 val_outputs = [post_pred(i) for i in decollate_batch(val_outputs)]
                 val_labels = decollate_batch(val_labels)
                 
@@ -376,7 +481,6 @@ def main(args):
             )
         
         # Log a random sample of test images along with their ground truth and predictions
-        
         random.seed(config["seed"])
         sample = random.sample(range(len(val_dataset)), args.num_sample_images)
 
@@ -386,6 +490,8 @@ def main(args):
             outputs = model(inputs.to(device=device))
         if isinstance(outputs, list):
             outputs = outputs[0]
+        if isinstance(labels, list):
+            labels = labels[0]
 
         fig, axes = plt.subplots(args.num_sample_images, 3, figsize=(9, 3 * args.num_sample_images))
         for i in range(args.num_sample_images):

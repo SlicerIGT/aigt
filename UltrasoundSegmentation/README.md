@@ -167,13 +167,15 @@ Similar to running the prepare_data.py script, train.py can be run from command 
 * `--train-data-folder` should be the path of the folder with the training set (which should be a subset of the output of prepare_data.py)
 * `--val-data-folder` should be the path of the folder with validation set 
 * `--output-dir` is the name of the directory in which to save the run
-* `--config-file` is by default `"train_config.yaml"`
+* `--config-file` is the yaml file detailing the training settings. See [train_config.yaml](train_config.yaml) for an example. Also see [Supported networks](#supported-networks) to see the available networks.
 * `--save-torchscript` saves the model as a torchscript
 * `--save-ckpt-freq` is the integer value for how often (number of epochs) the model saves and is 0 by default
 * `--wandb-project-name` should be the name of the project in _Weights and Biases_ and has a default name
 * `--wandb-exp-name` is the experiment name in _Weights and Biases_ and is by default the model name and timestamp of the experiment
 * `--log-level` is by default `"INFO"`
 * `--save-log` saves the log to a file named train.log.
+* `--nnunet-dataset-name` is the name of the dataset used by nnUNet (see [below](#using-the-nnunet))
+* `--verify-nnunet-dataset` checks dataset integrity if included
 
 The output of this script is a PyTorch model that is trained from your training data. For using the trained model for 3D volume reconstruction with the [Slicer module](../SlicerExtension/LiveUltrasoundAi/TorchSequenceSegmentation/), it is necessary to include the `--save-torchscript` flag.
 
@@ -201,3 +203,83 @@ To configure the JSON file for train.py, open the launch.json again. Copy and pa
 ```
 
 Similar to the configuration for prepare_data.py, `"name"` can be changed, but `"type"`, `"request"`, `"program"`, `"console"`, and `"justmycode"` should be untouched. Argument parameters are outlined above, but should be in string format and separated by commas in the configuration.
+
+## Supported networks
+
+The network architectures that are currently supported (and their required `names` in the config file) are listed below:
+
+- UNet (`unet`)
+- UNet with EfficientNetB4 as backbone (`effnetunet`)
+- Attention UNet (`attentionunet`)
+- UNet++ (`unetplusplus`)
+- UNETR (`unetr`)
+- SegResNet (`segresnet`)
+- nnUNet (`nnunet`)
+
+Using any of the networks other than the nnUNet will use the hyperparameters described in the config file. Otherwise, due to the nature of the nnUNet, many of the hyperparameters will be automatically set and the config file will be ignored. However, using the nnUNet requires additional packages and flags to be set. This will be described in the following section.
+
+### Using the nnUNet
+
+The implementation of the nnUNet is found on [GitHub](https://github.com/MIC-DKFZ/nnUNet/tree/master). Most of the instructions in this guide can be found in much more detail on the [official repo](https://github.com/MIC-DKFZ/nnUNet/tree/master/documentation). This section will explain what is necessary to use the nnUNet from the aigt repo.
+
+### Installation
+
+The source code must first be downloaded by cloning the official repository. From the UltrasoundSegmentation folder of the aigt repo, run the following commands:
+
+```
+git clone https://github.com/MIC-DKFZ/nnUNet.git
+cd nnUNet
+pip install -e .
+```
+
+In addition, you will need to create 3 folders: `nnUNet_raw`, `nnUNet_preprocessed`, and `nnUNet_results`. These three folders can be located anywhere you wish, but their locations must be saved as separate environment variables. More detailed instructions can be found [here](https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/setting_up_paths.md).
+
+### Dataset conversion
+
+The nnUNet requires the data to be in a format that is notably different from the format used for training all other networks in this repository. Specifically, it requires all training and validation *images* to be in the *same folder*. Likewise, all corresponding training and validation *segmentations* are to be the same separate folder. These two folders need to be located in one `Dataset` folder that is located in the `nnUNet_raw` folder. The folder structure of `nnUNet_raw` should look something like this (`nnUNet_preprocessed` and `nnUNet_results` are kept empty):
+
+```
+nnUNet_raw  
+└───Dataset001_Breast
+│   └───imagesTr
+│   │   └───LN003_0000_0000.nii.gz
+│   │   └───LN003_0001_0000.nii.gz
+│   │   └───LN003_0002_0000.nii.gz
+│   │   └───...
+│   └───labelsTr
+│   │   └───LN003_0000.nii.gz
+│   │   └───LN003_0001.nii.gz
+│   │   └───LN003_0002.nii.gz
+│   │   └───...
+│   └───dataset.json
+```
+
+All training data from one dataset are located under the `Dataset` folder, which must be named in the following convention: `Dataset{ID}_{NAME}`, where `ID` is a unique 3-digit integer and `NAME` is a string. This is the string that should be provided to the `--nnunet_dataset-name` argument in `train.py`. **Without this flag, the nnUNet will not run.** `ID` can be whatever (3-digit) integer you like, as long as there is no other dataset in the `nnUNet_raw` folder that has that ID.
+
+The images themselves follow this naming convention: `{CASE_IDENTIFIER}_{CHANNEL}.{FILE_ENDING}`. In the above example, `LN003_0000` is the case identifier, `0000` is the 4-digit channel identifier, and `nii.gz` is the file ending. The segmentations follow a similar convention but without the channel indicator. This will be further explained below.
+
+Luckily, assuming your data has already been converted to slices (hopefully using the `--use-file-prefix` flag), `train.py` will convert the data into the nnUNet format for you. However, you must first set the values of 2 dictionaries in the `.yaml` config file. An example is shown in [train_config.yaml](train_config.yaml):
+
+```
+# For nnUNet only:
+channel_names:
+  0: "Ultrasound"
+
+labels:
+  background: 0
+  tumor: 1
+```
+
+The first dictionary, `channel_names`, corresponds to the 4-digit channel identifier of the nifti files in `imagesTr`. The nnUNet requires each channel/modality of an image to be in a separate file. This is mostly relevant in MRI images where you may have T1 or T2-weighted scans, which is why there is only one channel in the example above. For most cases in this repo, this dictionary can be left as-is.
+
+The second dictionary, `labels`, matches a string label to each integer class in the segmentation images. For multi-class segmentation, you will need to add more key/value pairs to this dictionary.
+
+More information about the data format can be found [here](https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/dataset_format.md).
+
+### Running `train.py`
+
+If you have completed the above instructions, you are now ready to run `train.py`. First, make sure you change the `model_name` parameter in the config file to "nnunet". Then, run `train.py` as you would with other models following [the previous instructions](#trainpy), but make sure you include the `--nnunet-dataset-name` flag with your desired name. You may also choose to set the `--verify-nnunet-dataset` flag to check that everything is formatted correctly.
+
+The first time you run `train.py` using the nnUNet, it will convert the slice dataset to the nnUNet format as described above. It will also find the optimal preprocessing steps, model architecture, and training settings for your dataset, referred to as the plan. Any subsequent runs using the same dataset will skip the conversion and the finding of the plan and use the existing one. These plans can be found in the `nnUNet_preprocessed` folder.
+
+One note on the data splits: by default, the nnUNet runs a 5-fold cross validation on all the data in the `imagesTr` folder. However, since we have now mixed all of our patient data together into one folder, randomly splitting the data this way will cause biases in our model. To mitigate this, a custom split will be generated automatically using the same training/validation split that was defined for training other networks in this repo (i.e. you don't need to do anything, this is just an FYI). The split can be found in a `splits_final.json` file in the `nnUNet_preprocessed` folder once a plan has been generated.

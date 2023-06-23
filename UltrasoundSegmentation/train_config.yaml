@@ -1,6 +1,6 @@
 # Example config file for train.py
 
-model_name: "unet"  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet
+model_name: "nnunet"  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet, nnunet
 loss_function: "DiceCE"
 lambda_ce: 0.5  # 0.0 for dice, 1.0 for cross-entropy/focal
 class_weights: [0.25, 0.75]  # must be same length as out_channels
@@ -34,3 +34,11 @@ transforms:
         keys: ["image", "label"]
         spatial_size: [128, 128]
   train:
+
+# For nnUNet only:
+channel_names:
+  0: "Ultrasound"
+
+labels:
+  background: 0
+  tumor: 1
