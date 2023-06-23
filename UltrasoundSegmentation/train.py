@@ -69,7 +69,7 @@ def parse_args():
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--save-log", action="store_true")
     parser.add_argument("--nnunet-dataset-name", type=str)
-    parser.add_argument("--verify-nnunet_dataset", action="store_true")
+    parser.add_argument("--verify-nnunet-dataset", action="store_true")
     try:
         return parser.parse_args()
     except SystemExit as err:
