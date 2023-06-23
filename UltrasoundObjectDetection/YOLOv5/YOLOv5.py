@@ -80,8 +80,8 @@ class YOLOv5():
     
     def _format_image(self, image):
         if len(image.shape) == 2:
-            im = np.stack([image, image, image], axis=-1)
-            
+            image = np.stack([image, image, image], axis=-1)
+
         height, width, layer = image.shape
         if width > height:
             height = round(height*(self.resized_size/width))
