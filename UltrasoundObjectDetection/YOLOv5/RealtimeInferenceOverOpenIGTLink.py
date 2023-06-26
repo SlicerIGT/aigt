@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument("--input-device-name", type=str, default="Image_Reference")
     parser.add_argument("--output-device-name", type=str, default="Inference")
     parser.add_argument("--target-size", type=int, default=512)
+    parser.add_argument("--confidence-threshold", type=float, default=0.5)
     parser.add_argument("--line-thickness", type=int, default=2)
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18944)
@@ -46,7 +47,7 @@ def main(args):
 
             image = np.rot90(np.transpose(message.image, (1,2,0)), 2)
 
-            prediction = model.predict(image)
+            prediction = model.predict(image, args.confidence_threshold)
             image_message = pyigtl.ImageMessage(np.flip(np.flip(prediction, axis=1), axis=2), device_name=args.output_device_name)
             client.send_message(image_message, wait=True)
 

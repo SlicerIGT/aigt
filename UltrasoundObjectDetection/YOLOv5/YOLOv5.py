@@ -21,7 +21,7 @@ class YOLOv5():
             Resize(size=target_size)
         ])
 
-    def predict(self,image):
+    def predict(self,image,confidence_threshold):
         im = image.copy()
         #im_debug = self._format_image(im)  
         #im_debug = torch.from_numpy(im_debug).permute(2,0,1).to(self.model.device)
@@ -29,15 +29,19 @@ class YOLOv5():
         #im_debug /= 255
         im = self.transform(im).to(self.model.device)  
         im = im.half() if self.model.fp16 else im.float()  # uint8 to fp16/32
+        if im.shape[0] == 1:
+            im = im.expand(3,*im.shape[1:])
         if len(im.shape) == 3:
             im = im[None]  # expand for batch dim
 
         pred = self.model(im, visualize=False)
 
-        pred = non_max_suppression(pred)
+        pred = non_max_suppression(pred, conf_thres=confidence_threshold)
 
         for det in pred:  # per image
             im0 = np.ascontiguousarray(image.copy())
+            if im0.shape[2] == 1:
+                im0 = np.concatenate((im0, im0, im0), axis=2)
 
             annotator = Annotator(im0, line_width=self.line_thickness, example=str(self.class_names))
             if len(det):
