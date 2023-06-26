@@ -1,17 +1,18 @@
 import numpy as np
 
-nodeName = "SCN_22_meroleges_RUA_334"
-videoVolume = slicer.util.getNode(nodeName)
+#nodeName = "SCN_22_meroleges_RUA_334"
+#videoVolume = slicer.util.getNode(nodeName)
+videoVolume = getNodesByClass("vtkMRMLVectorVolumeNode")[0]
 videoArray = slicer.util.arrayFromVolume(videoVolume)
 index = 0.00
 sequenceNode = slicer.vtkMRMLSequenceNode()
 slicer.mrmlScene.AddNode(sequenceNode)
-sequenceNode.SetName("ImageReference")
+sequenceNode.SetName("Image_Reference")
 for i in range(videoArray.shape[0]):
     index += 0.1
     indexFloat = round(float(index), 2)
     newVideoNode = slicer.vtkMRMLScalarVolumeNode()
-    newVideoNode.SetName(nodeName + "-Sequence_" + str(i).zfill(4))
+    newVideoNode.SetName(videoVolume.GetName() + "-Sequence_" + str(i).zfill(4))
 
     imageSpacing = [0.2, 0.2, 0.2]
     imageData = vtk.vtkImageData()

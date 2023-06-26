@@ -1,52 +1,34 @@
-import sys
 import torch
-import sys
 import numpy as np
 import cv2
-
+import math
 from models.common import DetectMultiBackend
 from utils.general import non_max_suppression, scale_boxes
 from utils.plots import Annotator, colors
+from torchvision.transforms import Resize, ToTensor, Compose, Pad
 
-sys.path.append('C:\\repos\\aigt')
-
-''' 
-Sample Model file for defining a neural network for use within the DeepLearnLive extension
-Originally developed by Rebecca Hisey for the Laboratory of Percutaneous Surgery, Queens University, Kingston, ON
-
-Model description: 
-    Include a description of the intended use of your model here.
-    This example shows a simple CNN that predicts tools from RGB images and returns a string
-'''
 
 class YOLOv5():
-    def __init__(self):
-        self.model = None
-        self.class_names = None
-        self.line_thickness = 1
-        self.resized_size = 512
-
-    def loadModel(self,modelFolder,modelName):
-        # Load model
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        weights = f'{modelFolder}/weights/best.pt'
-
+    def __init__(self, weights='yolov5s.pt', device=torch.device('cpu'), line_thickness=2, input_size=(600,800), target_size=512):
         self.model = DetectMultiBackend(weights=weights, device=device)
         self.class_names = self.model.names
-        print(f'device: {self.model.device}')
+        self.line_thickness = line_thickness
+        self.resized_size = target_size
+        #self.input_size = input_size
+        self.transform = Compose([
+            ToTensor(),
+            Pad(padding=self._get_padding_values(input_size=input_size)),
+            Resize(size=target_size)
+        ])
 
     def predict(self,image):
-        #Replace the following lines with whatever needs to be done to use the model to predict on new data
-        # in this case the image needed to be recoloured and resized and our prediction returns the tool name and the
-        # softmax output
         im = image.copy()
-
-        im = self._format_image(im)
-        
-        im = torch.from_numpy(im).permute(2,0,1).to(self.model.device)
-        
+        #im_debug = self._format_image(im)  
+        #im_debug = torch.from_numpy(im_debug).permute(2,0,1).to(self.model.device)
+        #im_debug = im_debug.half()
+        #im_debug /= 255
+        im = self.transform(im).to(self.model.device)  
         im = im.half() if self.model.fp16 else im.float()  # uint8 to fp16/32
-        im /= 255  # 0 - 255 to 0.0 - 1.0
         if len(im.shape) == 3:
             im = im[None]  # expand for batch dim
 
@@ -70,13 +52,20 @@ class YOLOv5():
 
         im0 = np.expand_dims(im0, axis=0)
         return im0
+    
+    def _get_padding_values(self, input_size):
+        height, width = input_size
+        difference = width - height
+        left, top, right, bottom = 0, 0, 0, 0
+        pad_value = math.ceil(difference / 2)
+        if difference > 0:
+            top = pad_value
+            bottom = pad_value if difference % 2 == 0 else pad_value - 1
+        if difference < 0:
+            left = pad_value
+            right = pad_value if difference % 2 == 0 else pad_value - 1
+        return left, top, right, bottom
 
-
-    def createModel(self,imageSize,num_classes):
-        pass
-
-    def saveModel(self,trainedModel,saveLocation):
-        pass
     
     def _format_image(self, image):
         if len(image.shape) == 2:
