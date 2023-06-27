@@ -21,7 +21,7 @@ def parse_args():
     parser.add_argument("--confidence-threshold", type=float, default=0.5)
     parser.add_argument("--line-thickness", type=int, default=2)
     parser.add_argument("--host", type=str, default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=18944)
+    parser.add_argument("--port", type=int, default=18945)
     try:
         return parser.parse_args()
     except SystemExit as err:
@@ -29,12 +29,12 @@ def parse_args():
         sys.exit(err.code)
 
 
-def main(args):
+def run_client(args):
     client = pyigtl.OpenIGTLinkClient(host=args.host, port=args.port)
     model = None
 
     while True:
-        message = client.wait_for_message(args.input_device_name, timeout=3)
+        message = client.wait_for_message(args.input_device_name, timeout=-1)
         if message:
             if model is None:
                 input_size = message.image.shape[1:3]
@@ -45,13 +45,19 @@ def main(args):
                                input_size=input_size,
                                target_size=args.target_size)
 
-            image = np.rot90(np.transpose(message.image, (1,2,0)), 2)
+            image = preprocess_epiphan_image(message.image)
 
             prediction = model.predict(image, args.confidence_threshold)
             image_message = pyigtl.ImageMessage(np.flip(np.flip(prediction, axis=1), axis=2), device_name=args.output_device_name)
             client.send_message(image_message, wait=True)
 
 
+def preprocess_epiphan_image(image):
+    image = np.rot90(np.transpose(image, (1,2,0)), 2)
+    if image.shape[2] == 1:
+        image = np.concatenate([image, image, image], axis=2)
+    return image
+
 if __name__ == "__main__":
     args = parse_args()
-    main(args)
+    run_client(args)
