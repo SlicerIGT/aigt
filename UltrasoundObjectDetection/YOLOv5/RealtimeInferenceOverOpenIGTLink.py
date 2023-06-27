@@ -1,5 +1,14 @@
 """
 Implements an OpenIGTLink client that expect pyigtl.ImageMessage and returns pyigtl.ImageMessage with YOLOv5 inference added to the image.
+Arguments:
+    weights: string path to the .pt weights file used for the model
+    input device name: This is the device name the client is listening to
+    output device name: The device name the client outputs to
+    host: the server's IP the client connects to.
+    port: port used for bidirectional communication between server and client.
+    target size: target quadratic size the model resizes to internally for predictions. Does not affect the actual output size
+    confidence threshold: only bounding boxes above the given threshold will be visualized.
+    line thickness: line thickness of drawn bounding boxes. Also affects font size of class names and confidence
 """
 
 import argparse
@@ -14,7 +23,7 @@ import torch
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--weights", type=str)
+    parser.add_argument("--weights", type=str, default="YOLOv5/weights/lung_us_pretrained.pt")
     parser.add_argument("--input-device-name", type=str, default="Image_Reference")
     parser.add_argument("--output-device-name", type=str, default="Inference")
     parser.add_argument("--target-size", type=int, default=512)
@@ -29,6 +38,8 @@ def parse_args():
         sys.exit(err.code)
 
 
+# runs the client in an infinite loop, waiting for messages from the server. Once a message is received,
+# the message is processed and the inference is sent back to the server as a pyigtl ImageMessage.
 def run_client(args):
     client = pyigtl.OpenIGTLinkClient(host=args.host, port=args.port)
     model = None
