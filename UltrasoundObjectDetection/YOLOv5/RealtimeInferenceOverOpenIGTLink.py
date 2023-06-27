@@ -46,20 +46,24 @@ def run_client(args):
 
     while True:
         message = client.wait_for_message(args.input_device_name, timeout=-1)
-        if model is None:
-            input_size = message.image.shape[1:3]
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            model = YOLOv5(weights=args.weights,
-                            device=device,
-                            line_thickness=args.line_thickness,
-                            input_size=input_size,
-                            target_size=args.target_size)
 
-        image = preprocess_epiphan_image(message.image)
+        if isinstance(message, pyigtl.ImageMessage):
+            if model is None:
+                input_size = message.image.shape[1:3]
+                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                model = YOLOv5(weights=args.weights,
+                                device=device,
+                                line_thickness=args.line_thickness,
+                                input_size=input_size,
+                                target_size=args.target_size)
 
-        prediction = model.predict(image, args.confidence_threshold)
-        image_message = pyigtl.ImageMessage(np.flip(np.flip(prediction, axis=1), axis=2), device_name=args.output_device_name)
-        client.send_message(image_message, wait=True)
+            image = preprocess_epiphan_image(message.image)
+
+            prediction = model.predict(image, args.confidence_threshold)
+            image_message = pyigtl.ImageMessage(np.flip(np.flip(prediction, axis=1), axis=2), device_name=args.output_device_name)
+            client.send_message(image_message, wait=True)
+        else:
+            print(f'Unexpected message format. Message:\n{message}')
 
 
 def preprocess_epiphan_image(image):
