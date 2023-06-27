@@ -8,7 +8,12 @@ from torchvision.transforms import Resize, ToTensor, Compose, Pad
 
 
 class YOLOv5():
-    def __init__(self, weights='weights/lung_us_pretrained.pt', device=torch.device('cpu'), line_thickness=2, input_size=(600,800), target_size=512):
+    def __init__(self,
+                 input_size,
+                 weights='weights/lung_us_pretrained.pt',
+                 device=torch.device('cpu'), line_thickness=2,
+                 target_size=512):
+        
         self.model = DetectMultiBackend(weights=weights, device=device)
         self.class_names = self.model.names
         self.line_thickness = line_thickness
@@ -18,7 +23,7 @@ class YOLOv5():
             Resize(size=target_size)
         ])
 
-    def predict(self,image,confidence_threshold=0.5):
+    def predict(self, image, confidence_threshold=0.5):
         im = image.copy()
         im = self.input_transform(im).to(self.model.device).type(torch.float)
         if len(im.shape) == 3:
