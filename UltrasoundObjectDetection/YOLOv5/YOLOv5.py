@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import cv2
 import math
 from models.common import DetectMultiBackend
 from utils.general import non_max_suppression, scale_boxes
