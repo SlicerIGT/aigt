@@ -52,10 +52,10 @@ def run_client(args):
                 input_size = message.image.shape[1:3]
                 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
                 model = YOLOv5(weights=args.weights,
-                                device=device,
-                                line_thickness=args.line_thickness,
-                                input_size=input_size,
-                                target_size=args.target_size)
+                               device=device,
+                               line_thickness=args.line_thickness,
+                               input_size=input_size,
+                               target_size=args.target_size)
 
             image = preprocess_epiphan_image(message.image)
 
