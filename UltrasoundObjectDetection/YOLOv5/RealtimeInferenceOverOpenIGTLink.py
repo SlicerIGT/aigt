@@ -19,11 +19,14 @@ import pyigtl
 import numpy as np
 from YOLOv5 import YOLOv5
 import torch
+from pathlib import Path
+
+ROOT = Path(__file__).parent.resolve()
 
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--weights", type=str, default="YOLOv5/weights/lung_us_pretrained.pt")
+    parser.add_argument("--weights", type=str, default="weights/lung_us_pretrained.pt")
     parser.add_argument("--input-device-name", type=str, default="Image_Reference")
     parser.add_argument("--output-device-name", type=str, default="Inference")
     parser.add_argument("--target-size", type=int, default=512)
@@ -51,7 +54,8 @@ def run_client(args):
             if model is None:
                 input_size = message.image.shape[1:3]
                 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-                model = YOLOv5(weights=args.weights,
+                weights = args.weights if Path(args.weights).is_absolute() else f'{str(ROOT)}/{args.weights}'
+                model = YOLOv5(weights=weights,
                                device=device,
                                line_thickness=args.line_thickness,
                                input_size=input_size,
