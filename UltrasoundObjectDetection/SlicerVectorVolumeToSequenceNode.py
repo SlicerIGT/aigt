@@ -1,7 +1,16 @@
+'''
+Description:
+    Helper script to turn a Slicer VectorVolumeNode into a SequenceNode. Necessary for testing real time inference with recorded data, in case
+    data was captured as a VectorVolumeNode, where the 3rd dimension represents time. The script iterates through the temporal dimension
+    of the VectorVolumeNode, and stitches the 2D frames together into a new SequenceNode
+
+Usage:
+    Open the VectorVolume, and copy-paste the below script in python interactor in Slicer. A new sequence will be created from the
+    first VectorVolumeNode open in Slicer (relevant if you have more than one open).
+'''
+
 import numpy as np
 
-#nodeName = "SCN_22_meroleges_RUA_334"
-#videoVolume = slicer.util.getNode(nodeName)
 videoVolume = getNodesByClass("vtkMRMLVectorVolumeNode")[0]
 videoArray = slicer.util.arrayFromVolume(videoVolume)
 index = 0.00
@@ -12,9 +21,7 @@ for i in range(videoArray.shape[0]):
     index += 0.1
     indexFloat = round(float(index), 2)
     newVideoNode = slicer.vtkMRMLScalarVolumeNode()
-    newVideoNode.SetName(videoVolume.GetName() + "-Sequence_" + str(i).zfill(4))
 
-    imageSpacing = [0.2, 0.2, 0.2]
     imageData = vtk.vtkImageData()
 
     imageMat = np.rot90(videoArray[i], 3)

@@ -17,7 +17,7 @@ import sys
 import numpy as np
 import pyigtl
 import numpy as np
-from YOLOv5 import YOLOv5
+from YOLOv5.model import YOLOv5
 import torch
 from pathlib import Path
 

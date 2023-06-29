@@ -1,11 +1,15 @@
 import torch
 import numpy as np
-import math
+import sys
+from pathlib import Path
+from torchvision.transforms import Resize, ToTensor, Compose, Pad
+
+ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(ROOT))
+
 from models.common import DetectMultiBackend
 from utils.general import non_max_suppression, scale_boxes
 from utils.plots import Annotator, colors
-from torchvision.transforms import Resize, ToTensor, Compose, Pad
-
 
 class YOLOv5():
     def __init__(self,
@@ -53,11 +57,11 @@ class YOLOv5():
         height, width = input_size
         difference = width - height
         left, top, right, bottom = 0, 0, 0, 0
-        pad_value = math.ceil(difference / 2)
+        pad_value = difference // 2
         if difference > 0:
             top = pad_value
-            bottom = pad_value if difference % 2 == 0 else pad_value - 1
+            bottom = pad_value if difference % 2 == 0 else pad_value + 1
         if difference < 0:
             left = pad_value
-            right = pad_value if difference % 2 == 0 else pad_value - 1
+            right = pad_value if difference % 2 == 0 else pad_value + 1
         return left, top, right, bottom
