@@ -43,16 +43,6 @@ from monai.metrics import (
 
 from UltrasoundDataset import UltrasoundDataset
 
-from nnunet_utils import convert_to_nnunet_raw, generate_split_json
-from nnUNet.nnunetv2.paths import nnUNet_raw, nnUNet_preprocessed
-from nnUNet.nnunetv2.experiment_planning.plan_and_preprocess_api import (
-    extract_fingerprints,
-    plan_experiments,
-    preprocess
-)
-from nnUNet.nnunetv2.run.run_training import get_trainer_from_args
-from nnUNet.nnunetv2.utilities.helpers import dummy_context
-
 
 # Parse command line arguments
 def parse_args():
@@ -194,6 +184,19 @@ def main(args):
     val_dataset = UltrasoundDataset(args.val_data_folder, transform=val_transform)
 
     if config["model_name"].lower() == "nnunet":
+
+        # Only import nnUNet if needed, so other users don't need to install it
+        
+        from nnunet_utils import convert_to_nnunet_raw, generate_split_json
+        from nnUNet.nnunetv2.paths import nnUNet_raw, nnUNet_preprocessed
+        from nnUNet.nnunetv2.experiment_planning.plan_and_preprocess_api import (
+            extract_fingerprints,
+            plan_experiments,
+            preprocess
+        )
+        from nnUNet.nnunetv2.run.run_training import get_trainer_from_args
+        from nnUNet.nnunetv2.utilities.helpers import dummy_context
+
         # Convert dataset to nnUNet format
         convert_to_nnunet_raw(
             args.train_data_folder, 
