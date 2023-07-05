@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 
 import vtk
 import qt
@@ -141,30 +142,11 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
         # (in the selected parameter node).
-        self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-        self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-        self.ui.invertedOutputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
 
         # Buttons
-        self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
+        self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
 
-        self.ui.startPlusButton.connect('clicked(bool)', self.onStartPlusClicked)
-        
-        '''
-        self.ui.freezeUltrasoundButton.connect('toggled(bool)', self.onFreezeUltrasoundClicked)
-        self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
-        
-        lastHostname = slicer.util.settingsValue(self.logic.HOSTNAME_SETTING, "")
-        if lastHostname != "":
-            self.ui.hostnameLineEdit.text = lastHostname
-        self.ui.hostnameLineEdit.connect('editingFinished()', self.onHostnameChanged)
-        '''
-
-        configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_SETTING, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
-        #self.ui.plusConfigFileSelector.currentPath = configFilepath
-        #self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -173,9 +155,8 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         """
         Called when the application closes and the module widget is destroyed.
         """
-        plusServerNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_NODE)
-        if plusServerNode:
-            plusServerNode.StopServer()
+        if self.logic.plus_server_process:
+            self.logic.plus_server_process.kill()
 
         self.removeObservers()
 
@@ -217,12 +198,6 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
         self.setParameterNode(self.logic.getParameterNode())
 
-        # Select default input nodes if nothing is selected yet to save a few clicks for the user
-        if not self._parameterNode.GetNodeReference("InputVolume"):
-            firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-            if firstVolumeNode:
-                self._parameterNode.SetNodeReferenceID("InputVolume", firstVolumeNode.GetID())
-
     def setParameterNode(self, inputParameterNode):
         """
         Set and observe parameter node.
@@ -256,14 +231,10 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
         self._updatingGUIFromParameterNode = True
 
-        # Update node selectors and sliders
-        self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
-        self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
-        self.ui.invertedOutputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolumeInverse"))
-        self.ui.imageThresholdSliderWidget.value = float(self._parameterNode.GetParameter("Threshold"))
-        self.ui.invertOutputCheckBox.checked = (self._parameterNode.GetParameter("Invert") == "true")
+        #configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_DEFAULT, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
+        self.ui.plusConfigFileSelector.currentPath = self._parameterNode.GetParameter("PLUSConfigFile")
         
-
+        '''
         # Update buttons states and tooltips
         if self._parameterNode.GetNodeReference("InputVolume") and self._parameterNode.GetNodeReference("OutputVolume"):
             self.ui.applyButton.toolTip = "Compute output volume"
@@ -271,14 +242,9 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         else:
             self.ui.applyButton.toolTip = "Select input and output volume nodes"
             self.ui.applyButton.enabled = False
-
-        if not self.observedPlusServerLauncherNode:
-            plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
-            self.observedPlusServerLauncherNode = plusServerLauncherNode
-        if self.observedPlusServerLauncherNode is not None:
-            self.addObserver(self.observedPlusServerLauncherNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromMRML)
-        
+        '''
         # All the GUI updates are done
+        
         self._updatingGUIFromParameterNode = False
 
     def updateParameterNodeFromGUI(self, caller=None, event=None):
@@ -292,62 +258,14 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
-        self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
-        self._parameterNode.SetNodeReferenceID("OutputVolume", self.ui.outputSelector.currentNodeID)
-        self._parameterNode.SetParameter("Threshold", str(self.ui.imageThresholdSliderWidget.value))
-        self._parameterNode.SetParameter("Invert", "true" if self.ui.invertOutputCheckBox.checked else "false")
-        self._parameterNode.SetNodeReferenceID("OutputVolumeInverse", self.ui.invertedOutputSelector.currentNodeID)
+        self._parameterNode.SetParameter("PLUSConfigFile", self.ui.plusConfigFileSelector.currentpath)
 
         self._parameterNode.EndModify(wasModified)
-
-    def updateGUIFromMRML(self, caller=None, event=None):
-        """
-        Updates the GUI from MRML nodes in the scene (except parameter node).
-        """
-        if self._updatingGUIFromMRML:
-            return
-
-        if self._parameterNode is None:
-            return
-
-        self._updatingGUIFromMRML = True
-
-        plusServerLauncherNode = self._parameterNode.GetNodeReference(self.logic.PLUS_SERVER_LAUNCHER_NODE)
-        if plusServerLauncherNode is not None:
-            hostname = plusServerLauncherNode.GetHostname()
-            self.ui.hostnameLineEdit.setText(hostname)
-
-        self._updatingGUIFromMRML = False
     
-    def onApplyButton(self):
-        """
-        Run processing when user clicks "Apply" button.
-        """
-        with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
-
-            # Compute output
-            self.logic.process(self.ui.inputSelector.currentNode(), self.ui.outputSelector.currentNode(),
-                               self.ui.imageThresholdSliderWidget.value, self.ui.invertOutputCheckBox.checked)
-
-            # Compute inverted output (if needed)
-            if self.ui.invertedOutputSelector.currentNode():
-                # If additional output volume is selected then result with inverted threshold is written there
-                self.logic.process(self.ui.inputSelector.currentNode(), self.ui.invertedOutputSelector.currentNode(),
-                                   self.ui.imageThresholdSliderWidget.value, not self.ui.invertOutputCheckBox.checked, showResult=False)
-
-    def onFreezeUltrasoundClicked(self, toggled):
-        logging.info(f"onFreezeUltrasoundClicked({toggled})")
-        if toggled:
-            self.ui.freezeUltrasoundButton.text = "Un-Freeze"
-        else:
-            self.ui.freezeUltrasoundButton.text = "Freeze"
-        self.logic.setFreezeUltrasoundClicked(toggled)
 
     def onPlusConfigFileChanged(self, configFilepath):
         logging.info(f"onPlusConfigFileChanged({configFilepath})")
-        settings = qt.QSettings()
-        settings.setValue(self.logic.CONFIG_FILE_SETTING, configFilepath)
-        self.logic.setPlusConfigFile(configFilepath)
+        #self.logic.setPlusConfigFile(configFilepath)
 
     def onHostnameChanged(self):
         newHostname = self.ui.hostnameLineEdit.text
@@ -359,11 +277,11 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     def onStartPlusClicked(self, toggled):
         logging.info(f"onStartPlusClicked({toggled})")
         if toggled:
-            self.ui.startPlusButton.text = "Stop PLUS"
+            self.ui.startPlusButton.text = "Stop PLUS Server"
             #self.ui.plusConfigFileSelector.enabled = False
             #self.ui.hostnameLineEdit.enabled = False
         else:
-            self.ui.startPlusButton.text = "Start PLUS"
+            self.ui.startPlusButton.text = "Start PLUS Server"
             #self.ui.plusConfigFileSelector.enabled = True
             #self.ui.hostnameLineEdit.enabled = True
         
@@ -384,20 +302,28 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     """
 
     # OpenIGTLink PLUS connection
-    CONFIG_FILE_SETTING = "LumpNav2/PlusConfigFile"
     CONFIG_FILE_DEFAULT = "default_plus_config.xml"  # Default config file if the user doesn't set another.
     CONFIG_TEXT_NODE = "ConfigTextNode"
     PLUS_SERVER_NODE = "PlusServer"
     PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
     HOSTNAME_SETTING = "127.0.0.1"
+    IGTL_CONNECTOR_NODE = "EpiphanInput"
+    IGTL_PORT = 18945
 
     def __init__(self):
         """
         Called when the logic class is instantiated. Can be used for initializing member variables.
         """
         ScriptedLoadableModuleLogic.__init__(self)
-        self.setupPlusServer()
 
+        self.IgtlConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
+        self.IgtlConnectorNode.SetName('EpiphanInput')
+        self.IgtlConnectorNode.SetTypeClient('localhost', self.IGTL_PORT)
+        slicer.mrmlScene.AddNode(self.IgtlConnectorNode)
+        self.IgtlConnectorNode.Start()
+        
+        self.plus_server_process = None
+        
     def setDefaultParameters(self, parameterNode):
         """
         Initialize parameter node with default settings.
@@ -406,6 +332,8 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
             parameterNode.SetParameter("Threshold", "100.0")
         if not parameterNode.GetParameter("Invert"):
             parameterNode.SetParameter("Invert", "false")
+        if not parameterNode.GetParameter("PLUSConfigFile"):
+            parameterNode.SetParameter("PLUSConfigFile", self.resourcePath(self.CONFIG_FILE_DEFAULT))
 
     def resourcePath(self, filename):
         """
@@ -452,50 +380,9 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         """
         Creates PLUS server and OpenIGTLink connection if it doesn't exist already.
         """
-        parameterNode = self.getParameterNode()
-
-        # Check if config file is specified in settings. Set and use default if not.
-        configFullpath = slicer.util.settingsValue(self.CONFIG_FILE_SETTING, '')
-        if configFullpath == '':
-            configFullpath = self.resourcePath(self.CONFIG_FILE_DEFAULT)
-            settings = qt.QSettings()
-            settings.setValue(self.CONFIG_FILE_SETTING, configFullpath)
-
-        # Make sure text node for config file exists
-        configTextNode = parameterNode.GetNodeReference(self.CONFIG_TEXT_NODE)
-        if configTextNode is None:
-            configTextNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTextNode", self.CONFIG_TEXT_NODE)
-            configTextNode.SaveWithSceneOff()
-            configTextNode.SetForceCreateStorageNode(slicer.vtkMRMLTextNode.CreateStorageNodeAlways)
-            parameterNode.SetNodeReferenceID(self.CONFIG_TEXT_NODE, configTextNode.GetID())
-        if not configTextNode.GetStorageNode():
-            configTextNode.AddDefaultStorageNode()
-            configTextStorageNode = configTextNode.GetStorageNode()
-            configTextStorageNode.SaveWithSceneOff()
-            configTextStorageNode.SetFileName(configFullpath)
-            configTextStorageNode.ReadData(configTextNode)
-
-        # Make sure PLUS server and launcher exist, and launcher references server
-        plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
-        if not plusServerNode:
-            plusServerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerNode", self.PLUS_SERVER_NODE)
-            plusServerNode.SaveWithSceneOff()
-            parameterNode.SetNodeReferenceID(self.PLUS_SERVER_NODE, plusServerNode.GetID())
-            plusServerNode.SetAndObserveConfigNode(configTextNode)
-
-        plusServerLauncherNode = parameterNode.GetNodeReference(self.PLUS_SERVER_LAUNCHER_NODE)
-        if not plusServerLauncherNode:
-            plusServerLauncherNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerLauncherNode", self.PLUS_SERVER_LAUNCHER_NODE)
-            plusServerLauncherNode.SaveWithSceneOff()
-            parameterNode.SetNodeReferenceID(self.PLUS_SERVER_LAUNCHER_NODE, plusServerLauncherNode.GetID())
-
-        if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
-            plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
-
-        # Set hostname from settings
-        lastHostname = slicer.util.settingsValue(self.HOSTNAME_SETTING, "")
-        if lastHostname != "":
-            self.setHostname(lastHostname)
+        
+        
+        
 
 
     def setFreezeUltrasoundClicked(self, toggled):
@@ -509,13 +396,18 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
                 plusServerConnectorNode.Start()
 
     def setPlusServerClicked(self, toggled):
-        parameterNode = self.getParameterNode()
-        plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
-        if plusServerNode:
-            if toggled:
-                plusServerNode.StartServer()
-            else:
-                plusServerNode.StopServer()
+        if toggled:
+            FNULL = open(os.devnull, 'w')    #use this if you want to suppress output to stdout from the subprocess
+            #config_file = "C:/repos/aigt/UltrasoundObjectDetection/SlicerModule/BLUELungUltrasound/BLUELungUltrasound/default_plus_config.xml"
+            config_file = self.getParameterNode().GetParameter("PLUSConfigFile")
+            print(config_file)
+            executable = "C:/Users/Guest admin/PlusApp-2.8.0.20191105-Win64/bin/PlusServer.exe"
+            args = f'"{executable}" --config-file="{config_file}"'
+            self.plus_server_process = subprocess.Popen(args, stdout=FNULL, stderr=FNULL, shell=False)
+            print('plus server started')
+        else:
+            self.plus_server_process.kill()
+            print('plus server stopped')
 
     def setPlusConfigFile(self, configFilepath):
         parameterNode = self.getParameterNode()
