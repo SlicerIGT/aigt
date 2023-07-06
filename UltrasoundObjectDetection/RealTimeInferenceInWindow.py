@@ -17,7 +17,7 @@ import sys
 import numpy as np
 import pyigtl
 import numpy as np
-from YOLOv5.model import YOLOv5
+from YOLOv5.model import ObjectDetectionModel
 import torch
 import cv2
 from pathlib import Path
@@ -28,7 +28,8 @@ cv2.namedWindow("Inference")
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--weights", type=str, default="weights/lung_us_pretrained.pt")
+    parser.add_argument("--model", type=str, default="YOLOv5/lung_us_pretrained.torchscript")
+    parser.add_argument("--data-yaml", type=str, default="YOLOv5/lung_us.yml")
     parser.add_argument("--input-device-name", type=str, default="Image_Reference")
     parser.add_argument("--output-device-name", type=str, default="Inference")
     parser.add_argument("--target-size", type=int, default=512)
@@ -56,20 +57,20 @@ def run_client(args):
             if model is None:
                 input_size = message.image.shape[1:3]
                 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-                weights = args.weights if Path(args.weights).is_absolute() else f'{str(ROOT)}/{args.weights}'
-                model = YOLOv5(weights=weights,
-                               device=device,
-                               line_thickness=args.line_thickness,
-                               input_size=input_size,
-                               target_size=args.target_size)
+                model_path = args.model if Path(args.model).is_absolute() else f'{str(ROOT)}/{args.model}'
+                data_yaml_path = args.data_yaml if Path(args.data_yaml).is_absolute() else f'{str(ROOT)}/{args.data_yaml}'
+                model = ObjectDetectionModel(model=model_path,
+                                             data_yaml=data_yaml_path,
+                                             device=device,
+                                             line_thickness=args.line_thickness,
+                                             input_size=input_size,
+                                             target_size=args.target_size)
 
             image = preprocess_epiphan_image(message.image)
 
             prediction = model.predict(image, args.confidence_threshold)
             cv2.imshow("Inference", prediction[0,:,:,:])
             cv2.waitKey(500)
-            #image_message = pyigtl.ImageMessage(np.flip(np.flip(prediction, axis=1), axis=2), device_name=args.output_device_name)
-            #client.send_message(image_message, wait=True)
         else:
             print(f'Unexpected message format. Message:\n{message}')
 

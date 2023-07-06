@@ -24,7 +24,7 @@ from utils import TryExcept, threaded
 from utils.general import (CONFIG_DIR, FONT, LOGGER, check_font, check_requirements, clip_boxes, increment_path,
                            is_ascii, xywh2xyxy, xyxy2xywh)
 from utils.metrics import fitness
-from utils.segment.general import scale_image
+#from utils.segment.general import scale_image
 
 # Settings
 RANK = int(os.getenv('RANK', -1))
