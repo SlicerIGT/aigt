@@ -1,6 +1,8 @@
 import logging
 import os
 import subprocess
+import string
+from ctypes import windll
 
 import vtk
 import qt
@@ -143,6 +145,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
         # (in the selected parameter node).
         self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
+        self.ui.plusServerExeSelector.connect('currentPathChanged(const QString)', self.onPlusServerExePathChanged)
 
         # Buttons
         self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
@@ -233,6 +236,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
         #configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_DEFAULT, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
         self.ui.plusConfigFileSelector.currentPath = self._parameterNode.GetParameter("PLUSConfigFile")
+        self.ui.plusServerExeSelector.currentPath = self._parameterNode.GetParameter("PLUSExePath")
         
         '''
         # Update buttons states and tooltips
@@ -258,14 +262,19 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
 
-        self._parameterNode.SetParameter("PLUSConfigFile", self.ui.plusConfigFileSelector.currentpath)
+        #self._parameterNode.SetParameter("PLUSConfigFile", self.ui.plusConfigFileSelector.currentpath)
 
         self._parameterNode.EndModify(wasModified)
     
 
     def onPlusConfigFileChanged(self, configFilepath):
         logging.info(f"onPlusConfigFileChanged({configFilepath})")
+        self._parameterNode.SetParameter("PLUSConfigFile", self.ui.plusConfigFileSelector.currentPath)
         #self.logic.setPlusConfigFile(configFilepath)
+
+    def onPlusServerExePathChanged(self, plusExePath):
+        logging.info(f"onPlusServerExePathChanged({plusExePath})")
+        self._parameterNode.SetParameter("PLUSExePath", self.ui.plusServerExeSelector.currentPath)
 
     def onHostnameChanged(self):
         newHostname = self.ui.hostnameLineEdit.text
@@ -303,12 +312,9 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
 
     # OpenIGTLink PLUS connection
     CONFIG_FILE_DEFAULT = "default_plus_config.xml"  # Default config file if the user doesn't set another.
-    CONFIG_TEXT_NODE = "ConfigTextNode"
-    PLUS_SERVER_NODE = "PlusServer"
-    PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
-    HOSTNAME_SETTING = "127.0.0.1"
+    PLUS_SERVER_EXECUTABLE = "PlusServer.exe" # having Plus Toolkit installed is a prerequisite
     IGTL_CONNECTOR_NODE = "EpiphanInput"
-    IGTL_PORT = 18945
+    IGTL_PORT = 18944
 
     def __init__(self):
         """
@@ -328,12 +334,10 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         """
         Initialize parameter node with default settings.
         """
-        if not parameterNode.GetParameter("Threshold"):
-            parameterNode.SetParameter("Threshold", "100.0")
-        if not parameterNode.GetParameter("Invert"):
-            parameterNode.SetParameter("Invert", "false")
         if not parameterNode.GetParameter("PLUSConfigFile"):
             parameterNode.SetParameter("PLUSConfigFile", self.resourcePath(self.CONFIG_FILE_DEFAULT))
+        if not parameterNode.GetParameter("PLUSExePath"):
+            parameterNode.SetParameter("PLUSExePath", self.find_local_file(self.PLUS_SERVER_EXECUTABLE))
 
     def resourcePath(self, filename):
         """
@@ -343,65 +347,17 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         """
         moduleDir = os.path.dirname(slicer.util.modulePath(self.moduleName))
         return os.path.join(moduleDir, filename)
+
     
-    def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
-        """
-        Run the processing algorithm.
-        Can be used without GUI widget.
-        :param inputVolume: volume to be thresholded
-        :param outputVolume: thresholding result
-        :param imageThreshold: values above/below this threshold will be set to 0
-        :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-        :param showResult: show output volume in slice viewers
-        """
-
-        if not inputVolume or not outputVolume:
-            raise ValueError("Input or output volume is invalid")
-
-        import time
-        startTime = time.time()
-        logging.info('Processing started')
-
-        # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-        cliParams = {
-            'InputVolume': inputVolume.GetID(),
-            'OutputVolume': outputVolume.GetID(),
-            'ThresholdValue': imageThreshold,
-            'ThresholdType': 'Above' if invert else 'Below'
-        }
-        cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True, update_display=showResult)
-        # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-        slicer.mrmlScene.RemoveNode(cliNode)
-
-        stopTime = time.time()
-        logging.info(f'Processing completed in {stopTime-startTime:.2f} seconds')
-
-    def setupPlusServer(self):
-        """
-        Creates PLUS server and OpenIGTLink connection if it doesn't exist already.
-        """
-        
-        
-        
-
-
-    def setFreezeUltrasoundClicked(self, toggled):
-        parameterNode = self.getParameterNode()
-        plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
-        plusServerConnectorNode = plusServerNode.GetNodeReference("plusServerConnectorNodeRef")
-        if plusServerConnectorNode:
-            if toggled:
-                plusServerConnectorNode.Stop()
-            else:
-                plusServerConnectorNode.Start()
-
     def setPlusServerClicked(self, toggled):
         if toggled:
             FNULL = open(os.devnull, 'w')    #use this if you want to suppress output to stdout from the subprocess
             #config_file = "C:/repos/aigt/UltrasoundObjectDetection/SlicerModule/BLUELungUltrasound/BLUELungUltrasound/default_plus_config.xml"
             config_file = self.getParameterNode().GetParameter("PLUSConfigFile")
             print(config_file)
-            executable = "C:/Users/Guest admin/PlusApp-2.8.0.20191105-Win64/bin/PlusServer.exe"
+            #executable = "C:/Users/Guest admin/PlusApp-2.8.0.20191105-Win64/bin/PlusServer.exe"
+            executable = self.getParameterNode().GetParameter("PLUSExePath")
+            print(executable)
             args = f'"{executable}" --config-file="{config_file}"'
             self.plus_server_process = subprocess.Popen(args, stdout=FNULL, stderr=FNULL, shell=False)
             print('plus server started')
@@ -409,21 +365,19 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
             self.plus_server_process.kill()
             print('plus server stopped')
 
-    def setPlusConfigFile(self, configFilepath):
-        parameterNode = self.getParameterNode()
-        plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
-        configTextNode = parameterNode.GetNodeReference(self.CONFIG_TEXT_NODE)
-        configTextStorageNode = configTextNode.GetStorageNode()
-        configTextStorageNode.SaveWithSceneOff()
-        configTextStorageNode.SetFileName(configFilepath)
-        configTextStorageNode.ReadData(configTextNode)
-        plusServerNode.SetAndObserveConfigNode(configTextNode)
-
-    def setHostname(self, hostname):
-        parameterNode = self.getParameterNode()
-        plusServerLauncherNode = parameterNode.GetNodeReference(self.PLUS_SERVER_LAUNCHER_NODE)
-        if plusServerLauncherNode:
-            plusServerLauncherNode.SetHostname(hostname)
+    
+    def find_local_file(self, filename):        
+        drives = []
+        bitmask = windll.kernel32.GetLogicalDrives()
+        for letter in string.ascii_uppercase:
+            if bitmask & 1:
+                drives.append(letter)
+            bitmask >>= 1
+        
+        for drive in drives:
+            for root, dirs, files in os.walk(f'{drive}:/'):
+                if filename in files:
+                    return os.path.join(root, filename)
 #
 # BLUELungUltrasoundTest
 #

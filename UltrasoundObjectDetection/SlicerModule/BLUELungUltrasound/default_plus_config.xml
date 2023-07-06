@@ -38,7 +38,7 @@
   <PlusOpenIGTLinkServer 
     MaxNumberOfIgtlMessagesToSend="1" 
     MaxTimeSpentWithProcessingMs="50" 
-    ListeningPort="18945" 
+    ListeningPort="18944" 
     SendValidTransformsOnly="true" 
     OutputChannelId="VideoStream" > 
     <DefaultClientInfo> 

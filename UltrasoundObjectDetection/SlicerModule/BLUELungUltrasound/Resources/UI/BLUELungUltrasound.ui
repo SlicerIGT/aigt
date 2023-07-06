@@ -29,6 +29,23 @@
     </layout>
    </item>
    <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="label_2">
+       <property name="text">
+        <string>Path to PlusServer.exe:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="ctkPathLineEdit" name="plusServerExeSelector"/>
+     </item>
+    </layout>
+   </item>
+   <item>
     <widget class="QPushButton" name="startPlusButton">
      <property name="text">
       <string>Start PLUS Server</string>
