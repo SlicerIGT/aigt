@@ -7,7 +7,7 @@ import logging
 import subprocess
 import time
 import datetime
-from sequenceSpinBox import sequenceSpinBox
+from Libs.sequenceSpinBox import sequenceSpinBox
 
 try:
   import cv2
@@ -1295,7 +1295,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       maxValue = maxLabels[i].text
       maxValue = maxValue.replace(" s", "")
       maxValue = float(maxValue)
-      labels = labels.append({self.labelNode.GetName():labelName,"Start":minValue,"End":maxValue},ignore_index=True)
+      labels = pandas.concat([labels, pandas.DataFrame({self.labelNode.GetName():[labelName],"Start":[minValue],"End":[maxValue]})])
+      labels.index = [i for i in range(len(labels.index))]
     return labels
 
 
@@ -1441,9 +1442,10 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
         if self.fromSequence:
           recordingTime = timeLabel.text
           self.lastRecordedTime = float(recordingTime)
-          self.imageLabels = self.imageLabels.append({'FileName': fileName,'Time Recorded':recordingTime}, ignore_index=True)
+          self.imageLabels = pandas.concat([self.imageLabels, pandas.DataFrame({'FileName': [fileName],'Time Recorded':[recordingTime]})])
         else:
-          self.imageLabels = self.imageLabels.append({'FileName':fileName},ignore_index=True)
+          self.imageLabels = pandas.concat([self.imageLabels,pandas.DataFrame({'FileName':[fileName]})])
+        self.imageLabels.index = [i for i in range(len(self.imageLabels.index))]
       else:
         if self.labellingMethod == 'Auto from file':
           self.labelType = self.autoLabels.columns[0]
@@ -1469,8 +1471,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
             #self.imageLabels[self.labelType].iloc._setitem_with_indexer(entry, self.labelName)
             self.imageLabels.loc[entry,self.labelType] = self.labelName
         else:
-          self.imageLabels = self.imageLabels.append({'FileName': fileName, self.labelType: self.labelName},
-                                                     ignore_index=True)
+          self.imageLabels = pandas.concat([self.imageLabels, pandas.DataFrame({'FileName': [fileName], self.labelType: [self.labelName]})])
+          self.imageLabels = [i for i in range(len(self.imageLabels.index))]
       self.imageLabels.to_csv(self.labelFilePath)
     elif not self.continueRecording:
       playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
@@ -1516,8 +1518,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     prevTimeRecorded = 0
     for i in range(numDataNodes):
       logging.info(str(i) + " / " + str(numDataNodes) + " written")
-      dataNode = sequenceNode.GetNthDataNode(i)
-      timeRecorded = float(sequenceNode.GetNthIndexValue(i))
+      #dataNode = sequenceNode.GetNthDataNode(i)
+      #timeRecorded = float(sequenceNode.GetNthIndexValue(i))
+      self.moveToNextTimeStep(i)
       roundedtimeRecorded = "%.2f" % timeRecorded
       if timeRecorded - prevTimeRecorded > 0.01:
         roundedtimeRecorded = float(roundedtimeRecorded)
@@ -1535,7 +1538,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           for j in entry.index:
             self.imageLabels.loc[j, self.labelType] = labelName
         else:
-          imData = self.getVtkImageDataAsOpenCVMat(dataNode,True)
+          imData = self.getVtkImageDataAsOpenCVMat(self.recordingVolumeNode,True)
           if self.imageSubtype == '':
             fileName = self.videoID + "_" + str(i).zfill(5) + self.fileType
           else:
@@ -1545,7 +1548,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
             numpy.save(os.path.join(imagePath, fileName), imData)
           else:
             cv2.imwrite(os.path.join(imagePath, fileName), imData)
-          self.imageLabels = self.imageLabels.append({"FileName":fileName,"Time Recorded":timeRecorded,self.labelType:labelName},ignore_index=True)
+          self.imageLabels = pandas.concat([self.imageLabels, pandas.DataFrame({"FileName":[fileName],"Time Recorded":[timeRecorded],self.labelType:[labelName]})])
+          self.imageLabels.index = [i for i in range(len(self.imageLabels.index))]
       prevTimeRecorded = timeRecorded
     self.imageLabels.to_csv(self.labelFilePath)
 
@@ -1605,8 +1609,9 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
             numpy.save(os.path.join(imagePath, fileName), imData)
           else:
             cv2.imwrite(os.path.join(imagePath, fileName), imData)
-          self.imageLabels = self.imageLabels.append(
-            {"FileName": fileName, "Time Recorded": timeRecorded, self.labelType: labelName}, ignore_index=True)
+          self.imageLabels = pandas.concat([self.imageLabels, pandas.DataFrame(
+            {"FileName": [fileName], "Time Recorded": [timeRecorded], self.labelType: [labelName]})])
+          self.imageLabels.index = [i for i in range(len(self.imageLabels.index))]
       prevTimeRecorded = timeRecorded
     self.imageLabels.to_csv(self.labelFilePath)
 
@@ -1628,6 +1633,18 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       else:
         cv2.imwrite(os.path.join(imagePath, labelFileName), segImage)
     return labelFileName
+
+  def moveToNextTimeStep(self,index):
+    seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
+    seekWidget = seekWidget[0]
+    seekSlider = seekWidget.findChildren("QSlider")
+    seekSlider = seekSlider[0]
+    timeLabel = seekWidget.findChildren("QLabel")
+    timeLabel = timeLabel[1]
+    recordingTime = float(timeLabel.text)
+    if seekSlider.value <= seekSlider.maximum and recordingTime >= self.lastRecordedTime:
+      seekSlider.setValue(index)
+      slicer.mrmlScene.Modified()
 
   def getClassificationLabelFromSequence(self,labels,timeRecorded):
     label = labels.loc[(labels["Start"] <= timeRecorded) & (labels["End"] > timeRecorded)]
@@ -1677,7 +1694,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
         else:
           endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
-          labels = labels.append({self.labelType:startLabel,"Start":startIndex,"End":endIndex},ignore_index=True)
+          labels = pandas.concat([labels, pandas.DataFrame({self.labelType:[startLabel],"Start":[startIndex],"End":[endIndex]})])
+          labels.index = [i for i in range(len(labels.index))]
           startIndex = endIndex
           startLabel = currentLabel
           #endIndex = float(self.labelSequenceNode.GetNthIndexValue(i))
