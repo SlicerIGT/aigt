@@ -379,7 +379,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
                 foregroundOpacity=0,
                 fit=True)
         except:
-            print("View reset unsuccessful - cannot find incoming data node")
+            print("View reset unsuccessful - cannot find incoming data node. Try again in a few seconds")
 
 
     def find_local_file(self, filename):        
