@@ -276,23 +276,16 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         logging.info(f"onPlusServerExePathChanged({plusExePath})")
         self._parameterNode.SetParameter("PLUSExePath", self.ui.plusServerExeSelector.currentPath)
 
-    def onHostnameChanged(self):
-        newHostname = self.ui.hostnameLineEdit.text
-        settings = qt.QSettings()
-        settings.setValue(self.logic.HOSTNAME_SETTING, newHostname)
-        self.logic.setHostname(newHostname)
-        logging.info(f"onHostnameChanged({newHostname})")
-
     def onStartPlusClicked(self, toggled):
         logging.info(f"onStartPlusClicked({toggled})")
         if toggled:
             self.ui.startPlusButton.text = "Stop PLUS Server"
-            #self.ui.plusConfigFileSelector.enabled = False
-            #self.ui.hostnameLineEdit.enabled = False
+            self.ui.plusConfigFileSelector.enabled = False
+            self.ui.plusServerExeSelector.enabled = False
         else:
             self.ui.startPlusButton.text = "Start PLUS Server"
-            #self.ui.plusConfigFileSelector.enabled = True
-            #self.ui.hostnameLineEdit.enabled = True
+            self.ui.plusConfigFileSelector.enabled = True
+            self.ui.plusServerExeSelector.enabled = True
         
         self.logic.setPlusServerClicked(toggled)
 
