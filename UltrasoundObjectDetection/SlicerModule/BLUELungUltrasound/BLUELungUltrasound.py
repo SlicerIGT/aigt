@@ -2,7 +2,8 @@ import logging
 import os
 import subprocess
 import string
-import time
+import sys
+from pathlib import Path
 from ctypes import windll
 
 import vtk
@@ -151,6 +152,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         # Buttons
         self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
         self.ui.setViewButton.connect('clicked(bool)', self.onSetViewButtonClicked)
+        self.ui.startInferenceButton.connect('toggled(bool)', self.onStartInferenceButtonClicked)
 
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -162,6 +164,9 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         """
         if self.logic.plus_server_process:
             self.logic.plus_server_process.kill()
+        
+        if self.logic.inference_server_process:
+            self.logic.inference_server_process.kill()
 
         self.removeObservers()
 
@@ -276,11 +281,16 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             self.ui.plusServerExeSelector.enabled = True
         
         self.logic.setPlusServerClicked(toggled)
-        #self.logic.setViewToIncomingData("Image_Reference")
 
     def onSetViewButtonClicked(self):
         logging.info("onSetViewButtonClicked()")
         self.logic.setViewToIncomingData("Image_Reference")
+
+    def onStartInferenceButtonClicked(self, toggled):
+        logging.info(f'onStartInferenceButtonClicked({toggled})')
+        self.ui.startInferenceButton.text = "Stop Inference" if toggled else "Start Inference"
+
+        self.logic.ToggleInferenceMode(toggled)
 
 #
 # BLUELungUltrasoundLogic
@@ -299,24 +309,34 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     # OpenIGTLink PLUS connection
     CONFIG_FILE_DEFAULT = "default_plus_config.xml"  # Default config file if the user doesn't set another.
     PLUS_SERVER_EXECUTABLE = "PlusServer.exe" # having Plus Toolkit installed is a prerequisite
-    IGTL_CONNECTOR_NODE = "EpiphanInput"
-    IGTL_PORT = 18944 # TODO: read the port from the PLUS config file
+    IGTL_RAW_INPUT_PORT = 18944 # TODO: read the port from the PLUS config file
+    IGTL_INFERENCE_PORT = 18945
 
     def __init__(self):
         """
         Called when the logic class is instantiated. Can be used for initializing member variables.
         """
         ScriptedLoadableModuleLogic.__init__(self)
-        self.setupIgtlClient()
-        
         self.plus_server_process = None
+        self.inference_server_process = None
+
+        self.setupOpenIgtLink()
+        #self.setupInferenceServer()
         
-    def setupIgtlClient(self):
-        self.IgtlConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
-        self.IgtlConnectorNode.SetName('EpiphanInput')
-        self.IgtlConnectorNode.SetTypeClient('localhost', self.IGTL_PORT)
-        slicer.mrmlScene.AddNode(self.IgtlConnectorNode)
-        self.IgtlConnectorNode.Start()
+        
+        
+    def setupOpenIgtLink(self):
+
+        self.RawInputIgtlConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
+        self.RawInputIgtlConnectorNode.SetName('Raw Input')
+        self.RawInputIgtlConnectorNode.SetTypeClient('localhost', self.IGTL_RAW_INPUT_PORT)
+        slicer.mrmlScene.AddNode(self.RawInputIgtlConnectorNode)
+        self.RawInputIgtlConnectorNode.Start()
+
+        self.InferenceIgtlConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
+        self.InferenceIgtlConnectorNode.SetName('Inference')
+        self.InferenceIgtlConnectorNode.SetTypeClient('localhost', self.IGTL_INFERENCE_PORT)
+        slicer.mrmlScene.AddNode(self.InferenceIgtlConnectorNode)
     
     def setDefaultParameters(self, parameterNode):
         """
@@ -336,6 +356,15 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         moduleDir = os.path.dirname(slicer.util.modulePath(self.moduleName))
         return os.path.join(moduleDir, 'Resources', filename)
 
+    def setupInferenceServer(self):
+        FNULL = open(os.devnull, 'w')
+        python_executable = '"C:/Users/Guest admin/anaconda3/envs/pytorch/python.exe"'
+        inference_server_script = 'C:/repos/aigt/UltrasoundObjectDetection/RealtimeInferenceOverOpenIGTLink.py'
+        args = f'{python_executable} {inference_server_script}'
+        print(args)
+        self.inference_server_process = subprocess.Popen(args, env=os.environ)
+        print('Inference server started')
+    
     
     def setPlusServerClicked(self, toggled):
         if toggled:
@@ -397,6 +426,15 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
                 
         print("No PLUS installation found")
         return None
+    
+    def ToggleInferenceMode(self, toggled):
+        if toggled:
+            self.InferenceIgtlConnectorNode.Start()
+            print("Inference running")
+        else:
+            self.InferenceIgtlConnectorNode.Stop()
+            print("Inference stopped")
+
 #
 # BLUELungUltrasoundTest
 #
