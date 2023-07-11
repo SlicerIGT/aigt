@@ -52,6 +52,7 @@ def parse_args():
     parser.add_argument("--output-dir", type=str)
     parser.add_argument("--config-file", type=str, default="train_config.yaml")
     parser.add_argument("--num-sample-images", type=int, default=3)
+    parser.add_argument("--num-fps-test-images", type=int, default=100)
     parser.add_argument("--save-torchscript", action="store_true")
     parser.add_argument("--save-ckpt-freq", type=int, default=0)
     parser.add_argument("--wandb-project-name", type=str, default="aigt_ultrasound_segmentation")
@@ -541,24 +542,6 @@ def main(args):
             torch.save(model.state_dict(), ckpt_model_path)
             logging.info(f"Saved model checkpoint to {ckpt_model_path}.")
 
-    # Test inference time (load images before loop to exclude from time measurement)
-    logging.info("Measuring inference time...")
-    num_test_images = 100
-    inputs = torch.stack([val_dataset[i]["image"] for i in range(num_test_images)])
-    model.eval()
-    with torch.no_grad():
-        start = perf_counter()
-        for i in range(num_test_images):
-            model(inputs[i, :, :, :].unsqueeze(0).to(device=device))
-        end = perf_counter()
-    avg_inf_time = (end - start) / num_test_images
-    avg_inf_fps = 1 / avg_inf_time
-    logging.info(f"Average inference time per image: {avg_inf_time:.4f}s ({avg_inf_fps:.2f} FPS)")
-    run.log({
-        "avg_inference_time": avg_inf_time,
-        "avg_inference_fps": avg_inf_fps
-    })
-
     # Save the final model also under the name "model.pt" so that we can easily find it later.
     # This is useful if we want to use the model for inference without having to specify the model filename.
     model_path = os.path.join(run_dir, "model.pt")
@@ -575,6 +558,24 @@ def main(args):
         extra_files = {"config.json": json.dumps(d)}
         traced_script_module.save(ts_model_path, _extra_files=extra_files)
         logging.info(f"Saved traced model to {ts_model_path}.")
+
+    # Test inference time (load images before loop to exclude from time measurement)
+    logging.info("Measuring inference time...")
+    num_test_images = args.num_fps_test_images
+    inputs = torch.stack([val_dataset[i]["image"] for i in range(num_test_images)])
+    model.eval()
+    with torch.no_grad():
+        start = perf_counter()
+        for i in range(num_test_images):
+            model(inputs[i, :, :, :].unsqueeze(0).to(device=device))
+        end = perf_counter()
+    avg_inf_time = (end - start) / num_test_images
+    avg_inf_fps = 1 / avg_inf_time
+    logging.info(f"Average inference time per image: {avg_inf_time:.4f}s ({avg_inf_fps:.2f} FPS)")
+    run.log({
+        "avg_inference_time": avg_inf_time,
+        "avg_inference_fps": avg_inf_fps
+    })
 
     run.finish()
 
