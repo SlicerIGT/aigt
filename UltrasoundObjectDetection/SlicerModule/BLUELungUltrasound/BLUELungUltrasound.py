@@ -2,6 +2,7 @@ import logging
 import os
 import subprocess
 import string
+import time
 from ctypes import windll
 
 import vtk
@@ -24,7 +25,7 @@ class BLUELungUltrasound(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = "BLUE Lung Ultrasound"  # TODO: make this more human readable by adding spaces
-        self.parent.categories = ["Ultrasound"]  # TODO: set categories (folders where the module shows up in the module selector)
+        self.parent.categories = ["IGT"]  # TODO: set categories (folders where the module shows up in the module selector)
         self.parent.dependencies = []  # TODO: add here list of module names that this module requires
         self.parent.contributors = ["Róbert Zsolt Szabó (Óbuda University)"]  # TODO: replace with "Firstname Lastname (Organization)"
         # TODO: update with short description of the module and a link to online module documentation
@@ -106,7 +107,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         Called when the user opens the module the first time and the widget is initialized.
         """
         ScriptedLoadableModuleWidget.__init__(self, parent)
-        slicer.mymodW = self  # then in python interactor, call "self = slicer.mymod" to use
+        slicer.BlueLungWidget = self  # then in python interactor, call "self = slicer.mymod" to use
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
@@ -149,6 +150,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
         # Buttons
         self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
+        self.ui.setViewButton.connect('clicked(bool)', self.onSetViewButtonClicked)
 
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -234,19 +236,9 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         # Make sure GUI changes do not call updateParameterNodeFromGUI (it could cause infinite loop)
         self._updatingGUIFromParameterNode = True
 
-        #configFilepath = slicer.util.settingsValue(self.logic.CONFIG_FILE_DEFAULT, self.logic.resourcePath(self.logic.CONFIG_FILE_DEFAULT))
         self.ui.plusConfigFileSelector.currentPath = self._parameterNode.GetParameter("PLUSConfigFile")
         self.ui.plusServerExeSelector.currentPath = self._parameterNode.GetParameter("PLUSExePath")
         
-        '''
-        # Update buttons states and tooltips
-        if self._parameterNode.GetNodeReference("InputVolume") and self._parameterNode.GetNodeReference("OutputVolume"):
-            self.ui.applyButton.toolTip = "Compute output volume"
-            self.ui.applyButton.enabled = True
-        else:
-            self.ui.applyButton.toolTip = "Select input and output volume nodes"
-            self.ui.applyButton.enabled = False
-        '''
         # All the GUI updates are done
         
         self._updatingGUIFromParameterNode = False
@@ -261,16 +253,12 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             return
 
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
-
-        #self._parameterNode.SetParameter("PLUSConfigFile", self.ui.plusConfigFileSelector.currentpath)
-
         self._parameterNode.EndModify(wasModified)
     
 
     def onPlusConfigFileChanged(self, configFilepath):
         logging.info(f"onPlusConfigFileChanged({configFilepath})")
         self._parameterNode.SetParameter("PLUSConfigFile", self.ui.plusConfigFileSelector.currentPath)
-        #self.logic.setPlusConfigFile(configFilepath)
 
     def onPlusServerExePathChanged(self, plusExePath):
         logging.info(f"onPlusServerExePathChanged({plusExePath})")
@@ -288,6 +276,11 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             self.ui.plusServerExeSelector.enabled = True
         
         self.logic.setPlusServerClicked(toggled)
+        #self.logic.setViewToIncomingData("Image_Reference")
+
+    def onSetViewButtonClicked(self):
+        logging.info("onSetViewButtonClicked()")
+        self.logic.setViewToIncomingData("Image_Reference")
 
 #
 # BLUELungUltrasoundLogic
@@ -307,22 +300,24 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     CONFIG_FILE_DEFAULT = "default_plus_config.xml"  # Default config file if the user doesn't set another.
     PLUS_SERVER_EXECUTABLE = "PlusServer.exe" # having Plus Toolkit installed is a prerequisite
     IGTL_CONNECTOR_NODE = "EpiphanInput"
-    IGTL_PORT = 18944
+    IGTL_PORT = 18944 # TODO: read the port from the PLUS config file
 
     def __init__(self):
         """
         Called when the logic class is instantiated. Can be used for initializing member variables.
         """
         ScriptedLoadableModuleLogic.__init__(self)
-
+        self.setupIgtlClient()
+        
+        self.plus_server_process = None
+        
+    def setupIgtlClient(self):
         self.IgtlConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
         self.IgtlConnectorNode.SetName('EpiphanInput')
         self.IgtlConnectorNode.SetTypeClient('localhost', self.IGTL_PORT)
         slicer.mrmlScene.AddNode(self.IgtlConnectorNode)
         self.IgtlConnectorNode.Start()
-        
-        self.plus_server_process = None
-        
+    
     def setDefaultParameters(self, parameterNode):
         """
         Initialize parameter node with default settings.
@@ -339,26 +334,54 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         :returns: str, full path to file specified
         """
         moduleDir = os.path.dirname(slicer.util.modulePath(self.moduleName))
-        return os.path.join(moduleDir, filename)
+        return os.path.join(moduleDir, 'Resources', filename)
 
     
     def setPlusServerClicked(self, toggled):
         if toggled:
-            FNULL = open(os.devnull, 'w')    #use this if you want to suppress output to stdout from the subprocess
-            #config_file = "C:/repos/aigt/UltrasoundObjectDetection/SlicerModule/BLUELungUltrasound/BLUELungUltrasound/default_plus_config.xml"
+            FNULL = open(os.devnull, 'w')
             config_file = self.getParameterNode().GetParameter("PLUSConfigFile")
             print(config_file)
-            #executable = "C:/Users/Guest admin/PlusApp-2.8.0.20191105-Win64/bin/PlusServer.exe"
             executable = self.getParameterNode().GetParameter("PLUSExePath")
-            print(executable)
             args = f'"{executable}" --config-file="{config_file}"'
             self.plus_server_process = subprocess.Popen(args, stdout=FNULL, stderr=FNULL, shell=False)
-            print('plus server started')
+            print('PLUS server started')
         else:
             self.plus_server_process.kill()
-            print('plus server stopped')
+            print('PLUS server stopped')
 
     
+    '''
+    def setViewToIncomingData(self, nodeName):
+        tryCount = 5
+        while tryCount > 0:
+            try:
+                slicer.util.getNode(nodeName)
+            except:
+                print("Waiting for incoming data...")
+                tryCount -= 1
+                time.sleep(1)
+            else:
+                slicer.util.setSliceViewerLayers(
+                    foreground=slicer.util.getNode(nodeName).GetID(),
+                    foregroundOpacity=0,
+                    fit=True)
+                break
+        
+        if tryCount == 0:
+            print("View reset unsuccessful - cannot find incoming data node")
+    '''
+
+    def setViewToIncomingData(self, nodeName):
+        try:
+            slicer.util.setSliceViewerLayers(
+                foreground=slicer.util.getNode(nodeName).GetID(),
+                foregroundOpacity=0,
+                fit=True)
+        except:
+            print("View reset unsuccessful - cannot find incoming data node")
+
+
     def find_local_file(self, filename):        
         drives = []
         bitmask = windll.kernel32.GetLogicalDrives()
@@ -371,6 +394,9 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
             for root, dirs, files in os.walk(f'{drive}:/'):
                 if filename in files:
                     return os.path.join(root, filename)
+                
+        print("No PLUS installation found")
+        return None
 #
 # BLUELungUltrasoundTest
 #

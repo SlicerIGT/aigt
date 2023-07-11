@@ -56,6 +56,13 @@
     </widget>
    </item>
    <item>
+    <widget class="QPushButton" name="setViewButton">
+     <property name="text">
+      <string>Set Views</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
