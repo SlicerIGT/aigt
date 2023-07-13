@@ -15,11 +15,11 @@ import argparse
 import traceback
 import sys
 import numpy as np
+from pathlib import Path
 import pyigtl
-import numpy as np
 from YOLOv5.model import ObjectDetectionModel
 import torch
-from pathlib import Path
+
 
 ROOT = Path(__file__).parent.resolve()
 
@@ -34,7 +34,8 @@ def parse_args():
     parser.add_argument("--confidence-threshold", type=float, default=0.5)
     parser.add_argument("--line-thickness", type=int, default=2)
     parser.add_argument("--host", type=str, default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=18945)
+    parser.add_argument("--input-port", type=int, default=18944)
+    parser.add_argument("--output-port", type=int, default=18945)
     try:
         return parser.parse_args()
     except SystemExit as err:
@@ -45,11 +46,12 @@ def parse_args():
 # runs the client in an infinite loop, waiting for messages from the server. Once a message is received,
 # the message is processed and the inference is sent back to the server as a pyigtl ImageMessage.
 def run_client(args):
-    client = pyigtl.OpenIGTLinkClient(host=args.host, port=args.port)
+    input_client = pyigtl.OpenIGTLinkClient(host=args.host, port=args.input_port)
+    output_server = pyigtl.OpenIGTLinkServer(port=args.output_port)
     model = None
 
     while True:
-        message = client.wait_for_message(args.input_device_name, timeout=-1)
+        message = input_client.wait_for_message(args.input_device_name, timeout=-1)
 
         if isinstance(message, pyigtl.ImageMessage):
             if model is None:
@@ -68,7 +70,7 @@ def run_client(args):
 
             prediction = model.predict(image, args.confidence_threshold)
             image_message = pyigtl.ImageMessage(np.flip(np.flip(prediction, axis=1), axis=2), device_name=args.output_device_name)
-            client.send_message(image_message, wait=True)
+            output_server.send_message(image_message, wait=True)
         else:
             print(f'Unexpected message format. Message:\n{message}')
 
