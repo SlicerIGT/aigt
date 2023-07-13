@@ -71,6 +71,8 @@ def run_client(args):
 
             if isinstance(prediction, list):
                 prediction = prediction[0]
+                
+            prediction = torch.nn.functional.softmax(prediction, dim=1)
             prediction = postprocess_prediction(prediction, orig_img_size)
 
             image_message = pyigtl.ImageMessage(prediction, device_name=args.output_device_name)
