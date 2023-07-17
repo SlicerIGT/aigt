@@ -18,7 +18,7 @@ class ObjectDetectionModel():
                  data_yaml='lung_us.yml',
                  device=torch.device('cpu'),
                  line_thickness=2,
-                 target_size=512):
+                 target_size=256):
         
         self.model = torch.jit.load(model if Path(model).is_absolute() else f'{str(ROOT)}/{model}', map_location=device)
         self.class_names = self._get_class_names_from_yaml(data_yaml if Path(data_yaml).is_absolute() else f'{str(ROOT)}/{data_yaml}')

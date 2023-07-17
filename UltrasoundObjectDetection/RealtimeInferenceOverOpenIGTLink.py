@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument("--data-yaml", type=str, default="YOLOv5/lung_us.yml")
     parser.add_argument("--input-device-name", type=str, default="Image_Reference")
     parser.add_argument("--output-device-name", type=str, default="Inference")
-    parser.add_argument("--target-size", type=int, default=512)
+    parser.add_argument("--target-size", type=int, default=256)
     parser.add_argument("--confidence-threshold", type=float, default=0.5)
     parser.add_argument("--line-thickness", type=int, default=2)
     parser.add_argument("--host", type=str, default="127.0.0.1")
