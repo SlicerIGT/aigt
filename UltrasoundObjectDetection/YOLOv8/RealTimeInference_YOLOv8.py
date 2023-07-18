@@ -1,11 +1,12 @@
 """
 Implements an OpenIGTLink client that expect pyigtl.ImageMessage and returns pyigtl.ImageMessage with YOLOv5 inference added to the image.
 Arguments:
-    weights: string path to the .pt weights file used for the model
+    model: string path to the torchscript file you intend to use
     input device name: This is the device name the client is listening to
     output device name: The device name the client outputs to
     host: the server's IP the client connects to.
-    port: port used for bidirectional communication between server and client.
+    input port: port used for receiving data from the PLUS server over OpenIGTLink
+    output port: port used for sending data to Slicer over OpenIGTLink
     target size: target quadratic size the model resizes to internally for predictions. Does not affect the actual output size
     confidence threshold: only bounding boxes above the given threshold will be visualized.
     line thickness: line thickness of drawn bounding boxes. Also affects font size of class names and confidence
@@ -15,26 +16,27 @@ import argparse
 import traceback
 import sys
 import numpy as np
-import pyigtl
-import torch
-import cv2
-from ultralytics import YOLO
 from pathlib import Path
+import pyigtl
+from ultralytics import YOLO
+import torch
+
 
 ROOT = Path(__file__).parent.resolve()
-cv2.namedWindow("Inference")
 
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="best.pt")
+    parser.add_argument("--model", type=str, default="YOLOv5/lung_us_pretrained.torchscript")
+    parser.add_argument("--data-yaml", type=str, default="YOLOv5/lung_us.yml")
     parser.add_argument("--input-device-name", type=str, default="Image_Reference")
     parser.add_argument("--output-device-name", type=str, default="Inference")
     parser.add_argument("--target-size", type=int, default=256)
     parser.add_argument("--confidence-threshold", type=float, default=0.5)
     parser.add_argument("--line-thickness", type=int, default=2)
     parser.add_argument("--host", type=str, default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=18945)
+    parser.add_argument("--input-port", type=int, default=18944)
+    parser.add_argument("--output-port", type=int, default=18945)
     try:
         return parser.parse_args()
     except SystemExit as err:
@@ -45,12 +47,13 @@ def parse_args():
 # runs the client in an infinite loop, waiting for messages from the server. Once a message is received,
 # the message is processed and the inference is sent back to the server as a pyigtl ImageMessage.
 def run_client(args):
-    client = pyigtl.OpenIGTLinkClient(host=args.host, port=args.port)
-    model = None
+    input_client = pyigtl.OpenIGTLinkClient(host=args.host, port=args.input_port)
+    output_server = pyigtl.OpenIGTLinkServer(port=args.output_port)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = None
 
     while True:
-        message = client.wait_for_message(args.input_device_name, timeout=-1)
+        message = input_client.wait_for_message(args.input_device_name, timeout=-1)
 
         if isinstance(message, pyigtl.ImageMessage):
             if model is None:
@@ -60,8 +63,8 @@ def run_client(args):
             image = preprocess_epiphan_image(message.image)
 
             prediction = model(image, conf=args.confidence_threshold, device=device)[0].plot()
-            cv2.imshow("Inference", prediction)
-            cv2.waitKey(500)
+            image_message = pyigtl.ImageMessage(np.flip(np.flip(prediction, axis=1), axis=2), device_name=args.output_device_name)
+            output_server.send_message(image_message, wait=True)
         else:
             print(f'Unexpected message format. Message:\n{message}')
 
