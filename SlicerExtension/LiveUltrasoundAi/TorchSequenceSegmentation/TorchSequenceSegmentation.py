@@ -46,6 +46,12 @@ except (ImportError, OSError):
     except (ImportError, OSError):
         INSTALL_PYTORCHUTILS = True
 
+try:
+    import nrrd
+except:
+    slicer.util.pip_install('pynrrd')
+    import nrrd
+
 
 #
 # TorchSequenceSegmentation
@@ -175,6 +181,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         """
         ScriptedLoadableModuleWidget.__init__(self, parent)
         VTKObservationMixin.__init__(self)  # needed for parameter node observation
+        slicer.mymod = self
         self.logic = None
         self._parameterNode = None
         self._updatingGUIFromParameterNode = False
@@ -232,13 +239,17 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         lastScanConversionPath = slicer.util.settingsValue(self.logic.LAST_SCAN_CONVERSION_PATH_SETTING, "")
         if lastScanConversionPath:
             self.ui.scanConversionPathLineEdit.currentPath = lastScanConversionPath
+            self.logic.loadScanConversion(lastScanConversionPath)
         self.ui.scanConversionPathLineEdit.connect("currentPathChanged(const QString)", self.updateSettingsFromGUI)
+
+        self.ui.outputDirectoryButton.connect("directoryChanged(const QString)", self.updateSettingsFromGUI)
 
         # Buttons
         self.ui.useIndividualRadioButton.connect("toggled(bool)", self.onModelSelectionMethodChanged)
         self.ui.useAllRadioButton.connect("toggled(bool)", self.onModelSelectionMethodChanged)
         self.ui.inputResliceButton.connect("clicked()", self.onResliceVolume)
         self.ui.startButton.connect("clicked()", self.onStartButton)
+        self.ui.exportButton.connect("clicked()", self.onExportButton)
         self.ui.clearScanConversionButton.connect("clicked()", self.onClearScanConversion)
 
         # Add custom 2D + 3D layout
@@ -470,11 +481,17 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.modelComboBox.clear()
             for model in models:
                 self.ui.modelComboBox.addItem(model.split(os.sep)[-2], model)
+
+        # Update output folder path
+        outputFolder = self.ui.outputDirectoryButton.directory
+        if outputFolder != slicer.util.settingsValue(self.logic.LAST_OUTPUT_FOLDER_SETTING, ""):
+            settings.setValue(self.logic.LAST_OUTPUT_FOLDER_SETTING, outputFolder)
     
     def onClearScanConversion(self):
         self.ui.scanConversionPathLineEdit.currentPath = ""
         settings = qt.QSettings()
         settings.setValue(self.logic.LAST_SCAN_CONVERSION_PATH_SETTING, "")
+        self.logic.loadScanConversion(None)
     
     def onModelSelectionMethodChanged(self, caller=None, event=None):
         useIndividualModel = self.ui.useIndividualRadioButton.checked
@@ -542,7 +559,8 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.useIndividualRadioButton.setEnabled(False)
         self.ui.useAllRadioButton.setEnabled(False)
         self.ui.modelDirectoryButton.setEnabled(False)
-        self.ui.modelComboBox.setEnabled(False)
+        if self.ui.useIndividualRadioButton.checked:
+            self.ui.modelComboBox.setEnabled(False)
         self.ui.sequenceBrowserSelector.setEnabled(False)
         self.ui.inputVolumeSelector.setEnabled(False)
         self.ui.volumeReconstructionSelector.setEnabled(False)
@@ -602,7 +620,8 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.useIndividualRadioButton.setEnabled(True)
         self.ui.useAllRadioButton.setEnabled(True)
         self.ui.modelDirectoryButton.setEnabled(True)
-        self.ui.modelComboBox.setEnabled(True)
+        if self.ui.useIndividualRadioButton.checked:
+            self.ui.modelComboBox.setEnabled(True)
         self.ui.sequenceBrowserSelector.setEnabled(True)
         self.ui.inputVolumeSelector.setEnabled(True)
         self.ui.volumeReconstructionSelector.setEnabled(True)
@@ -613,6 +632,56 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.outputTransformSelector.setEnabled(True)
         self.ui.scanConversionPathLineEdit.setEnabled(True)
         self.ui.clearScanConversionButton.setEnabled(True)
+        slicer.app.processEvents()
+    
+    def onExportButton(self):
+        predictionNodes = slicer.util.getNodes("*_Prediction")
+        if len(predictionNodes) == 0:
+            logging.error("No predictions to export!")
+            return
+
+        self.ui.patientIDLineEdit.setEnabled(False)
+        self.ui.sequenceNameLineEdit.setEnabled(False)
+        self.ui.outputDirectoryButton.setEnabled(False)
+        self.ui.exportButton.setEnabled(False)
+        slicer.app.processEvents()
+
+        # Overall task progress bar
+        self.ui.overallProgressBar.setMaximum(len(predictionNodes))
+
+        outputFolder = self.ui.outputDirectoryButton.directory
+        patientID = self.ui.patientIDLineEdit.text
+        sequenceName = self.ui.sequenceNameLineEdit.text
+
+        # Export ultrasound if needed
+        if self.ui.exportUltrasoundCheckBox.checked:
+            self.ui.overallProgressBar.setMaximum(len(predictionNodes) + 1)
+            self.ui.overallStatusLabel.setText(f"Exporting ultrasound sequence...")
+
+            self.logic.exportImageSequenceAsArray(outputFolder, patientID, sequenceName)
+
+            self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
+            slicer.app.processEvents()
+
+        # Export segmentations
+        for name, proxyNode in predictionNodes.items():
+            self.ui.overallStatusLabel.setText(f"Exporting {name}...")
+            try:
+                self.logic.exportPredictionSequenceAsArray(proxyNode, outputFolder, patientID, sequenceName)
+            except Exception as e:
+                logging.error(f"Error exporting {name}: {e}")
+                continue
+            finally:
+                self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
+                slicer.app.processEvents()
+        
+        # Restore UI
+        self.ui.overallProgressBar.setValue(0)
+        self.ui.overallStatusLabel.setText("Ready")
+        self.ui.patientIDLineEdit.setEnabled(True)
+        self.ui.sequenceNameLineEdit.setEnabled(True)
+        self.ui.outputDirectoryButton.setEnabled(True)
+        self.ui.exportButton.setEnabled(True)
         slicer.app.processEvents()
 
 
@@ -632,6 +701,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
     LAST_MODEL_FOLDER_SETTING = "TorchSequenceSegmentation/LastModelFolder"
     LAST_SCAN_CONVERSION_PATH_SETTING = "TorchSequenceSegmentation/LastScanConversionPath"
+    LAST_OUTPUT_FOLDER_SETTING = "TorchSequenceSegmentation/LastOutputFolder"
 
     def __init__(self):
         """
@@ -950,6 +1020,56 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         self.volRecLogic.ReconstructVolumeFromSequence(reconstructionNode)
 
         self.isProcessing = False
+    
+    def exportImageSequenceAsArray(self, outputFolder, patientID, sequenceName):
+        # Get volume sequence data
+        parameterNode = self.getParameterNode()
+        sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
+        imageSequence = sequenceBrowser.GetMasterSequenceNode()
+        sampleImage = imageSequence.GetNthDataNode(0)
+
+        # Create array for storing each frame
+        numFrames = sequenceBrowser.GetNumberOfItems()
+        imageSize = slicer.util.arrayFromVolume(sampleImage).shape
+        arraySize = (numFrames, imageSize[1], imageSize[2], 1)
+        imageArray = self.convertSequenceToArray(imageSequence, arraySize)
+        
+        # Save ultrasound array
+        filename = f"{patientID}_{sequenceName}.nrrd"
+        fullPath = os.path.join(outputFolder, filename)
+        nrrd.write(fullPath, imageArray, compression_level=1)
+    
+    def exportPredictionSequenceAsArray(self, proxyNode, outputFolder, patientID, sequenceName):
+        # Get volume sequence data
+        parameterNode = self.getParameterNode()
+        sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
+        predictionSequence = sequenceBrowser.GetSequenceNode(proxyNode)
+
+        # Create array for storing each frame
+        numFrames = sequenceBrowser.GetNumberOfItems()
+        imageSize = slicer.util.arrayFromVolume(proxyNode).shape
+        arraySize = (numFrames, imageSize[1], imageSize[2], 1)
+        predictionArray = self.convertSequenceToArray(predictionSequence, arraySize)
+        
+        # Save prediction array
+        modelName = proxyNode.GetName().split("_Prediction")[0].replace("_", "-")
+        filename = f"{patientID}_{modelName}_{sequenceName}.nrrd"
+        fullPath = os.path.join(outputFolder, filename)
+        nrrd.write(fullPath, predictionArray, compression_level=1)
+
+    @staticmethod
+    def convertSequenceToArray(sequenceNode, outputShape):
+        # Create array for storing each frame
+        outputArray = np.zeros(outputShape, dtype=np.uint8)
+
+        # Iterate through each frame
+        for itemIndex in range(outputShape[0]):
+            # Add image to array
+            currentImage = sequenceNode.GetNthDataNode(itemIndex)
+            resizedImage = np.expand_dims(slicer.util.arrayFromVolume(currentImage), axis=3)
+            outputArray[itemIndex, ...] = resizedImage
+
+        return outputArray
 
 
 #
