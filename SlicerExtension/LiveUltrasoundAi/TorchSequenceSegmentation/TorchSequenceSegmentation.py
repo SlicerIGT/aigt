@@ -478,6 +478,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         if modelFolder != slicer.util.settingsValue(self.logic.LAST_MODEL_FOLDER_SETTING, ""):
             settings.setValue(self.logic.LAST_MODEL_FOLDER_SETTING, modelFolder)
             models = self.logic.getAllModelPaths()
+            self.logic.setModelsToUse(models)
             self.ui.modelComboBox.clear()
             for model in models:
                 self.ui.modelComboBox.addItem(model.split(os.sep)[-2], model)
