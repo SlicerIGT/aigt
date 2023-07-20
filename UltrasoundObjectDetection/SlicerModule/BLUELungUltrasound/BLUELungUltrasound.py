@@ -3,6 +3,8 @@ import os
 import subprocess
 import string
 import sys
+import time
+import numpy as np
 from pathlib import Path
 from ctypes import windll
 
@@ -147,12 +149,15 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
         # (in the selected parameter node).
         self.ui.plusConfigFileSelector.connect('currentPathChanged(const QString)', self.onPlusConfigFileChanged)
-        self.ui.plusServerExeSelector.connect('currentPathChanged(const QString)', self.onPlusServerExePathChanged)
+        self.ui.plusServerExeSelector.connect('currentPathChanged(const QString)', self.onPlusServerExePathChanged)        
 
         # Buttons
         self.ui.startPlusButton.connect('toggled(bool)', self.onStartPlusClicked)
         self.ui.setViewButton.connect('clicked(bool)', self.onSetViewButtonClicked)
         self.ui.startInferenceButton.connect('toggled(bool)', self.onStartInferenceButtonClicked)
+        self.ui.setCustomUiButton.connect('toggled(bool)', self.onSetCustomUiButtonClicked)
+        self.ui.placeMarkupLineButton.connect('clicked(bool)', self.onPlaceMarkupLineClicked)
+        self.ui.generateMModeButton.connect('clicked(bool)', self.onGenerateMModeButtonClicked)
 
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -292,6 +297,29 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
         self.logic.ToggleInferenceMode(toggled)
 
+    def onSetCustomUiButtonClicked(self, toggled):
+        self.ui.setCustomUiButton.text = "Disable Custom UI" if toggled else "Enable Custom UI"
+        self.logic.SetCustomStyle(toggled)
+
+    def onGenerateMModeButtonClicked(self):
+        self.logic.GenerateMModeImage()
+
+    def onPlaceMarkupLineClicked(self):
+        layoutManager = slicer.app.layoutManager()
+        redSliceLogic = layoutManager.sliceWidget("Red").sliceLogic()
+        transducerCenter = [self.logic.X_CENTER, self.logic.Y_CENTER, redSliceLogic.GetSliceOffset()]
+
+        lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode")
+        lineNode.AddControlPoint(transducerCenter)
+
+        selectionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLSelectionNodeSingleton")
+        selectionNode.SetActivePlaceNodeID(lineNode.GetID())
+        interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+        placeModePersistence = 1
+        interactionNode.SetPlaceModePersistence(placeModePersistence)
+        # mode 1 is Place, can also be accessed via slicer.vtkMRMLInteractionNode().Place
+        interactionNode.SetCurrentInteractionMode(1)
+
 #
 # BLUELungUltrasoundLogic
 #
@@ -311,6 +339,10 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     PLUS_SERVER_EXECUTABLE = "PlusServer.exe" # having Plus Toolkit installed is a prerequisite
     IGTL_RAW_INPUT_PORT = 18944 # TODO: read the port from the PLUS config file
     IGTL_INFERENCE_PORT = 18945
+
+    # M-mode stuff (TEMPORARY):
+    X_CENTER = 0
+    Y_CENTER = 0
 
     def __init__(self):
         """
@@ -379,27 +411,6 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
             self.plus_server_process.kill()
             print('PLUS server stopped')
 
-    
-    '''
-    def setViewToIncomingData(self, nodeName):
-        tryCount = 5
-        while tryCount > 0:
-            try:
-                slicer.util.getNode(nodeName)
-            except:
-                print("Waiting for incoming data...")
-                tryCount -= 1
-                time.sleep(1)
-            else:
-                slicer.util.setSliceViewerLayers(
-                    foreground=slicer.util.getNode(nodeName).GetID(),
-                    foregroundOpacity=0,
-                    fit=True)
-                break
-        
-        if tryCount == 0:
-            print("View reset unsuccessful - cannot find incoming data node")
-    '''
 
     def setViewToIncomingData(self, nodeName):
         try:
@@ -434,6 +445,53 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         else:
             self.InferenceIgtlConnectorNode.Stop()
             print("Inference stopped")
+
+    def SetCustomStyle(self, visible):
+        """
+        Applies UI customization. Hide Slicer widgets and apply custom stylesheet.
+        :param visible: True to apply custom style.
+        :returns: None
+        """
+        #settings = qt.QSettings()
+        #settings.setValue(self.SLICER_INTERFACE_VISIBLE, not visible)
+
+        slicer.util.setToolbarsVisible(not visible)
+        slicer.util.setMenuBarsVisible(not visible)
+        slicer.util.setApplicationLogoVisible(not visible)
+        slicer.util.setModuleHelpSectionVisible(not visible)
+        slicer.util.setModulePanelTitleVisible(not visible)
+        slicer.util.setDataProbeVisible(not visible)
+        slicer.util.setStatusBarVisible(not visible)
+
+        if visible:
+            styleFile = self.resourcePath('UI/LumpNav.qss')
+            f = qt.QFile(styleFile)
+            f.open(qt.QFile.ReadOnly | qt.QFile.Text)
+            ts = qt.QTextStream(f)
+            stylesheet = ts.readAll()
+            slicer.util.mainWindow().setStyleSheet(stylesheet)
+        else:
+            slicer.util.mainWindow().setStyleSheet("")
+
+        #self.ui.customUiButton.checked = visible
+
+
+    def GenerateMModeImage(self, n_seconds=5):
+        # 1: find center_point, r1, r2 to get the region of interest
+        # 2: Place line markup
+        
+        # 3: gather frames coming over OpenIGTLink for n_seconds, stitch them together as 3D np array
+        start_time = time.time()
+        frames = []
+        while time.time() < start_time + n_seconds:
+            frames.append(slicer.util.arrayFromVolume(slicer.util.getNode("Image_Reference")))
+        
+        ultrasound_volume = np.concatenate(frames, axis=0)
+        print(ultrasound_volume.shape)
+        # 4: generate M-mode image
+        # 5: run PTX inference / send M-mode image over OpenIGTLink for inference running script
+        # 6: set view layout to side-by-side (layoutManager.setLayout(29))
+        # 6: display M-mode image in yellow slice view
 
 #
 # BLUELungUltrasoundTest

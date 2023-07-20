@@ -1,0 +1,43 @@
+QWidget
+{
+  background-color: #2E4052;
+  color: #FFFFFF;
+  font-size: 16pt;
+}
+
+QWidget:focus {
+  outline: 0px;
+}
+
+QPushButton
+{
+  color: #000000;
+  background-color: #BDD9BF;
+  border: 2px solid black;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+QPushButton:checked
+{
+  border: 2px solid #FFC857;
+  background-color: #7cb380;
+}
+
+QPushButton:pressed
+{
+  background-color: #557A69;
+}
+
+QPushButton:hover
+{
+  border: 2px solid cyan;
+}
+
+ctkCollapsibleButton
+{
+   background-color: #0b1014;
+   border: 2px solid #2E4052;
+   border-radius: 8px;
+   padding: 8px;
+}
