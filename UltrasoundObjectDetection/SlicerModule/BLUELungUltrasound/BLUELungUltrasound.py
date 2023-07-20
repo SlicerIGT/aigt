@@ -302,7 +302,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         self.logic.SetCustomStyle(toggled)
 
     def onGenerateMModeButtonClicked(self):
-        self.logic.GenerateMModeImage()
+        self.logic.ProcessLungSlidingEvaluation()
 
     def onPlaceMarkupLineClicked(self):
         layoutManager = slicer.app.layoutManager()
@@ -310,6 +310,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         transducerCenter = [self.logic.X_CENTER, self.logic.Y_CENTER, redSliceLogic.GetSliceOffset()]
 
         lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode")
+        lineNode.SetName("MMode_Line")
         lineNode.AddControlPoint(transducerCenter)
 
         selectionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLSelectionNodeSingleton")
@@ -476,7 +477,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         #self.ui.customUiButton.checked = visible
 
 
-    def GenerateMModeImage(self, n_seconds=5):
+    def ProcessLungSlidingEvaluation(self, n_seconds=5):
         # 1: find center_point, r1, r2 to get the region of interest
         # 2: Place line markup
         
@@ -492,9 +493,28 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         
         ultrasound_volume = np.concatenate(frames, axis=0)
         # 4: generate M-mode image
+        mmode_image = self.GenerateMModeImage(ultrasound_volume)
+        np.save("C:/test_mmode.npy", mmode_image)
         # 5: run PTX inference / send M-mode image over OpenIGTLink for inference running script
         # 6: set view layout to side-by-side (layoutManager.setLayout(29))
         # 6: display M-mode image in yellow slice view
+
+    def GenerateMModeImage(self, usVol, imageHeight=100):
+        center, r1, r2 = self.GetUltrasoundAreaControlPoints(usVol[0])
+        inputPoint = slicer.util.arrayFromMarkupsControlPoints(slicer.util.GetNode("MMode_Line"))[1][:2]
+
+        unitVector = np.subtract(inputPoint, center)/np.linalg.norm(np.subtract(inputPoint, center)) #Generate the unit vector of the line
+        P1, P2 = list(reversed(abs(unitVector*r1 + center))), list(reversed(abs(unitVector*r2 + center))) #The indices of the line intersections with the radius
+        x, y = np.linspace(P1[0], P2[0], imageHeight).astype(np.uint8), np.linspace(P1[1], P2[1], imageHeight).astype(np.uint8) #A list of imageHeight indices between P1 and P2
+        mFull = np.column_stack([[frame[xVal,yVal] for xVal, yVal in zip(x,y)] for frame in usVol]) #For each frame, for each [x,y], append the value
+        return mFull
+    
+    
+    def GetUltrasoundAreaControlPoints(self, ultrasound_frame):
+        center_point = (460, -115)
+        r_inner = 277
+        r_outer = 585
+        return center_point, r_inner, r_outer
 
 #
 # BLUELungUltrasoundTest
