@@ -483,11 +483,14 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         # 3: gather frames coming over OpenIGTLink for n_seconds, stitch them together as 3D np array
         start_time = time.time()
         frames = []
+        framerate=50
         while time.time() < start_time + n_seconds:
-            frames.append(slicer.util.arrayFromVolume(slicer.util.getNode("Image_Reference")))
+            frame=slicer.util.arrayFromVolume(slicer.util.getNode("Image_Reference"))
+            frames.append(frame)
+            framecount += 1
+            time.sleep(1/framerate)
         
         ultrasound_volume = np.concatenate(frames, axis=0)
-        print(ultrasound_volume.shape)
         # 4: generate M-mode image
         # 5: run PTX inference / send M-mode image over OpenIGTLink for inference running script
         # 6: set view layout to side-by-side (layoutManager.setLayout(29))
