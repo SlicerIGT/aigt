@@ -4,6 +4,7 @@ import subprocess
 import string
 import sys
 import time
+from PIL import Image
 import numpy as np
 from pathlib import Path
 from ctypes import windll
@@ -307,7 +308,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     def onPlaceMarkupLineClicked(self):
         layoutManager = slicer.app.layoutManager()
         redSliceLogic = layoutManager.sliceWidget("Red").sliceLogic()
-        transducerCenter = [self.logic.X_CENTER, self.logic.Y_CENTER, redSliceLogic.GetSliceOffset()]
+        transducerCenter = [110, 130, redSliceLogic.GetSliceOffset()]
 
         lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode")
         lineNode.SetName("MMode_Line")
@@ -484,24 +485,26 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         # 3: gather frames coming over OpenIGTLink for n_seconds, stitch them together as 3D np array
         start_time = time.time()
         frames = []
-        framerate=50
+        framerate=100
         while time.time() < start_time + n_seconds:
             frame=slicer.util.arrayFromVolume(slicer.util.getNode("Image_Reference"))
             frames.append(frame)
-            framecount += 1
             time.sleep(1/framerate)
         
         ultrasound_volume = np.concatenate(frames, axis=0)
         # 4: generate M-mode image
         mmode_image = self.GenerateMModeImage(ultrasound_volume)
-        np.save("C:/test_mmode.npy", mmode_image)
+        print(mmode_image.shape)
+        print(mmode_image)
+        im = Image.fromarray(mmode_image)
+        im.save("C:/Users/Guest admin/Desktop/test_mmode.png")
         # 5: run PTX inference / send M-mode image over OpenIGTLink for inference running script
         # 6: set view layout to side-by-side (layoutManager.setLayout(29))
         # 6: display M-mode image in yellow slice view
 
-    def GenerateMModeImage(self, usVol, imageHeight=100):
+    def GenerateMModeImage(self, usVol, imageHeight=512):
         center, r1, r2 = self.GetUltrasoundAreaControlPoints(usVol[0])
-        inputPoint = slicer.util.arrayFromMarkupsControlPoints(slicer.util.GetNode("MMode_Line"))[1][:2]
+        inputPoint = slicer.util.arrayFromMarkupsControlPoints(slicer.util.getNode("MMode_Line"))[1][:2]
 
         unitVector = np.subtract(inputPoint, center)/np.linalg.norm(np.subtract(inputPoint, center)) #Generate the unit vector of the line
         P1, P2 = list(reversed(abs(unitVector*r1 + center))), list(reversed(abs(unitVector*r2 + center))) #The indices of the line intersections with the radius
@@ -511,9 +514,9 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     
     
     def GetUltrasoundAreaControlPoints(self, ultrasound_frame):
-        center_point = (460, -115)
-        r_inner = 277
-        r_outer = 585
+        center_point = (-460, 120)
+        r_inner = 280
+        r_outer = 600
         return center_point, r_inner, r_outer
 
 #
