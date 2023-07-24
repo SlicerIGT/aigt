@@ -291,6 +291,13 @@ def main(args):
             img_size=config["image_size"],
             spatial_dims=2
         )
+    elif config["model_name"].lower() == "swinunetr":
+        model = monai.networks.nets.SwinUNETR(
+            img_size=config["image_size"],
+            in_channels=config["in_channels"],
+            out_channels=config["out_channels"],
+            spatial_dims=2
+        )
     elif config["model_name"].lower() == "segresnet":
         model = monai.networks.nets.SegResNet(
             spatial_dims=2,
