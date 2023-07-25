@@ -570,6 +570,7 @@ def main(args):
     logging.info("Measuring inference time...")
     num_test_images = args.num_fps_test_images
     inputs = torch.stack([val_dataset[i]["image"] for i in range(num_test_images)])
+    model.to(device)
     model.eval()
     with torch.no_grad():
         start = perf_counter()
