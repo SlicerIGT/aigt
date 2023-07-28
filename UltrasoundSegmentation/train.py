@@ -90,6 +90,7 @@ def main(args):
     run = wandb.init(
         # Set the project where this run will be logged
         project=args.wandb_project_name,
+        entity=args.wandb_entity_name,
         name=experiment_name,
         # Track hyperparameters and run metadata
         config={
