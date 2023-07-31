@@ -478,15 +478,10 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     def PredictStaticSignsOnFrame(self, volumeNode, event):
         image = slicer.util.arrayFromVolume(volumeNode).copy()
         image = self.preprocess_epiphan_image(image)
-        #cv2.imshow("input_img", image)
-
+        
         prediction = self.model(image, conf=self.CONFIDENCE_THRESHOLD, device=self.DEVICE)[0].plot()
-        print(prediction.shape)
-        #cv2.imshow("pred", prediction)
-        #self.PushNumpyDataToVolumeNode(prediction, self.InferenceOutputNode)
-        prediction = np.flip(np.expand_dims(prediction, axis=0), axis=(1,2))
-        print(prediction.shape)
-        slicer.util.updateVolumeFromArray(self.InferenceOutputNode, prediction)
+
+        slicer.util.updateVolumeFromArray(self.InferenceOutputNode, np.flip(np.expand_dims(prediction, axis=0), axis=(1,2)))
 
 
 
