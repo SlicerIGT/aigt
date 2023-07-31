@@ -29,6 +29,7 @@ def main(args):
     os.makedirs(tfm_dir, exist_ok=True)
 
     logging.info(f"Saving individual images, segmentations, and transforms to {args.output_dir}...")
+
     for pt_idx in tqdm(range(len(ultrasound_data_files))):
         # Create new directory for individual images
         if args.use_file_prefix:

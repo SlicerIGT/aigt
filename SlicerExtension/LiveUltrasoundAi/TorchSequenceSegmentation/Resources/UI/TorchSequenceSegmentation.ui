@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>372</width>
-    <height>594</height>
+    <height>720</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -17,28 +17,24 @@
       <string>Inputs</string>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
-      <item row="0" column="0">
+      <item row="4" column="0">
        <widget class="QLabel" name="label_6">
-        <property name="text">
-         <string>TorchScript model path:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="ctkPathLineEdit" name="modelPathLineEdit">
         <property name="toolTip">
-         <string>Specify the path to a TorchScript model.</string>
+         <string/>
+        </property>
+        <property name="text">
+         <string>TorchScript model folder:</string>
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
+      <item row="7" column="0">
        <widget class="QLabel" name="label_2">
         <property name="text">
          <string>Sequence browser:</string>
         </property>
        </widget>
       </item>
-      <item row="2" column="1">
+      <item row="7" column="1">
        <widget class="qMRMLNodeComboBox" name="sequenceBrowserSelector">
         <property name="enabled">
          <bool>true</bool>
@@ -74,7 +70,14 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="1">
+      <item row="8" column="0">
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>Input volume:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="8" column="1">
        <layout class="QHBoxLayout" name="horizontalLayout_2">
         <item>
          <widget class="qMRMLNodeComboBox" name="inputVolumeSelector">
@@ -127,14 +130,14 @@
         </item>
        </layout>
       </item>
-      <item row="7" column="0">
+      <item row="11" column="0">
        <widget class="QLabel" name="label_3">
         <property name="text">
          <string>Volume reconstruction node:</string>
         </property>
        </widget>
       </item>
-      <item row="7" column="1">
+      <item row="11" column="1">
        <widget class="qMRMLNodeComboBox" name="volumeReconstructionSelector">
         <property name="enabled">
          <bool>true</bool>
@@ -154,7 +157,7 @@
          <stringlist notr="true"/>
         </property>
         <property name="noneEnabled">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
         <property name="addEnabled">
          <bool>true</bool>
@@ -170,107 +173,72 @@
         </property>
        </widget>
       </item>
-      <item row="8" column="0">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>Reconstruction volume:</string>
+      <item row="6" column="1">
+       <widget class="QComboBox" name="modelComboBox">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="editable">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
-      <item row="8" column="1">
-       <widget class="qMRMLNodeComboBox" name="reconstructionVolumeSelector">
-        <property name="enabled">
-         <bool>true</bool>
+      <item row="6" column="0">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>Model:</string>
         </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_10">
+        <property name="text">
+         <string>Model selection method:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QRadioButton" name="useIndividualRadioButton">
         <property name="toolTip">
-         <string>Select an output volume for the volume reconstruction.</string>
+         <string>Select individual models to use for segmentation.</string>
         </property>
-        <property name="nodeTypes">
-         <stringlist notr="true">
-          <string>vtkMRMLScalarVolumeNode</string>
-         </stringlist>
+        <property name="text">
+         <string>Select individual model</string>
         </property>
-        <property name="hideChildNodeTypes">
-         <stringlist notr="true"/>
-        </property>
-        <property name="noneEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="removeEnabled">
+        <property name="checked">
          <bool>true</bool>
         </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="interactionNodeSingletonTag">
-         <string notr="true"/>
-        </property>
-        <property name="noneDisplay">
-         <string>Select a Volume</string>
-        </property>
+        <attribute name="buttonGroup">
+         <string notr="true">modelSelectionGroup</string>
+        </attribute>
        </widget>
       </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Input volume:</string>
+      <item row="2" column="1">
+       <widget class="QRadioButton" name="useAllRadioButton">
+        <property name="toolTip">
+         <string>Use all models in folder for segmentation.</string>
         </property>
+        <property name="text">
+         <string>Use all models in folder</string>
+        </property>
+        <attribute name="buttonGroup">
+         <string notr="true">modelSelectionGroup</string>
+        </attribute>
        </widget>
       </item>
       <item row="4" column="1">
-       <layout class="QHBoxLayout" name="horizontalLayout_3">
-        <item>
-         <widget class="qMRMLNodeComboBox" name="predictionVolumeSelector">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="toolTip">
-           <string>Select a volume for the model prediction output.</string>
-          </property>
-          <property name="nodeTypes">
-           <stringlist notr="true">
-            <string>vtkMRMLScalarVolumeNode</string>
-           </stringlist>
-          </property>
-          <property name="hideChildNodeTypes">
-           <stringlist notr="true"/>
-          </property>
-          <property name="noneEnabled">
-           <bool>false</bool>
-          </property>
-          <property name="addEnabled">
-           <bool>false</bool>
-          </property>
-          <property name="removeEnabled">
-           <bool>true</bool>
-          </property>
-          <property name="renameEnabled">
-           <bool>true</bool>
-          </property>
-          <property name="interactionNodeSingletonTag">
-           <string notr="true"/>
-          </property>
-          <property name="noneDisplay">
-           <string>Select a Volume</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QPushButton" name="predictionResliceButton">
-          <property name="text">
-           <string>Reslice</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="label_12">
-        <property name="text">
-         <string>Prediction volume:</string>
+       <widget class="ctkDirectoryButton" name="modelDirectoryButton">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="toolTip">
+         <string>Specify the folder containing TorchScript models to use for segmentation.</string>
         </property>
        </widget>
       </item>
@@ -284,33 +252,49 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
-       <widget class="QPushButton" name="segmentButton">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="toolTip">
-         <string>Generate predictions and add to sequence browser.</string>
-        </property>
-        <property name="text">
-         <string>Generate segmentation sequence</string>
-        </property>
-        <property name="checkable">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="reconstructButton">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="toolTip">
-         <string>Reconstruct the segmentation and render in 3D.</string>
-        </property>
-        <property name="text">
-         <string>Reconstruct 3D volume</string>
-        </property>
-       </widget>
+       <layout class="QHBoxLayout" name="horizontalLayout_3">
+        <item>
+         <widget class="QCheckBox" name="reconstructCheckBox">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="toolTip">
+           <string>Reconstruct the segmentation and render in 3D.</string>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::RightToLeft</enum>
+          </property>
+          <property name="text">
+           <string>Reconstruct 3D volume:</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="startButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="toolTip">
+           <string>Start segmentation and/or reconstruction of the ultrasound sequence.</string>
+          </property>
+          <property name="text">
+           <string>Start</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
      </layout>
     </widget>
@@ -337,12 +321,18 @@
         </sizepolicy>
        </property>
        <property name="text">
-        <string>Status:</string>
+        <string>Task:</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="statusLabel">
+      <widget class="QLabel" name="taskStatusLabel">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
        <property name="layoutDirection">
         <enum>Qt::LeftToRight</enum>
        </property>
@@ -354,7 +344,44 @@
     </layout>
    </item>
    <item>
-    <widget class="QProgressBar" name="statusProgressBar">
+    <widget class="QProgressBar" name="taskProgressBar">
+     <property name="value">
+      <number>0</number>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_4">
+     <item>
+      <widget class="QLabel" name="label_12">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string>Overall:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="overallStatusLabel">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string>Ready</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QProgressBar" name="overallProgressBar">
      <property name="value">
       <number>0</number>
      </property>
@@ -453,39 +480,47 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="label_5">
+      <item row="5" column="0">
+       <widget class="QLabel" name="label_4">
         <property name="text">
-         <string>ROI node:</string>
+         <string>Scan conversion config:</string>
         </property>
        </widget>
       </item>
-      <item row="4" column="1">
-       <widget class="qMRMLNodeComboBox" name="roiNodeSelector">
-        <property name="enabled">
-         <bool>true</bool>
-        </property>
-        <property name="nodeTypes">
-         <stringlist notr="true">
-          <string>vtkMRMLAnnotationROINode</string>
-         </stringlist>
-        </property>
-        <property name="hideChildNodeTypes">
-         <stringlist notr="true"/>
-        </property>
-        <property name="noneEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="interactionNodeSingletonTag">
-         <string notr="true"/>
-        </property>
-       </widget>
+      <item row="5" column="1">
+       <layout class="QHBoxLayout" name="horizontalLayout_5">
+        <item>
+         <widget class="ctkPathLineEdit" name="scanConversionPathLineEdit">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="showHistoryButton">
+           <bool>true</bool>
+          </property>
+          <property name="nameFilters">
+           <stringlist>
+            <string>Configs (*.yaml)</string>
+           </stringlist>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="clearScanConversionButton">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Clear</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
      </layout>
     </widget>
@@ -511,6 +546,11 @@
    <extends>QWidget</extends>
    <header>ctkCollapsibleButton.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkDirectoryButton</class>
+   <extends>QWidget</extends>
+   <header>ctkDirectoryButton.h</header>
   </customwidget>
   <customwidget>
    <class>ctkPathLineEdit</class>
@@ -550,22 +590,6 @@
   <connection>
    <sender>TorchSequenceSegmentation</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>reconstructionVolumeSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>274</x>
-     <y>309</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>306</x>
-     <y>196</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>TorchSequenceSegmentation</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>sequenceBrowserSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
@@ -598,22 +622,6 @@
   <connection>
    <sender>TorchSequenceSegmentation</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>roiNodeSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>134</x>
-     <y>416</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>279</x>
-     <y>288</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>TorchSequenceSegmentation</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
    <receiver>outputTransformSelector</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
@@ -627,21 +635,8 @@
     </hint>
    </hints>
   </connection>
-  <connection>
-   <sender>TorchSequenceSegmentation</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>predictionVolumeSelector</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>293</x>
-     <y>438</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>279</x>
-     <y>166</y>
-    </hint>
-   </hints>
-  </connection>
  </connections>
+ <buttongroups>
+  <buttongroup name="modelSelectionGroup"/>
+ </buttongroups>
 </ui>

@@ -1,0 +1,8 @@
+num_lines: !!int 128
+num_samples_along_lines: !!int 128
+curvilinear_image_size: !!int 512
+center_coordinate_pixel: [0, 256]
+radius_start_pixels: 100
+radius_end_pixels: 420
+angle_min_degrees: -36
+angle_max_degrees: 36

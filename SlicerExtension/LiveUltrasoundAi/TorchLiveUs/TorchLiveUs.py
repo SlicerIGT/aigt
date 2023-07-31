@@ -4,6 +4,26 @@ import numpy as np
 import time
 import vtk, qt, ctk, slicer
 
+# Import yaml. If import fails, install yaml package
+
+try:
+    import yaml
+except:
+    slicer.util.pip_install('pyyaml')
+    import yaml
+
+# Import scipy. If import fails, install scipy package
+
+try:
+    from scipy.ndimage import map_coordinates
+    from scipy.interpolate import griddata
+    from scipy.spatial import Delaunay
+except:
+    slicer.util.pip_install('scipy')
+    from scipy.ndimage import map_coordinates
+    from scipy.interpolate import griddata
+    from scipy.spatial import Delaunay
+
 import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -12,6 +32,9 @@ try:
     import torch
 except:
     logging.error('TorchLiveUs module requires PyTorch to be installed')
+
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 try:
     import cv2
@@ -151,11 +174,12 @@ class TorchLiveUsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in either the MRML scene
         # (in the selected parameter node), or in the application settings (independent of the scene).
 
-        self.ui.modelPathLineEdit.connect("currentPathChanged(QString)", self.updateParameterNodeFromGUI)
+        self.ui.modelPathLineEdit.connect("currentPathChanged(QString)", self.updateSettingsFromGUI)
         self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.verticalFlipCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
+        self.ui.scanConversionPathLineEdit.connect("currentPathChanged(QString)", self.updateSettingsFromGUI)
 
         # Buttons
 
@@ -181,6 +205,13 @@ class TorchLiveUsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         lastModelPath = self.logic.getLastModelPath()
         if lastModelPath is not None:
             self.ui.modelPathLineEdit.currentPath = lastModelPath
+            self.logic.loadModel(lastModelPath)
+
+        lastScanConversionPath = slicer.util.settingsValue(self.logic.LAST_SCANCONVERSION_PATH_SETTING, None)
+        if lastScanConversionPath is not None:
+            self.ui.scanConversionPathLineEdit.currentPath = lastScanConversionPath
+
+        self.updateSettingsFromGUI()
 
     def exit(self):
         """
@@ -259,7 +290,6 @@ class TorchLiveUsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         self.ui.applyButton.checked = (self._parameterNode.GetParameter(self.logic.PREDICTION_ACTIVE).lower() == "true")
 
-        self.ui.modelPathLineEdit.setCurrentPath(self._parameterNode.GetParameter(self.logic.MODEL_PATH))
         self.ui.verticalFlipCheckBox.checked = (self._parameterNode.GetParameter(self.logic.VERTICAL_FLIP).lower() == "true")
 
         # All the GUI updates are done
@@ -281,17 +311,36 @@ class TorchLiveUsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self._parameterNode.SetNodeReferenceID(self.logic.OUTPUT_TRANSFORM, self.ui.outputTransformSelector.currentNodeID)
         self._parameterNode.SetParameter(self.logic.VERTICAL_FLIP, "true" if self.ui.verticalFlipCheckBox.checked else "false")
 
+        self._parameterNode.EndModify(wasModified)
+
+    def updateSettingsFromGUI(self, caller=None, event=None):
+
+        settings = qt.QSettings()
+
         # Update model path and load model if changed
 
         modelPath = self.ui.modelPathLineEdit.currentPath
         if modelPath is None or modelPath == "":
-            self._parameterNode.SetParameter(self.logic.MODEL_PATH, "")
+            settings.setValue(self.logic.LAST_AI_MODEL_PATH_SETTING, "")
         else:
-            if modelPath != self._parameterNode.GetParameter(self.logic.MODEL_PATH):
-                self._parameterNode.SetParameter(self.logic.MODEL_PATH, modelPath)
+            if modelPath != slicer.util.settingsValue(self.logic.LAST_AI_MODEL_PATH_SETTING, None):
+                settings.setValue(self.logic.LAST_AI_MODEL_PATH_SETTING, modelPath)
                 self.logic.loadModel(modelPath)
 
-        self._parameterNode.EndModify(wasModified)
+        # Update scan conversion file path if changed
+
+        scanConversionPath = self.ui.scanConversionPathLineEdit.currentPath
+        if scanConversionPath is None or scanConversionPath == "":
+            settings.setValue(self.logic.LAST_SCANCONVERSION_PATH_SETTING, "")
+        else:
+            if scanConversionPath != slicer.util.settingsValue(self.logic.LAST_SCANCONVERSION_PATH_SETTING, None):
+                settings.setValue(self.logic.LAST_SCANCONVERSION_PATH_SETTING, scanConversionPath)
+                self.logic.loadScanConversion(scanConversionPath)
+                scanConversionDict = self.logic.scanConversionDict
+                if scanConversionDict is not None:
+                    self.ui.statusLabel.text = "Scan conversion loaded"
+                    logging.info(f"Scan conversion loaded from {scanConversionPath}")
+                    logging.info(f"Scan conversion: {scanConversionDict}")
 
     def onApplyButton(self, toggled):
         """
@@ -300,14 +349,18 @@ class TorchLiveUsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if self._parameterNode.GetNodeReference(self.logic.INPUT_IMAGE) is None:
             self.ui.statusLabel.text = "Input volume is required"
+            self.ui.applyButton.checked = False
             return
 
         if self._parameterNode.GetNodeReference(self.logic.OUTPUT_IMAGE) is None:
             self.ui.statusLabel.text = "Output volume is required"
+            self.ui.applyButton.checked = False
             return
 
-        if self._parameterNode.GetParameter(self.logic.MODEL_PATH) == "":
+        modelPath = slicer.util.settingsValue(self.logic.LAST_AI_MODEL_PATH_SETTING, None)
+        if modelPath is None or modelPath == "":
             self.ui.statusLabel.text = "Model path is required"
+            self.ui.applyButton.checked = False
             return
 
         try:
@@ -315,12 +368,14 @@ class TorchLiveUsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.ui.inputSelector.enabled = False
                 self.ui.outputSelector.enabled = False
                 self.ui.modelPathLineEdit.enabled = False
+                self.ui.scanConversionPathLineEdit.enabled = False
                 self.ui.applyButton.text = "Stop processing"
                 self.ui.statusLabel.text = "Running"
             else:
                 self.ui.inputSelector.enabled = True
                 self.ui.outputSelector.enabled = True
                 self.ui.modelPathLineEdit.enabled = True
+                self.ui.scanConversionPathLineEdit.enabled = True
                 self.ui.applyButton.text = "Start processing"
                 self.ui.statusLabel.text = "Stopped"
 
@@ -359,6 +414,7 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     # Settings
 
     LAST_AI_MODEL_PATH_SETTING = "TorchLiveUs/LastModelPath"
+    LAST_SCANCONVERSION_PATH_SETTING = "TorchLiveUs/LastScanConvertPath"
 
 
     def __init__(self):
@@ -369,6 +425,13 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         VTKObservationMixin.__init__(self)
 
         self.model = None
+        self.scanConversionDict = None
+        self.x_cart = None
+        self.y_cart = None
+        self.input_image_size = None
+        self.grid_x, self.grid_y = None, None
+        self.vertices, self.weights = None, None
+        self.curvilinear_mask = None
 
     def setDefaultParameters(self, parameterNode):
         """
@@ -395,9 +458,71 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             logging.error("Model file does not exist: "+modelPath)
             self.model = None
         else:
-            self.model = torch.jit.load(modelPath)
-        settings = qt.QSettings()
-        settings.setValue(self.LAST_AI_MODEL_PATH_SETTING, modelPath)
+            self.model = torch.jit.load(modelPath).to(DEVICE)
+            logging.info(f"Model loaded from {modelPath}")
+
+    def loadScanConversion(self, scanConversionPath):
+        if scanConversionPath is None or scanConversionPath == "":
+            logging.warning("Scan conversion path is empty")
+            self.scanConversionDict = None
+            self.x_cart = None
+            self.y_cart = None
+        elif not os.path.isfile(scanConversionPath):
+            logging.error("Scan conversion file does not exist: "+scanConversionPath)
+            self.scanConversionDict = None
+            self.x_cart = None
+            self.y_cart = None
+        else:
+            with open(scanConversionPath, "r") as f:
+                self.scanConversionDict = yaml.safe_load(f)
+
+        if self.scanConversionDict is not None:
+            initial_radius = np.deg2rad(self.scanConversionDict["angle_min_degrees"])
+            final_radius = np.deg2rad(self.scanConversionDict["angle_max_degrees"])
+            self.input_image_size = self.scanConversionDict["curvilinear_image_size"]
+            radius_start_px = self.scanConversionDict["radius_start_pixels"]
+            radius_end_px = self.scanConversionDict["radius_end_pixels"]
+            num_samples_along_lines = self.scanConversionDict["num_samples_along_lines"]
+            num_lines = self.scanConversionDict["num_lines"]
+            center_coordinate_pixel = self.scanConversionDict["center_coordinate_pixel"]
+
+            theta, r = np.meshgrid(np.linspace(initial_radius, final_radius, num_samples_along_lines),
+                                   np.linspace(radius_start_px, radius_end_px, num_lines))
+
+            # Precompute mapping parameters between scan converted and curvilinear images
+
+            self.x_cart = r * np.cos(theta) + center_coordinate_pixel[0]
+            self.y_cart = r * np.sin(theta) + center_coordinate_pixel[1]
+
+            self.grid_x, self.grid_y = np.mgrid[0:self.input_image_size, 0:self.input_image_size]
+
+            triangulation = Delaunay(np.vstack((self.x_cart.flatten(), self.y_cart.flatten())).T)
+
+            simplices = triangulation.find_simplex(np.vstack((self.grid_x.flatten(), self.grid_y.flatten())).T)
+            self.vertices = triangulation.simplices[simplices]
+
+            X = triangulation.transform[simplices, :2]
+            Y = np.vstack((self.grid_x.flatten(), self.grid_y.flatten())).T - triangulation.transform[simplices, 2]
+            b = np.einsum('ijk,ik->ij', X, Y)
+            self.weights = np.c_[b, 1 - b.sum(axis=1)]
+
+            # Compute curvilinear mask, one pixel tighter to avoid artifacts
+
+            angle1 = 90.0 + (self.scanConversionDict["angle_min_degrees"] + 1)
+            angle2 = 90.0 + (self.scanConversionDict["angle_max_degrees"] - 1)
+
+            self.curvilinear_mask = np.zeros((self.input_image_size, self.input_image_size), dtype=np.int8)
+            self.curvilinear_mask = cv2.ellipse(self.curvilinear_mask,
+                                                (center_coordinate_pixel[1], center_coordinate_pixel[0]),
+                                                (radius_end_px - 1, radius_end_px - 1), 0.0, angle1, angle2, 1, -1)
+            self.curvilinear_mask = cv2.circle(self.curvilinear_mask,
+                                               (center_coordinate_pixel[1], center_coordinate_pixel[0]),
+                                               radius_start_px + 1, 0, -1)
+
+    def scanConvert(self, linear_array):
+        z = linear_array.flatten()
+        zi = np.einsum('ij,ij->i', np.take(z, self.vertices), self.weights)
+        return zi.reshape(self.input_image_size, self.input_image_size)
 
     def togglePrediction(self, toggled):
         """
@@ -448,26 +573,43 @@ class TorchLiveUsLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         if parameterNode.GetParameter(self.VERTICAL_FLIP) == "true":
             input_array = np.flip(input_array, axis=0)
 
-        # Resize input using opencv with linear interpolation to match model input size
-        resized_array = cv2.resize(input_array[0, :, :], (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_LINEAR)
+        # If scan conversion given, map image accordingly.
+        # Otherwise, resize input using opencv with linear interpolation to match model input size
+
+        if self.scanConversionDict is not None:
+            resized_array = map_coordinates(input_array[0, :, :], [self.x_cart, self.y_cart], order=1, mode='constant', cval=0.0)
+        else:
+            resized_array = cv2.resize(input_array[0, :, :], (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_LINEAR)
 
         # Convert to tensor and add batch dimension
+
         input_tensor = torch.from_numpy(resized_array).unsqueeze(0).unsqueeze(0).float()
 
         # Run inference
+
         with torch.inference_mode():
-            output_logits = self.model(input_tensor)
-            output_tensor = torch.sigmoid(output_logits)
+            output_logits = self.model(input_tensor.to(DEVICE))
+        if isinstance(output_logits, list):
+            output_logits = output_logits[0]
 
-        # Convert output to numpy array
-        output_array = output_tensor.squeeze().numpy() * 255
+        output_tensor = torch.softmax(output_logits, dim=1)
 
-        # Resize output to match input size
-        output_array = cv2.resize(output_array, (input_array.shape[2], input_array.shape[1]), interpolation=cv2.INTER_LINEAR)
+        # If scan conversion given, map image accordingly. Otherwise, resize output to match input size
+
+        if self.scanConversionDict is not None:
+            # resized_output_array = griddata((self.x_cart.flatten(), self.y_cart.flatten()), output_array[1, :, :].flatten(),
+            #                         (self.grid_x, self.grid_y), method="linear", fill_value=0)
+            output_array = output_tensor.detach().cpu().numpy() * 255
+            resized_output_array = self.scanConvert(output_array[0, 1, :, :])
+            resized_output_array = resized_output_array * self.curvilinear_mask
+        else:
+            output_array = output_tensor.squeeze().detach().cpu().numpy() * 255
+            resized_output_array = cv2.resize(output_array[1], (input_array.shape[2], input_array.shape[1]), interpolation=cv2.INTER_LINEAR)
 
         # Set output volume image data
+
         outputVolume = parameterNode.GetNodeReference(self.OUTPUT_IMAGE)
-        slicer.util.updateVolumeFromArray(outputVolume, output_array.astype(np.uint8)[np.newaxis, ...])
+        slicer.util.updateVolumeFromArray(outputVolume, resized_output_array.astype(np.uint8)[np.newaxis, ...])
 
 
 
