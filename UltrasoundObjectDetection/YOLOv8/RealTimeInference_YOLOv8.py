@@ -27,8 +27,8 @@ ROOT = Path(__file__).parent.resolve()
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="YOLOv5/lung_us_pretrained.torchscript")
-    parser.add_argument("--data-yaml", type=str, default="YOLOv5/lung_us.yml")
+    parser.add_argument("--model", type=str, default="best.pt")
+    parser.add_argument("--data-yaml", type=str, default="lung_us.yml")
     parser.add_argument("--input-device-name", type=str, default="Image_Reference")
     parser.add_argument("--output-device-name", type=str, default="Inference")
     parser.add_argument("--target-size", type=int, default=256)
@@ -63,7 +63,7 @@ def run_client(args):
             image = preprocess_epiphan_image(message.image)
 
             prediction = model(image, conf=args.confidence_threshold, device=device)[0].plot()
-            image_message = pyigtl.ImageMessage(np.flip(np.flip(prediction, axis=1), axis=2), device_name=args.output_device_name)
+            image_message = pyigtl.ImageMessage(np.flip(np.flip(np.expand_dims(prediction, axis=0), axis=1), axis=2), device_name=args.output_device_name)
             output_server.send_message(image_message, wait=True)
         else:
             print(f'Unexpected message format. Message:\n{message}')
