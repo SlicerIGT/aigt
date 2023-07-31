@@ -379,8 +379,9 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     FRAMES = []
 
     # Model parameters
-    MODEL_WEIGHTS_PATH = 'D:/GitRepos/aigt-LIVE/UltrasoundObjectDetection/YOLOv8/best.pt'
-    CONFIDENCE_THRESHOLD = 0.25 # TODO: Add as UI parameter
+    #MODEL_WEIGHTS_PATH = 'D:/GitRepos/aigt-LIVE/UltrasoundObjectDetection/YOLOv8/best.pt'
+    #MODEL_WEIGHTS_PATH = 'lung_yolov8_pretrained.pt'
+    CONFIDENCE_THRESHOLD = 0.55 # TODO: Add as UI parameter
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -400,7 +401,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         slicer.mrmlScene.AddNode(self.InferenceOutputNode)
         #self.setupInferenceServer()
 
-        self.model = YOLO(self.MODEL_WEIGHTS_PATH)        
+        self.model = YOLO(self.resourcePath(f'model/lung_yolov8_pretrained.pt'))        
         
         
     def setupOpenIgtLink(self):
@@ -578,15 +579,25 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         r_outer = 591
         return center_point, r_inner, r_outer
 
+    
+    def preprocess_epiphan_image(self, image):
+        image = np.rot90(np.transpose(image, (1,2,0)), 2)
+        if image.shape[2] == 1:
+            image = np.concatenate([image, image, image], axis=2)
+        return np.ascontiguousarray(image)
+    
     def PredictStaticSignsOnFrame(self, volumeNode, event):
-        image = np.transpose(slicer.util.arrayFromVolume(volumeNode), (1,2,0))
-        image = np.ascontiguousarray(np.flip(np.rot90(image, k=3), axis=(1,2)))
-        cv2.imshow("input_img", image)
+        image = slicer.util.arrayFromVolume(volumeNode).copy()
+        image = self.preprocess_epiphan_image(image)
+        #cv2.imshow("input_img", image)
 
         prediction = self.model(image, conf=self.CONFIDENCE_THRESHOLD, device=self.DEVICE)[0].plot()
+        print(prediction.shape)
         #cv2.imshow("pred", prediction)
         #self.PushNumpyDataToVolumeNode(prediction, self.InferenceOutputNode)
-        slicer.util.updateVolumeFromArray(self.InferenceOutputNode, np.flip(np.expand_dims(prediction, axis=0), axis=(1,2)))
+        prediction = np.flip(np.expand_dims(prediction, axis=0), axis=(1,2))
+        print(prediction.shape)
+        slicer.util.updateVolumeFromArray(self.InferenceOutputNode, prediction)
 
 
 
