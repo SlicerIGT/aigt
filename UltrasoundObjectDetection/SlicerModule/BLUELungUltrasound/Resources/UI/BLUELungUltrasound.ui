@@ -83,6 +83,30 @@
     </widget>
    </item>
    <item>
+    <widget class="QPushButton" name="placeMarkupLineButton">
+     <property name="text">
+      <string>Place Markup Line</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="generateMModeButton">
+     <property name="text">
+      <string>TEST-mmode</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="toggleTestObserverButton">
+     <property name="text">
+      <string>ToggleTestObserver</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>

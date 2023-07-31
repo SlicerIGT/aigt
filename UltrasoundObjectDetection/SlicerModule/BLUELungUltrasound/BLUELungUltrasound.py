@@ -118,6 +118,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         self._updatingGUIFromParameterNode = False
         self._updatingGUIFromMRML = False
         self._updatingGui = False
+        self.observedPlusServerLauncherNode = None
 
     def setup(self):
         """
@@ -156,6 +157,9 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         self.ui.setViewButton.connect('clicked(bool)', self.onSetViewButtonClicked)
         self.ui.startInferenceButton.connect('toggled(bool)', self.onStartInferenceButtonClicked)
         self.ui.setCustomUiButton.connect('toggled(bool)', self.onSetCustomUiButtonClicked)
+        self.ui.placeMarkupLineButton.connect('clicked(bool)', self.onPlaceMarkupLineClicked)
+        self.ui.generateMModeButton.connect('clicked(bool)', self.onGenerateMModeButtonClicked)
+        self.ui.toggleTestObserverButton.connect('toggled(bool)', self.onToggleTestObserverButtonClicked)
 
 
         # Make sure parameter node is initialized (needed for module reload)
@@ -171,6 +175,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         if self.logic.inference_server_process:
             self.logic.inference_server_process.kill()
 
+        slicer.mrmlScene.RemoveNode(self.logic.InferenceIgtlConnectorNode)
         slicer.mrmlScene.RemoveNode(self.logic.RawInputIgtlConnectorNode)
         slicer.mrmlScene.RemoveNode(self.logic.InferenceOutputNode)
 
@@ -292,9 +297,8 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
     def onSetViewButtonClicked(self):
         logging.info("onSetViewButtonClicked()")
-        self.logic.setViewToIncomingData()
+        self.logic.setViewToIncomingData(self.logic.INPUT_NODE_NAME)
 
-    
     def onStartInferenceButtonClicked(self, toggled):
         input_volume = slicer.util.getNode(self.logic.INPUT_NODE_NAME)
         logging.info(f'onStartInferenceButtonClicked({toggled})')
@@ -307,10 +311,45 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             self.removeObservers(self.logic.PredictStaticSignsOnFrame)
             print('inference STOP')
 
-    
+        #self.logic.ToggleInferenceMode(toggled)
+
     def onSetCustomUiButtonClicked(self, toggled):
         self.ui.setCustomUiButton.text = "Disable Custom UI" if toggled else "Enable Custom UI"
         self.logic.SetCustomStyle(toggled)
+
+    def onGenerateMModeButtonClicked(self):
+        self.logic.ProcessLungSlidingEvaluation(n_seconds=5)
+
+
+    def onToggleTestObserverButtonClicked(self, toggled):
+        input_volume = slicer.util.getNode(self.logic.INPUT_NODE_NAME)
+        if toggled:
+            self.logic.FRAMES = []
+            #input_volume.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.logic.TestAddFrameToVolume)
+            self.addObserver(input_volume, slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.logic.TestAddFrameToVolume)
+            print('observer added')
+        else:
+            #input_volume.RemoveObservers(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent)
+            self.removeObservers(self.logic.TestAddFrameToVolume)
+            print('observer removed')
+
+
+    def onPlaceMarkupLineClicked(self):
+        layoutManager = slicer.app.layoutManager()
+        redSliceLogic = layoutManager.sliceWidget("Red").sliceLogic()
+        transducerCenter = [-95, 461, redSliceLogic.GetSliceOffset()]
+
+        lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode")
+        lineNode.SetName("MMode_Line")
+        lineNode.AddControlPoint(transducerCenter)
+
+        selectionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLSelectionNodeSingleton")
+        selectionNode.SetActivePlaceNodeID(lineNode.GetID())
+        interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
+        placeModePersistence = 1
+        interactionNode.SetPlaceModePersistence(placeModePersistence)
+        # mode 1 is Place, can also be accessed via slicer.vtkMRMLInteractionNode().Place
+        interactionNode.SetCurrentInteractionMode(1)
 
 #
 # BLUELungUltrasoundLogic
@@ -332,8 +371,16 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     INPUT_NODE_NAME = "Image_Reference"
     INFERENCE_NODE_NAME = "Inference"
     IGTL_RAW_INPUT_PORT = 18944 # TODO: read the port from the PLUS config file
+    IGTL_INFERENCE_PORT = 18945
+
+    # M-mode stuff (TEMPORARY):
+    X_CENTER = 0
+    Y_CENTER = 0
+    FRAMES = []
 
     # Model parameters
+    #MODEL_WEIGHTS_PATH = 'D:/GitRepos/aigt-LIVE/UltrasoundObjectDetection/YOLOv8/best.pt'
+    #MODEL_WEIGHTS_PATH = 'lung_yolov8_pretrained.pt'
     CONFIDENCE_THRESHOLD = 0.55 # TODO: Add as UI parameter
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -365,6 +412,11 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         slicer.mrmlScene.AddNode(self.RawInputIgtlConnectorNode)
         self.RawInputIgtlConnectorNode.Start()
 
+        self.InferenceIgtlConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
+        self.InferenceIgtlConnectorNode.SetName('Inference')
+        self.InferenceIgtlConnectorNode.SetTypeClient('localhost', self.IGTL_INFERENCE_PORT)
+        slicer.mrmlScene.AddNode(self.InferenceIgtlConnectorNode)
+
     
     def setDefaultParameters(self, parameterNode):
         """
@@ -388,6 +440,15 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         """
         moduleDir = os.path.dirname(slicer.util.modulePath(self.moduleName))
         return os.path.join(moduleDir, 'Resources', filename)
+
+    def setupInferenceServer(self):
+        FNULL = open(os.devnull, 'w')
+        python_executable = '"C:/Users/Guest admin/anaconda3/envs/pytorch/python.exe"'
+        inference_server_script = 'C:/repos/aigt/UltrasoundObjectDetection/RealtimeInferenceOverOpenIGTLink.py'
+        args = f'{python_executable} {inference_server_script}'
+        print(args)
+        self.inference_server_process = subprocess.Popen(args, env=os.environ)
+        print('Inference server started')
     
     
     def setPlusServerClicked(self, toggled):
@@ -404,25 +465,15 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
             print('PLUS server stopped')
 
 
-    def setViewToIncomingData(self):
-        layoutManager = slicer.app.layoutManager()
-        layoutManager.setLayout(29) # side-by-side Red and Yellow slice view layout
-        redSliceLogic = layoutManager.sliceWidget('Red').sliceLogic()
-        yellowSliceLogic = layoutManager.sliceWidget('Yellow').sliceLogic()
-
+    def setViewToIncomingData(self, nodeName):
         try:
-            redSliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(slicer.util.getNode(self.INPUT_NODE_NAME).GetID())
-            redSliceLogic.GetSliceNode().SetOrientationToAxial()
-            redSliceLogic.FitSliceToAll()
+            slicer.util.setSliceViewerLayers(
+                foreground=slicer.util.getNode(nodeName).GetID(),
+                foregroundOpacity=0,
+                fit=True)
         except:
             print("View reset unsuccessful - cannot find incoming data node. Try again in a few seconds")
 
-        yellowSliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(self.InferenceOutputNode.GetID())
-        yellowSliceLogic.GetSliceNode().SetOrientationToAxial()
-        yellowSliceLogic.FitSliceToAll()
-        
-        #slicer.util.setSliceViewerLayers(fit=True)
-    
 
     def find_local_file(self, filename):        
         drives = []
@@ -439,8 +490,15 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
                 
         print("No PLUS installation found")
         return None
-
     
+    def ToggleInferenceMode(self, toggled):
+        if toggled:
+            self.InferenceIgtlConnectorNode.Start()
+            print("Inference running")
+        else:
+            self.InferenceIgtlConnectorNode.Stop()
+            print("Inference stopped")
+
     def SetCustomStyle(self, visible):
         """
         Applies UI customization. Hide Slicer widgets and apply custom stylesheet.
@@ -468,6 +526,59 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         else:
             slicer.util.mainWindow().setStyleSheet("")
 
+        #self.ui.customUiButton.checked = visible
+
+
+    def TestAddFrameToVolume(self, volumeNode, event):
+        #frame = np.expand_dims(slicer.util.arrayFromVolume(volumeNode)[0,:,:], axis=0).copy()
+        self.FRAMES.append(slicer.util.arrayFromVolume(volumeNode).copy())
+    
+    
+    def ProcessLungSlidingEvaluation(self, n_seconds=5):
+        # 1: find center_point, r1, r2 to get the region of interest
+        # 2: Place line markup
+        
+        # 3: gather frames coming over OpenIGTLink for n_seconds, stitch them together as 3D np array
+
+        
+        ultrasound_volume = np.concatenate([np.expand_dims(frame[0,:,:], axis=0) for frame in self.FRAMES], axis=0)
+        test_us_im = Image.fromarray(ultrasound_volume[0,:,:])
+        test_us_im.save(f'D:/test_us.png')
+        
+        # 4: generate M-mode image
+        mmode_image = self.GenerateMModeImage(ultrasound_volume)
+        print(f'n_frames: {len(self.FRAMES)}, mmode shape: {mmode_image.shape}')
+        im = Image.fromarray(mmode_image)
+        im.save("D:/test_mmode.png")
+        # 5: run PTX inference / send M-mode image over OpenIGTLink for inference running script
+        # 6: set view layout to side-by-side (layoutManager.setLayout(29))
+        # 6: display M-mode image in yellow slice view
+
+    def GenerateMModeImage(self, usVol, imageHeight=256):
+        #usVol_flipped = usVol
+        usVol_flipped = np.flip(usVol, axis=(1,2))
+        center, r1, r2 = self.GetUltrasoundAreaControlPoints(usVol_flipped[0])
+        inputPoint = np.flip(slicer.util.arrayFromMarkupsControlPoints(slicer.util.getNode("MMode_Line"))[1][:2])
+        print(center, inputPoint)
+
+        unitVector = np.subtract(inputPoint, center)/np.linalg.norm(np.subtract(inputPoint, center)) #Generate the unit vector of the line
+        print(unitVector)
+        P1, P2 = list(abs(unitVector*r1 + center)), list(abs(unitVector*r2 + center)) #The indices of the line intersections with the radius
+        print(f'P1: {P1}, P2: {P2}')
+        x, y = np.linspace(P1[0], P2[0], imageHeight).astype(np.uint32), np.linspace(P1[1], P2[1], imageHeight).astype(np.uint32) #A list of imageHeight indices between P1 and P2
+        print(f'first point: {x[0]}, {y[0]}; last point: {x[len(x)-1]}, {y[len(y)-1]}')
+        mFull = np.column_stack([[frame[xVal,yVal] for xVal, yVal in zip(x,y)] for frame in usVol]) #For each frame, for each [x,y], append the value
+        cv2.imshow('mmode', mFull)
+        return mFull
+
+    
+    def GetUltrasoundAreaControlPoints(self, ultrasound_frame):
+        #center_point = [-95, 461]
+        center_point = [461, -95]
+        r_inner = 216
+        r_outer = 591
+        return center_point, r_inner, r_outer
+
     
     def preprocess_epiphan_image(self, image):
         image = np.rot90(np.transpose(image, (1,2,0)), 2)
@@ -478,10 +589,15 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     def PredictStaticSignsOnFrame(self, volumeNode, event):
         image = slicer.util.arrayFromVolume(volumeNode).copy()
         image = self.preprocess_epiphan_image(image)
-        
-        prediction = self.model(image, conf=self.CONFIDENCE_THRESHOLD, device=self.DEVICE)[0].plot()
+        #cv2.imshow("input_img", image)
 
-        slicer.util.updateVolumeFromArray(self.InferenceOutputNode, np.flip(np.expand_dims(prediction, axis=0), axis=(1,2)))
+        prediction = self.model(image, conf=self.CONFIDENCE_THRESHOLD, device=self.DEVICE)[0].plot()
+        print(prediction.shape)
+        #cv2.imshow("pred", prediction)
+        #self.PushNumpyDataToVolumeNode(prediction, self.InferenceOutputNode)
+        prediction = np.flip(np.expand_dims(prediction, axis=0), axis=(1,2))
+        print(prediction.shape)
+        slicer.util.updateVolumeFromArray(self.InferenceOutputNode, prediction)
 
 
 
