@@ -407,17 +407,21 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     def setViewToIncomingData(self):
         layoutManager = slicer.app.layoutManager()
         layoutManager.setLayout(29) # side-by-side Red and Yellow slice view layout
-        redCompositeNode = layoutManager.sliceWidget('Red').sliceLogic().GetSliceCompositeNode()
-        yellowCompositeNode = layoutManager.sliceWidget('Yellow').sliceLogic().GetSliceCompositeNode()
+        redSliceLogic = layoutManager.sliceWidget('Red').sliceLogic()
+        yellowSliceLogic = layoutManager.sliceWidget('Yellow').sliceLogic()
 
         try:
-            redCompositeNode.SetBackgroundVolumeID(slicer.util.getNode(self.INPUT_NODE_NAME).GetID())
+            redSliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(slicer.util.getNode(self.INPUT_NODE_NAME).GetID())
+            redSliceLogic.GetSliceNode().SetOrientationToAxial()
+            redSliceLogic.FitSliceToAll()
         except:
             print("View reset unsuccessful - cannot find incoming data node. Try again in a few seconds")
 
-        yellowCompositeNode.SetBackgroundVolumeID(self.InferenceOutputNode.GetID())
+        yellowSliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(self.InferenceOutputNode.GetID())
+        yellowSliceLogic.GetSliceNode().SetOrientationToAxial()
+        yellowSliceLogic.FitSliceToAll()
         
-        slicer.util.setSliceViewerLayers(fit=True)
+        #slicer.util.setSliceViewerLayers(fit=True)
     
 
     def find_local_file(self, filename):        
