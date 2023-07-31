@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>BLUELungUltrasound</class>
+ <widget class="qMRMLWidget" name="BLUELungUltrasound">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>417</width>
+    <height>316</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="label">
+       <property name="text">
+        <string>PLUS Server Config file:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="ctkPathLineEdit" name="plusConfigFileSelector"/>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="label_2">
+       <property name="text">
+        <string>Path to PlusServer.exe:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="ctkPathLineEdit" name="plusServerExeSelector"/>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QPushButton" name="startPlusButton">
+     <property name="text">
+      <string>Start PLUS Server</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="setViewButton">
+     <property name="text">
+      <string>Set Views</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="startInferenceButton">
+     <property name="text">
+      <string>Start Inference</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="setCustomUiButton">
+     <property name="text">
+      <string>Set Custom UI</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ctkPathLineEdit</class>
+   <extends>QWidget</extends>
+   <header>ctkPathLineEdit.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

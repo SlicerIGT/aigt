@@ -1,0 +1,52 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Realtime inference over OpenIGTLink",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": "true",
+            "args": [
+                "--model", "C:/repos/aigt/UltrasoundObjectDetection/YOLOv5/lung_us_pretrained.torchscript",
+                "--data-yaml", "C:/repos/aigt/UltrasoundObjectDetection/YOLOv5/lung_us.yml",
+                "--input-device-name", "Image_Reference",
+                "--output-device-name", "Inference",
+                "--target-size", "512",
+                "--line-thickness", "2",
+                "--host", "127.0.0.1",
+                "--port", "18945"
+            ]
+        },
+        {
+            "name": "Realtime inference over OpenIGTLink - no args",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": "true"
+        },
+        {
+            "name": "Export model",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": "true",
+            "args": [
+                "--weights", "C:/repos/aigt/UltrasoundObjectDetection/YOLOv5/weights/lung_us_pretrained.pt",
+                "--input-device-name", "Image_Reference",
+                "--output-device-name", "Inference",
+                "--target-size", "512",
+                "--line-thickness", "2",
+                "--host", "127.0.0.1",
+                "--port", "18945"
+            ]
+        }
+    ]
+}

@@ -7,7 +7,7 @@ class_weights: [0.25, 0.75]  # must be same length as out_channels
 image_size: 128
 in_channels: !!int 1
 out_channels: !!int 2
-num_epochs: !!int 50
+num_epochs: !!int 5
 batch_size: !!int 32
 learning_rate: !!float 0.004
 learning_rate_decay_factor: !!float 0.5
