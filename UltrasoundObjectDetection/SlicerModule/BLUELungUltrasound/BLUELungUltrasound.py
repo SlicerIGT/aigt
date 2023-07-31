@@ -292,7 +292,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
     def onSetViewButtonClicked(self):
         logging.info("onSetViewButtonClicked()")
-        self.logic.setViewToIncomingData(self.logic.INPUT_NODE_NAME)
+        self.logic.setViewToIncomingData()
 
     
     def onStartInferenceButtonClicked(self, toggled):
@@ -365,11 +365,6 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         slicer.mrmlScene.AddNode(self.RawInputIgtlConnectorNode)
         self.RawInputIgtlConnectorNode.Start()
 
-        self.InferenceIgtlConnectorNode = slicer.vtkMRMLIGTLConnectorNode()
-        self.InferenceIgtlConnectorNode.SetName('Inference')
-        self.InferenceIgtlConnectorNode.SetTypeClient('localhost', self.IGTL_INFERENCE_PORT)
-        slicer.mrmlScene.AddNode(self.InferenceIgtlConnectorNode)
-
     
     def setDefaultParameters(self, parameterNode):
         """
@@ -393,15 +388,6 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         """
         moduleDir = os.path.dirname(slicer.util.modulePath(self.moduleName))
         return os.path.join(moduleDir, 'Resources', filename)
-
-    def setupInferenceServer(self):
-        FNULL = open(os.devnull, 'w')
-        python_executable = '"C:/Users/Guest admin/anaconda3/envs/pytorch/python.exe"'
-        inference_server_script = 'C:/repos/aigt/UltrasoundObjectDetection/RealtimeInferenceOverOpenIGTLink.py'
-        args = f'{python_executable} {inference_server_script}'
-        print(args)
-        self.inference_server_process = subprocess.Popen(args, env=os.environ)
-        print('Inference server started')
     
     
     def setPlusServerClicked(self, toggled):
@@ -418,15 +404,21 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
             print('PLUS server stopped')
 
 
-    def setViewToIncomingData(self, nodeName):
+    def setViewToIncomingData(self):
+        layoutManager = slicer.app.layoutManager()
+        layoutManager.setLayout(29) # side-by-side Red and Yellow slice view layout
+        redCompositeNode = layoutManager.sliceWidget('Red').sliceLogic().GetSliceCompositeNode()
+        yellowCompositeNode = layoutManager.sliceWidget('Yellow').sliceLogic().GetSliceCompositeNode()
+
         try:
-            slicer.util.setSliceViewerLayers(
-                foreground=slicer.util.getNode(nodeName).GetID(),
-                foregroundOpacity=0,
-                fit=True)
+            redCompositeNode.SetBackgroundVolumeID(slicer.util.getNode(self.INPUT_NODE_NAME).GetID())
         except:
             print("View reset unsuccessful - cannot find incoming data node. Try again in a few seconds")
 
+        yellowCompositeNode.SetBackgroundVolumeID(self.InferenceOutputNode.GetID())
+        
+        slicer.util.setSliceViewerLayers(fit=True)
+    
 
     def find_local_file(self, filename):        
         drives = []
@@ -443,15 +435,6 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
                 
         print("No PLUS installation found")
         return None
-    
-    
-    def ToggleInferenceMode(self, toggled):
-        if toggled:
-            self.InferenceIgtlConnectorNode.Start()
-            print("Inference running")
-        else:
-            self.InferenceIgtlConnectorNode.Stop()
-            print("Inference stopped")
 
     
     def SetCustomStyle(self, visible):
