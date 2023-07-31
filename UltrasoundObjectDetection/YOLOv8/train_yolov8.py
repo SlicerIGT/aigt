@@ -8,11 +8,11 @@ from ultralytics import YOLO
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--weights", type=str, default="yolov8s.pt")
+    parser.add_argument("--weights", type=str, default="yolov8n.pt")
     parser.add_argument("--data-yaml", type=str, default='D:/Data/Lung/ObjectDetection/training.yaml')
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--image_size", type=int, default=512)
-    parser.add_argument("--batch", type=int, default=16)
+    parser.add_argument("--batch", type=int, default=8)
     try:
         return parser.parse_args()
     except SystemExit as err:
