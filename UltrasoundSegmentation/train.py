@@ -55,6 +55,7 @@ def parse_args():
     parser.add_argument("--num-fps-test-images", type=int, default=100)
     parser.add_argument("--save-torchscript", action="store_true")
     parser.add_argument("--save-ckpt-freq", type=int, default=0)
+    parser.add_argument("--wandb-entity-name", type=str)
     parser.add_argument("--wandb-project-name", type=str, default="aigt_ultrasound_segmentation")
     parser.add_argument("--wandb-exp-name", type=str)
     parser.add_argument("--log-level", type=str, default="INFO")

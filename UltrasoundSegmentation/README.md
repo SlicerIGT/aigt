@@ -170,6 +170,7 @@ Similar to running the prepare_data.py script, train.py can be run from command 
 * `--config-file` is the yaml file detailing the training settings. See [train_config.yaml](train_config.yaml) for an example. Also see [Supported networks](#supported-networks) to see the available networks.
 * `--save-torchscript` saves the model as a torchscript
 * `--save-ckpt-freq` is the integer value for how often (number of epochs) the model saves and is 0 by default
+* `--wandb-entity-name` should be set to your username if you are working on a solo project or the username of the owner of a collaborative team on wandb
 * `--wandb-project-name` should be the name of the project in _Weights and Biases_ and has a default name
 * `--wandb-exp-name` is the experiment name in _Weights and Biases_ and is by default the model name and timestamp of the experiment
 * `--log-level` is by default `"INFO"`
