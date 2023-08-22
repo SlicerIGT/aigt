@@ -1,17 +1,18 @@
-
+import tqdm
 import argparse
 import csv
 import time
 import torch
 import monai
 import statistics
-
 from pathlib import Path
 
-from monai.metrics import DiceMetric, MeanIoU, ConfusionMatrixMetric
 from monai.data import DataLoader
 from monai.transforms import Compose, Activations, AsDiscrete
 from UltrasoundDataset import UltrasoundDataset
+
+import metrics as fm
+
 
 def main(args):
     # Ensure reproducibility
@@ -34,60 +35,52 @@ def main(args):
     batch_size = 1
     test_ds = UltrasoundDataset(args.test_data_path, transform=test_transforms)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
-
-    # Confusion matrix labels
-    cm_labels_dict = {
-        "accuracy": 0,
-        "precision": 1,
-        "sensitivity": 2,
-        "specificity": 3,
-        "f1_score": 4
-    }
-
-    # Build a list of labels for the confusion matrix
-    cm_labels = [label for label in cm_labels_dict]
-
-    # Metrics
-    dice_metric = DiceMetric(include_background=True, reduction="mean")
-    iou_metric = MeanIoU(include_background=True, reduction="mean")
-    confusion_matrix_metric = ConfusionMatrixMetric(
-        include_background=True, 
-        metric_name=cm_labels,
-        reduction="mean"
-    )
+    num_test_batches = len(test_loader)
 
     # Test loop
     with torch.no_grad():
         inference_times = []
+        avg_acc = 0
+        avg_pre = 0
+        avg_sen = 0
+        avg_spe = 0
+        avg_f1 = 0
+        avg_dice = 0
+        avg_iou = 0
 
-        for test_data in test_loader:
+        for test_data in tqdm.tqdm(test_loader):
             inputs, labels = test_data["image"].to(device), test_data["label"].to(device)
             inputs = inputs.float()
             inputs = inputs.permute(0, 3, 1, 2)
             labels = labels.permute(0, 3, 1, 2)
+            labels = monai.networks.one_hot(labels, num_classes=inputs.shape[1])
 
             start_time = time.time()
             
             outputs = model(inputs)
-            outputs = Activations(sigmoid=True)(outputs)
-            outputs = torch.argmax(outputs, dim=1, keepdim=True)
-            outputs = AsDiscrete(threshold_values=True)(outputs)
+            if isinstance(outputs, list):
+                outputs = outputs[0]
             
             elapsed_time = time.time() - start_time
             inference_times.append(elapsed_time)
             
-            dice_metric(y_pred=outputs, y=labels)
-            iou_metric(y_pred=outputs, y=labels)
-            confusion_matrix_metric(y_pred=outputs, y=labels)
-
-    print(f"Dice Score: {dice_metric.aggregate().item():.3f}")
-    print(f"IoU: {iou_metric.aggregate().item():.3f}")
-    confusion_matrix_aggregate = confusion_matrix_metric.aggregate()
-
-    # Print the confusion matrix
-    print("\nConfusion matrix metrics:")
-    for label in cm_labels:
-        print(f"    {label}: {confusion_matrix_aggregate[cm_labels_dict[label]].item():.3f}")
+            avg_acc += fm.fuzzy_accuracy(pred=outputs, target=labels, sigmoid=True) / num_test_batches
+            avg_pre += fm.fuzzy_precision(pred=outputs, target=labels, sigmoid=True) / num_test_batches
+            avg_sen += fm.fuzzy_sensitivity(pred=outputs, target=labels, sigmoid=True) / num_test_batches
+            avg_spe += fm.fuzzy_specificity(pred=outputs, target=labels, sigmoid=True) / num_test_batches
+            avg_f1 += fm.fuzzy_f1_score(pred=outputs, target=labels, sigmoid=True) / num_test_batches
+            avg_dice += fm.fuzzy_dice(pred=outputs, target=labels, sigmoid=True) / num_test_batches
+            avg_iou += fm.fuzzy_iou(pred=outputs, target=labels, sigmoid=True) / num_test_batches
+    
+    # Printing metrics
+    print("\nPerformance metrics:")
+    print(f"    Accuracy:    {avg_acc:.3f}")
+    print(f"    Precision:   {avg_pre:.3f}")
+    print(f"    Sensitivity: {avg_sen:.3f}")
+    print(f"    Specificity: {avg_spe:.3f}")
+    print(f"    F1 score:    {avg_f1:.3f}")
+    print(f"    Dice score:  {avg_dice:.3f}")
+    print(f"    IoU:         {avg_iou:.3f}")
 
     # Printing performance statistics
     print("\nPerformance statistics:")
@@ -101,13 +94,13 @@ def main(args):
 
     # Put all metrics into a dictionary so it can be written to a CSV file later
     metrics_dict = {
-        "dice_score": dice_metric.aggregate().item(),
-        "iou": iou_metric.aggregate().item(),
-        "accuracy": confusion_matrix_aggregate[cm_labels_dict["accuracy"]].item(),
-        "precision": confusion_matrix_aggregate[cm_labels_dict["precision"]].item(),
-        "sensitivity": confusion_matrix_aggregate[cm_labels_dict["sensitivity"]].item(),
-        "specificity": confusion_matrix_aggregate[cm_labels_dict["specificity"]].item(),
-        "f1_score": confusion_matrix_aggregate[cm_labels_dict["f1_score"]].item(),
+        "dice_score": avg_dice,
+        "iou": avg_iou,
+        "accuracy": avg_acc,
+        "precision": avg_pre,
+        "sensitivity": avg_sen,
+        "specificity": avg_spe,
+        "f1_score": avg_f1,
         "num_test_images": len(test_ds),
         "median_inference_time": statistics.median(inference_times),
         "median_fps": 1 / statistics.median(inference_times),
