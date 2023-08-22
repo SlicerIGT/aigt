@@ -2,6 +2,7 @@ import tqdm
 import argparse
 import csv
 import time
+import yaml
 import torch
 import monai
 import statistics
@@ -24,6 +25,11 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = torch.jit.load(args.model_path).to(device)
     model.eval()
+
+    # Get number of output channels from config file in model folder
+    with open(Path(args.model_path).parent / "train_config.yaml", "r") as config_file:
+        config = yaml.safe_load(config_file)
+    num_classes = config["out_channels"]
 
     # Transforms for test dataset
     test_transforms = Compose([
@@ -53,7 +59,7 @@ def main(args):
             inputs = inputs.float()
             inputs = inputs.permute(0, 3, 1, 2)
             labels = labels.permute(0, 3, 1, 2)
-            labels = monai.networks.one_hot(labels, num_classes=inputs.shape[1])
+            labels = monai.networks.one_hot(labels, num_classes=num_classes)
 
             start_time = time.time()
             

@@ -20,7 +20,6 @@ def confusion_matrix(pred, target, sigmoid=False, softmax=False):
     Returns:
         tuple of Tensors: true positives, false positives, true negatives, false negatives
     """
-
     assert not (sigmoid and softmax), "sigmoid and softmax cannot both be True"
 
     if sigmoid:
@@ -33,7 +32,8 @@ def confusion_matrix(pred, target, sigmoid=False, softmax=False):
     tn = torch.sum(torch.minimum(1 - pred, 1 - target))
     fn = torch.sum(torch.maximum(target - pred, torch.tensor(0, dtype=torch.int8)))
 
-    assert tp + fp + tn + fn == torch.numel(pred)
+    assert round((tp + fp + tn + fn).item()) == torch.numel(pred), \
+        f"TP + FP + TN + FN = {tp + fp + tn + fn}, but should be {torch.numel(pred)}"
 
     return tp, fp, tn, fn
 
