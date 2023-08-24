@@ -7,12 +7,16 @@ import torch
 import monai
 import statistics
 from pathlib import Path
+from PIL import Image
 
 from monai.data import DataLoader
 from monai.transforms import Compose, Activations, AsDiscrete
 from UltrasoundDataset import UltrasoundDataset
 
 import metrics as fm
+
+
+LIMIT_TEST_BATCHES = 50  # Make this None to process all test batches
 
 
 def main(args):
@@ -38,10 +42,31 @@ def main(args):
     ])
 
     # Create test dataset and dataloader
-    batch_size = 1
     test_ds = UltrasoundDataset(args.test_data_path, transform=test_transforms)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False)
     num_test_batches = len(test_loader)
+
+    # Take a sample image and matching segmentation from the test dataset and print the data shapes and value ranges
+    sample_data = test_ds[0]
+    sample_image = sample_data["image"]
+    sample_label = sample_data["label"]
+    print(f"Sample image shape: {sample_image.shape}")
+    print(f"Sample image value range: {sample_image.min()} to {sample_image.max()}")
+    print(f"Sample label shape: {sample_label.shape}")
+    print(f"Sample label value range: {sample_label.min()} to {sample_label.max()}")
+
+    # Generate a list of random indices for sample images to save
+    sample_indices = torch.randint(0, len(test_ds), (args.num_sample_images,))
+    sample_indices = sample_indices.tolist()
+
+    if LIMIT_TEST_BATCHES is not None:
+        print(f"\nLimiting test batches to {LIMIT_TEST_BATCHES} batches.")
+        sample_indices = torch.randint(0, LIMIT_TEST_BATCHES, (args.num_sample_images,))
+        sample_indices = sample_indices.tolist()
+
+    # Create output directory if it doesn't already exist
+    if args.num_sample_images > 0:
+        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     # Test loop
     with torch.no_grad():
@@ -54,15 +79,23 @@ def main(args):
         avg_dice = 0
         avg_iou = 0
 
-        for test_data in tqdm.tqdm(test_loader):
+        # Make sure we have an index that increments by one with each iteration
+        test_loader = enumerate(test_loader)
+        for batch_index, test_data in tqdm.tqdm(test_loader):
             inputs, labels = test_data["image"].to(device), test_data["label"].to(device)
             inputs = inputs.float()
             inputs = inputs.permute(0, 3, 1, 2)
             labels = labels.permute(0, 3, 1, 2)
             labels = monai.networks.one_hot(labels, num_classes=num_classes)
 
-            start_time = time.time()
+            if LIMIT_TEST_BATCHES is not None:
+                print(f"\ninputs shape:        {inputs.shape}")
+                print(f"inputs value range:  {inputs.min()} to {inputs.max()}")
+                print(f"labels shape:        {labels.shape}")
+                print(f"labels value range:  {labels.min()} to {labels.max()}")
             
+            start_time = time.time()
+
             outputs = model(inputs)
             if isinstance(outputs, list):
                 outputs = outputs[0]
@@ -70,13 +103,56 @@ def main(args):
             elapsed_time = time.time() - start_time
             inference_times.append(elapsed_time)
             
-            avg_acc += fm.fuzzy_accuracy(pred=outputs, target=labels, sigmoid=True) / num_test_batches
-            avg_pre += fm.fuzzy_precision(pred=outputs, target=labels, sigmoid=True) / num_test_batches
-            avg_sen += fm.fuzzy_sensitivity(pred=outputs, target=labels, sigmoid=True) / num_test_batches
-            avg_spe += fm.fuzzy_specificity(pred=outputs, target=labels, sigmoid=True) / num_test_batches
-            avg_f1 += fm.fuzzy_f1_score(pred=outputs, target=labels, sigmoid=True) / num_test_batches
-            avg_dice += fm.fuzzy_dice(pred=outputs, target=labels, sigmoid=True) / num_test_batches
-            avg_iou += fm.fuzzy_iou(pred=outputs, target=labels, sigmoid=True) / num_test_batches
+            if LIMIT_TEST_BATCHES is not None:
+                print(f"outputs shape:       {outputs.shape}")
+                print(f"outputs value range: {outputs.min()} to {outputs.max()}")
+            
+            # Apply softmax activation to the outputs in dimension 1
+            outputs = torch.softmax(outputs, dim=1)
+            
+            avg_acc += fm.fuzzy_accuracy(pred=outputs, target=labels) / num_test_batches
+            avg_pre += fm.fuzzy_precision(pred=outputs, target=labels) / num_test_batches
+            avg_sen += fm.fuzzy_sensitivity(pred=outputs, target=labels) / num_test_batches
+            avg_spe += fm.fuzzy_specificity(pred=outputs, target=labels) / num_test_batches
+            avg_f1 += fm.fuzzy_f1_score(pred=outputs, target=labels) / num_test_batches
+            avg_dice += fm.fuzzy_dice(pred=outputs, target=labels) / num_test_batches
+            avg_iou += fm.fuzzy_iou(pred=outputs, target=labels) / num_test_batches
+
+            if LIMIT_TEST_BATCHES is not None:
+                print(f"outputs shape:       {outputs.shape}")
+                print(f"outputs value range: {outputs.min()} to {outputs.max()}")
+
+            # If this is a sample image, save the input image and the output image as png files
+            if batch_index in sample_indices:
+                # Save input image
+                input_image = inputs[0].permute(1, 2, 0).cpu().numpy()
+                if input_image.max() <= 1.0:
+                    input_image = input_image * 255
+                input_image = input_image.astype("uint8")
+                input_image = input_image[:, :, 0]
+                input_image = Image.fromarray(input_image)
+                input_image.save(Path(args.output_dir) / f"{batch_index:04}_input.png")
+
+                # Save labels
+                label_image = labels[0].permute(1, 2, 0).cpu().numpy()
+                label_image = (1.0 - label_image) * 255
+                label_image = label_image.astype("uint8")
+                label_image = label_image[:, :, 0]
+                label_image = Image.fromarray(label_image)
+                label_image.save(Path(args.output_dir) / f"{batch_index:04}_label.png")
+
+                # Save output image
+                output_image = outputs[0].permute(1, 2, 0).cpu().numpy()
+                output_image = (1.0 - output_image) * 255  # Invert the background, which results in the sum of all labels
+                output_image = output_image.astype("uint8")
+                output_image = output_image[:, :, 0]
+                output_image = Image.fromarray(output_image)
+                output_image.save(Path(args.output_dir) / f"{batch_index:04}_output.png")
+
+            # Limit the number of test batches to process
+            if LIMIT_TEST_BATCHES is not None:
+                if len(inference_times) >= LIMIT_TEST_BATCHES:
+                    break
     
     # Printing metrics
     print("\nPerformance metrics:")
@@ -132,5 +208,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, required=True, help="Path to the trained model.")
     parser.add_argument("--output_csv_file", type=str, required=True, help="Path to the output CSV file.")
     parser.add_argument("--test_data_path", type=str, required=True, help="Path to the test dataset already in slices format.")
+    parser.add_argument("--num_sample_images", type=int, default=10, help="Number of sample images to save in the output folder.")
+    parser.add_argument("--output_dir", type=str, default="output", help="Path to the output folder.")
     args = parser.parse_args()
     main(args)
