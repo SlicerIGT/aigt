@@ -1,15 +1,15 @@
 # Example config file for train.py
 
-model_name: "nnunet"  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet, nnunet
+model_name: "unet"  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet
 loss_function: "DiceCE"
 lambda_ce: 0.5  # 0.0 for dice, 1.0 for cross-entropy/focal
 class_weights: [0.25, 0.75]  # must be same length as out_channels
 image_size: 128
 in_channels: !!int 1
 out_channels: !!int 2
-num_epochs: !!int 5
-batch_size: !!int 32
-learning_rate: !!float 0.004
+num_epochs: !!int 100
+batch_size: !!int 64
+learning_rate: !!float 0.0001
 learning_rate_decay_factor: !!float 0.5
 learning_rate_decay_frequency: !!int 10
 weight_decay: 0.01
@@ -34,11 +34,3 @@ transforms:
         keys: ["image", "label"]
         spatial_size: [128, 128]
   train:
-
-# For nnUNet only:
-channel_names:
-  0: "Ultrasound"
-
-labels:
-  background: 0
-  tumor: 1

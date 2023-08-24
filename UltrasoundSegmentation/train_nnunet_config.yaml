@@ -1,0 +1,15 @@
+# Example config file for train_nnunet.py
+
+model_name: "nnunet"
+image_size: 128
+in_channels: !!int 1
+out_channels: !!int 2
+num_epochs: !!int 5
+seed: !!int 42
+
+channel_names:
+  0: "Ultrasound"
+
+labels:
+  background: 0
+  tumor: 1
