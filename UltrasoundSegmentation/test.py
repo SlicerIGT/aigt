@@ -110,8 +110,11 @@ def main(args):
                 print(f"outputs shape:       {outputs.shape}")
                 print(f"outputs value range: {outputs.min()} to {outputs.max()}")
             
+            # TODO: can remove this once debugging is done and change softmax arg to True below
+            outputs = torch.softmax(outputs, dim=1)
+
             # Update metrics
-            fm.update_metrics(outputs, labels, softmax=True)
+            fm.update_metrics(outputs, labels, softmax=False)
 
             if LIMIT_TEST_BATCHES is not None:
                 print(f"outputs shape:       {outputs.shape}")
@@ -172,24 +175,6 @@ def main(args):
     print(f"    Maximum time:            {max(inference_times):.3f} seconds")
     print(f"    Minimum time:            {min(inference_times):.3f} seconds")
 
-    # Put all metrics into a dictionary so it can be written to a CSV file later
-    # metrics_dict = {
-    #     "dice_score": avg_dice,
-    #     "iou": avg_iou,
-    #     "accuracy": avg_acc,
-    #     "precision": avg_pre,
-    #     "sensitivity": avg_sen,
-    #     "specificity": avg_spe,
-    #     "f1_score": avg_f1,
-    #     "num_test_images": len(test_ds),
-    #     "median_inference_time": statistics.median(inference_times),
-    #     "median_fps": 1 / statistics.median(inference_times),
-    #     "average_inference_time": statistics.mean(inference_times),
-    #     "inference_time_sd": statistics.stdev(inference_times),
-    #     "maximum_time": max(inference_times),
-    #     "minimum_time": min(inference_times)
-    # }
-
     # Create Pandas dataframe for metrics
     metrics_df = fm.get_metrics_as_dataframe()
     metrics_df.at["num_test_images", "total"] = len(test_ds)
@@ -203,12 +188,6 @@ def main(args):
     # Create the CSV folder path if it doesn't exist and save
     Path(args.output_csv_file).parent.mkdir(parents=True, exist_ok=True)
     metrics_df.to_csv(args.output_csv_file)
-    
-    # Write the metrics to a CSV file.
-    # with open(args.output_csv_file, "w", newline="") as csv_file:
-    #     writer = csv.DictWriter(csv_file, fieldnames=metrics_dict.keys())
-    #     writer.writeheader()
-    #     writer.writerow(metrics_dict)
 
     print("\nMetrics written to CSV file: " + args.output_csv_file)
 

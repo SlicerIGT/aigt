@@ -6,9 +6,17 @@ import torch
 
 
 class FuzzyMetrics:
+    ACC_INDEX = 0
+    PRE_INDEX = 1
+    SEN_INDEX = 2
+    SPE_INDEX = 3
+    F1_INDEX = 4
+    DICE_INDEX = 5
+    IOU_INDEX = 6
+
     def __init__(self, num_classes=2):
         self.num_classes = num_classes
-        self.count = 0
+        self.counts = torch.zeros((7, self.num_classes), dtype=torch.int32)
         self.cm = torch.zeros((self.num_classes, 4), dtype=torch.float32)
         self.accuracy = torch.zeros(self.num_classes, dtype=torch.float32)
         self.precision = torch.zeros(self.num_classes, dtype=torch.float32)
@@ -33,7 +41,7 @@ class FuzzyMetrics:
         if softmax:
             pred = torch.softmax(pred, dim=1)
 
-        self.count += 1
+        self.counts += 1
         for class_idx in range(self.num_classes):
             pred_class = pred[:, class_idx, :, :]
             target_class = target[:, class_idx, :, :]
@@ -52,7 +60,11 @@ class FuzzyMetrics:
         """
         for class_idx in range(self.num_classes):
             tp, fp, tn, fn = self.cm[class_idx]
-            self.accuracy[class_idx] += (tp + tn) / (tp + fp + tn + fn)
+            acc = (tp + tn) / (tp + fp + tn + fn)
+            if torch.isnan(acc):
+                self.counts[self.ACC_INDEX, class_idx] -= 1
+            else:
+                self.accuracy[class_idx] += acc
 
     def compute_precision(self):
         """Computes a fuzzy implementation of the precision metric.
@@ -61,7 +73,11 @@ class FuzzyMetrics:
         """
         for class_idx in range(self.num_classes):
             tp, fp, _, _ = self.cm[class_idx]
-            self.precision[class_idx] += tp / (tp + fp)
+            pre = tp / (tp + fp)
+            if torch.isnan(pre):
+                self.counts[self.PRE_INDEX, class_idx] -= 1
+            else:
+                self.precision[class_idx] += pre
 
     def compute_sensitivity(self):
         """Computes a fuzzy implementation of the sensitivity (recall/TPR) metric.
@@ -70,7 +86,11 @@ class FuzzyMetrics:
         """
         for class_idx in range(self.num_classes):
             tp, _, _, fn = self.cm[class_idx]
-            self.sensitivity[class_idx] += tp / (tp + fn)
+            sen = tp / (tp + fn)
+            if torch.isnan(sen):
+                self.counts[self.SEN_INDEX, class_idx] -= 1
+            else:
+                self.sensitivity[class_idx] += sen
 
     def compute_specificity(self):
         """Computes a fuzzy implementation of the specificity (TNR) metric.
@@ -79,7 +99,11 @@ class FuzzyMetrics:
         """
         for class_idx in range(self.num_classes):
             _, fp, tn, _ = self.cm[class_idx]
-            self.specificity[class_idx] += tn / (tn + fp)
+            spe = tn / (tn + fp)
+            if torch.isnan(spe):
+                self.counts[self.SPE_INDEX, class_idx] -= 1
+            else:
+                self.specificity[class_idx] += spe
 
     def compute_f1_score(self):
         """Computes a fuzzy implementation of the F1 measure.
@@ -90,7 +114,11 @@ class FuzzyMetrics:
             tp, fp, _, fn = self.cm[class_idx]
             pre = tp / (tp + fp)
             sen = tp / (tp + fn)
-            self.f1_score[class_idx] += 2 * pre * sen / (pre + sen)
+            f1 = 2 * pre * sen / (pre + sen)
+            if torch.isnan(f1):
+                self.counts[self.F1_INDEX, class_idx] -= 1
+            else:
+                self.f1_score[class_idx] += f1
 
     def compute_dice(self):
         """Computes a fuzzy implementation of the Dice coefficient.
@@ -99,7 +127,11 @@ class FuzzyMetrics:
         """
         for class_idx in range(self.num_classes):
             tp, fp, _, fn = self.cm[class_idx]
-            self.dice[class_idx] += 2 * tp / (2 * tp + fp + fn)
+            dice = 2 * tp / (2 * tp + fp + fn)
+            if torch.isnan(dice):
+                self.counts[self.DICE_INDEX, class_idx] -= 1
+            else:
+                self.dice[class_idx] += dice
 
     def compute_iou(self):
         """Computes a fuzzy implementation of the IoU (intersection over union/Jaccard) metric.
@@ -108,7 +140,11 @@ class FuzzyMetrics:
         """
         for class_idx in range(self.num_classes):
             tp, fp, _, fn = self.cm[class_idx]
-            self.iou[class_idx] += tp / (tp + fp + fn)
+            iou = tp / (tp + fp + fn)
+            if torch.isnan(iou):
+                self.counts[self.IOU_INDEX, class_idx] -= 1
+            else:
+                self.iou[class_idx] += iou
     
     def update_metrics(self, pred, target, softmax=False):
         """Computes all metrics for the given prediction and target tensors."""
@@ -123,13 +159,13 @@ class FuzzyMetrics:
     
     def get_mean_metrics_by_class(self):
         """Returns the mean for all metrics, split by class."""
-        avg_acc_by_class = (self.accuracy / self.count).numpy()
-        avg_pre_by_class = (self.precision / self.count).numpy()
-        avg_sen_by_class = (self.sensitivity / self.count).numpy()
-        avg_spe_by_class = (self.specificity / self.count).numpy()
-        avg_f1_by_class = (self.f1_score / self.count).numpy()
-        avg_dice_by_class = (self.dice / self.count).numpy()
-        avg_iou_by_class = (self.iou / self.count).numpy()
+        avg_acc_by_class = (self.accuracy / self.counts[self.ACC_INDEX]).numpy()
+        avg_pre_by_class = (self.precision / self.counts[self.PRE_INDEX]).numpy()
+        avg_sen_by_class = (self.sensitivity / self.counts[self.SEN_INDEX]).numpy()
+        avg_spe_by_class = (self.specificity / self.counts[self.SPE_INDEX]).numpy()
+        avg_f1_by_class = (self.f1_score / self.counts[self.F1_INDEX]).numpy()
+        avg_dice_by_class = (self.dice / self.counts[self.DICE_INDEX]).numpy()
+        avg_iou_by_class = (self.iou / self.counts[self.IOU_INDEX]).numpy()
         return avg_acc_by_class, avg_pre_by_class, avg_sen_by_class, avg_spe_by_class, \
                avg_f1_by_class, avg_dice_by_class, avg_iou_by_class
     
@@ -137,13 +173,13 @@ class FuzzyMetrics:
         """Returns the mean for all metrics, averaged over all classes."""
         avg_acc_by_class, avg_pre_by_class, avg_sen_by_class, avg_spe_by_class, \
         avg_f1_by_class, avg_dice_by_class, avg_iou_by_class = self.get_mean_metrics_by_class()
-        avg_acc = np.nanmean(avg_acc_by_class[1:])
-        avg_pre = np.nanmean(avg_pre_by_class[1:])
-        avg_sen = np.nanmean(avg_sen_by_class[1:])
-        avg_spe = np.nanmean(avg_spe_by_class[1:])
-        avg_f1 = np.nanmean(avg_f1_by_class[1:])
-        avg_dice = np.nanmean(avg_dice_by_class[1:])
-        avg_iou = np.nanmean(avg_iou_by_class[1:])
+        avg_acc = np.mean(avg_acc_by_class[1:])
+        avg_pre = np.mean(avg_pre_by_class[1:])
+        avg_sen = np.mean(avg_sen_by_class[1:])
+        avg_spe = np.mean(avg_spe_by_class[1:])
+        avg_f1 = np.mean(avg_f1_by_class[1:])
+        avg_dice = np.mean(avg_dice_by_class[1:])
+        avg_iou = np.mean(avg_iou_by_class[1:])
         return avg_acc, avg_pre, avg_sen, avg_spe, avg_f1, avg_dice, avg_iou
 
     def get_metrics_as_dataframe(self):
