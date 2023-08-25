@@ -13,7 +13,7 @@ from monai.data import DataLoader
 from monai.transforms import Compose, Activations, AsDiscrete
 from UltrasoundDataset import UltrasoundDataset
 
-import metrics as fm
+from metrics import FuzzyMetrics
 
 
 LIMIT_TEST_BATCHES = 50  # Make this None to process all test batches
@@ -45,6 +45,9 @@ def main(args):
     test_ds = UltrasoundDataset(args.test_data_path, transform=test_transforms)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False)
     num_test_batches = len(test_loader)
+
+    # Initialize metrics
+    fm = FuzzyMetrics(num_classes=num_classes)
 
     # Take a sample image and matching segmentation from the test dataset and print the data shapes and value ranges
     sample_data = test_ds[0]
@@ -107,16 +110,8 @@ def main(args):
                 print(f"outputs shape:       {outputs.shape}")
                 print(f"outputs value range: {outputs.min()} to {outputs.max()}")
             
-            # Apply softmax activation to the outputs in dimension 1
-            outputs = torch.softmax(outputs, dim=1)
-            
-            avg_acc += fm.fuzzy_accuracy(pred=outputs, target=labels) / num_test_batches
-            avg_pre += fm.fuzzy_precision(pred=outputs, target=labels) / num_test_batches
-            avg_sen += fm.fuzzy_sensitivity(pred=outputs, target=labels) / num_test_batches
-            avg_spe += fm.fuzzy_specificity(pred=outputs, target=labels) / num_test_batches
-            avg_f1 += fm.fuzzy_f1_score(pred=outputs, target=labels) / num_test_batches
-            avg_dice += fm.fuzzy_dice(pred=outputs, target=labels) / num_test_batches
-            avg_iou += fm.fuzzy_iou(pred=outputs, target=labels) / num_test_batches
+            # Update metrics
+            fm.update_metrics(outputs, labels, softmax=True)
 
             if LIMIT_TEST_BATCHES is not None:
                 print(f"outputs shape:       {outputs.shape}")
@@ -153,6 +148,9 @@ def main(args):
             if LIMIT_TEST_BATCHES is not None:
                 if len(inference_times) >= LIMIT_TEST_BATCHES:
                     break
+
+    # Aggregate metrics
+    avg_acc, avg_pre, avg_sen, avg_spe, avg_f1, avg_dice, avg_iou = fm.get_total_mean_metrics()
     
     # Printing metrics
     print("\nPerformance metrics:")
@@ -175,31 +173,42 @@ def main(args):
     print(f"    Minimum time:            {min(inference_times):.3f} seconds")
 
     # Put all metrics into a dictionary so it can be written to a CSV file later
-    metrics_dict = {
-        "dice_score": avg_dice,
-        "iou": avg_iou,
-        "accuracy": avg_acc,
-        "precision": avg_pre,
-        "sensitivity": avg_sen,
-        "specificity": avg_spe,
-        "f1_score": avg_f1,
-        "num_test_images": len(test_ds),
-        "median_inference_time": statistics.median(inference_times),
-        "median_fps": 1 / statistics.median(inference_times),
-        "average_inference_time": statistics.mean(inference_times),
-        "inference_time_sd": statistics.stdev(inference_times),
-        "maximum_time": max(inference_times),
-        "minimum_time": min(inference_times)
-    }
+    # metrics_dict = {
+    #     "dice_score": avg_dice,
+    #     "iou": avg_iou,
+    #     "accuracy": avg_acc,
+    #     "precision": avg_pre,
+    #     "sensitivity": avg_sen,
+    #     "specificity": avg_spe,
+    #     "f1_score": avg_f1,
+    #     "num_test_images": len(test_ds),
+    #     "median_inference_time": statistics.median(inference_times),
+    #     "median_fps": 1 / statistics.median(inference_times),
+    #     "average_inference_time": statistics.mean(inference_times),
+    #     "inference_time_sd": statistics.stdev(inference_times),
+    #     "maximum_time": max(inference_times),
+    #     "minimum_time": min(inference_times)
+    # }
 
-    # Create the CSV file and its path if it doesn't exist
+    # Create Pandas dataframe for metrics
+    metrics_df = fm.get_metrics_as_dataframe()
+    metrics_df.at["num_test_images", "total"] = len(test_ds)
+    metrics_df.at["median_inference_time", "total"] = statistics.median(inference_times)
+    metrics_df.at["median_fps", "total"] = 1 / statistics.median(inference_times)
+    metrics_df.at["average_inference_time", "total"] = statistics.mean(inference_times)
+    metrics_df.at["inference_time_sd", "total"] = statistics.stdev(inference_times)
+    metrics_df.at["maximum_time", "total"] = max(inference_times)
+    metrics_df.at["minimum_time", "total"] = min(inference_times)
+
+    # Create the CSV folder path if it doesn't exist and save
     Path(args.output_csv_file).parent.mkdir(parents=True, exist_ok=True)
+    metrics_df.to_csv(args.output_csv_file)
     
     # Write the metrics to a CSV file.
-    with open(args.output_csv_file, "w", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=metrics_dict.keys())
-        writer.writeheader()
-        writer.writerow(metrics_dict)
+    # with open(args.output_csv_file, "w", newline="") as csv_file:
+    #     writer = csv.DictWriter(csv_file, fieldnames=metrics_dict.keys())
+    #     writer.writeheader()
+    #     writer.writerow(metrics_dict)
 
     print("\nMetrics written to CSV file: " + args.output_csv_file)
 
