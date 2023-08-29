@@ -1,6 +1,6 @@
 import tqdm
 import argparse
-import csv
+import datetime
 import time
 import yaml
 import torch
@@ -44,7 +44,6 @@ def main(args):
     # Create test dataset and dataloader
     test_ds = UltrasoundDataset(args.test_data_path, transform=test_transforms)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False)
-    num_test_batches = len(test_loader)
 
     # Initialize metrics
     fm = FuzzyMetrics(num_classes=num_classes)
@@ -186,15 +185,15 @@ def main(args):
     metrics_df.at["minimum_time", "total"] = min(inference_times)
 
     # Create the CSV folder path if it doesn't exist and save
-    Path(args.output_csv_file).parent.mkdir(parents=True, exist_ok=True)
-    metrics_df.to_csv(args.output_csv_file)
+    output_csv_file = Path(args.output_dir) / f"test_results_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+    output_csv_file.parent.mkdir(parents=True, exist_ok=True)
+    metrics_df.to_csv(output_csv_file)
 
-    print("\nMetrics written to CSV file: " + args.output_csv_file)
+    print("\nMetrics written to CSV file: " + str(output_csv_file))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test the trained segmentation model.")
     parser.add_argument("--model_path", type=str, required=True, help="Path to the trained model.")
-    parser.add_argument("--output_csv_file", type=str, required=True, help="Path to the output CSV file.")
     parser.add_argument("--test_data_path", type=str, required=True, help="Path to the test dataset already in slices format.")
     parser.add_argument("--num_sample_images", type=int, default=10, help="Number of sample images to save in the output folder.")
     parser.add_argument("--output_dir", type=str, default="output", help="Path to the output folder.")
