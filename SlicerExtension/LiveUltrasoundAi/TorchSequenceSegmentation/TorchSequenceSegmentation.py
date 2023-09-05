@@ -64,15 +64,13 @@ class TorchSequenceSegmentation(ScriptedLoadableModule):
 
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
-        self.parent.title = "Torch Sequence Segmentation"  # TODO: make this more human readable by adding spaces
-        self.parent.categories = ["Ultrasound"]  # TODO: set categories (folders where the module shows up in the module selector)
+        self.parent.title = "Torch Sequence Segmentation"
+        self.parent.categories = ["Ultrasound"]
         self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-        self.parent.contributors = ["Chris Yeung (Queen's Univ.)"]  # TODO: replace with "Firstname Lastname (Organization)"
-        # TODO: update with short description of the module and a link to online module documentation
+        self.parent.contributors = ["Chris Yeung (Queen's Univ.)"]
         self.parent.helpText = """
 See more information in <a href="https://github.com/SlicerIGT/aigt/tree/master/SlicerExtension/LiveUltrasoundAi/TorchSequenceSegmentation">module documentation</a>.
 """
-        # TODO: replace with organization, grant and thanks
         self.parent.acknowledgementText = """
 This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
 and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
@@ -219,6 +217,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.modelComboBox.connect("currentTextChanged(const QString)", self.updateParameterNodeFromGUI)
         self.ui.volumeReconstructionSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.sequenceBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.allBrowsersCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.inputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.verticalFlipCheckbox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
@@ -322,6 +321,9 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
                 volumeReconstructionNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLVolumeReconstructionNode", "VolumeReconstruction")
             self.ui.volumeReconstructionSelector.setCurrentNode(volumeReconstructionNode)
 
+        # Collapse data probe widget
+        slicer.util.findChild(slicer.util.mainWindow(), "DataProbeCollapsibleWidget").collapsed = True
+
     def exit(self):
         """
         Called each time the user opens a different module.
@@ -396,6 +398,15 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.sequenceBrowserSelector.setCurrentNode(sequenceBrowser)
         self.ui.sequenceBrowserSelector.blockSignals(wasBlocked)
 
+        useAllBrowsers = self._parameterNode.GetParameter("UseAllBrowsers").lower() == "true"
+        wasBlocked = self.ui.allBrowsersCheckBox.blockSignals(True)
+        self.ui.allBrowsersCheckBox.setChecked(useAllBrowsers)
+        if useAllBrowsers:
+            self.ui.sequenceBrowserSelector.setEnabled(False)
+        else:
+            self.ui.sequenceBrowserSelector.setEnabled(True)
+        self.ui.allBrowsersCheckBox.blockSignals(wasBlocked)
+
         inputVolume = self._parameterNode.GetNodeReference("InputVolume")
         wasBlocked = self.ui.inputVolumeSelector.blockSignals(True)
         self.ui.inputVolumeSelector.setCurrentNode(inputVolume)
@@ -448,6 +459,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         # Update node references
         self._parameterNode.SetNodeReferenceID("VolumeReconstruction", self.ui.volumeReconstructionSelector.currentNodeID)
         self._parameterNode.SetNodeReferenceID("SequenceBrowser", self.ui.sequenceBrowserSelector.currentNodeID)
+        self._parameterNode.SetParameter("UseAllBrowsers", "true" if self.ui.allBrowsersCheckBox.checked else "false")
         self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputVolumeSelector.currentNodeID)
         self._parameterNode.SetNodeReferenceID("OutputTransform", self.ui.outputTransformSelector.currentNodeID)
 
@@ -588,22 +600,30 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
                 # Generate predictions and add to sequence browser
                 self.ui.taskStatusLabel.setText("Generating predictions...")
-                sequenceBrowser = self._parameterNode.GetNodeReference("SequenceBrowser")
-                numFrames = sequenceBrowser.GetMasterSequenceNode().GetNumberOfDataNodes() - 1
-                self.setPredictionProgressBar(numFrames)
-                self.logic.segmentSequence(model)
-                self.resetTaskProgressBar()
 
-                if self.ui.reconstructCheckBox.checked:
-                    self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
-                    # Reconstruct volume
-                    self.ui.taskStatusLabel.setText("Reconstructing volume...")
-                    self.setReconstructionProgressBar()
-                    slicer.app.processEvents()
-                    self.logic.runVolumeReconstruction(model)
+                # Create a list of sequence browsers nodes that need to be processed
+                if self.logic.getUseAllBrowsers():
+                    sequenceBrowserNodes = slicer.util.getNodesByClass("vtkMRMLSequenceBrowserNode")
+                else:
+                    sequenceBrowserNodes = [self._parameterNode.GetNodeReference("SequenceBrowser")]
+
+                #todo: Iterate over sequence browser nodes
+                for sequenceBrowser in sequenceBrowserNodes:
+                    self._parameterNode.SetNodeReferenceID("SequenceBrowser", sequenceBrowser.GetID())
+                    numFrames = sequenceBrowser.GetMasterSequenceNode().GetNumberOfDataNodes() - 1
+                    self.setPredictionProgressBar(numFrames)
+                    self.logic.segmentSequence(model)
                     self.resetTaskProgressBar()
 
-                self.ui.overallStatusLabel.setText(f"Done using {modelName}")
+                    if self.ui.reconstructCheckBox.checked:
+                        self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
+                        self.ui.taskStatusLabel.setText("Reconstructing volume...")
+                        self.setReconstructionProgressBar()
+                        slicer.app.processEvents()
+                        self.logic.runVolumeReconstruction(model)
+                        self.resetTaskProgressBar()
+
+                    self.ui.overallStatusLabel.setText(f"Done using {modelName}")
             except Exception as e:
                 logging.info(f"Skipping {modelName} due to error: {e}")
                 continue
@@ -728,8 +748,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         """
         Initialize parameter node with default settings.
         """
-        if not parameterNode.GetParameter("Threshold"):
-            parameterNode.SetParameter("Threshold", "100.0")
+        if not parameterNode.GetParameter("UseAllBrowsers"):
+            parameterNode.SetParameter("UseAllBrowsers", "false")
         if not parameterNode.GetParameter("Invert"):
             parameterNode.SetParameter("Invert", "false")
     
@@ -846,6 +866,10 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                 except ValueError:
                     newName += "_1"
         return newName
+
+    def getUseAllBrowsers(self):
+        parameterNode = self.getParameterNode()
+        return parameterNode.GetParameter("UseAllBrowsers") == "true"
     
     def addPredictionVolume(self, modelName):
         parameterNode = self.getParameterNode()
@@ -978,11 +1002,24 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         return roiNode
 
-    def addReconstructionVolume(self, modelName):
+    def addReconstructionVolume(self, modelName, sequenceName):
         parameterNode = self.getParameterNode()
 
+        # Replace underscores with dashes in model name and sequence name so the volumes can be used by the comparison module
+
+        modelName = modelName.split(os.sep)[-2]
+        modelName = modelName.replace("_", "-")
+        sequenceName = sequenceName.replace("_", "-")
+
+        # Default scan orientation is sagittal, but if "ax" is in the sequence name, then it is axial
+        scanName = "Sagittal"
+        if "ax" in sequenceName.lower():
+            scanName = "Axial"
+
+        volumeName = sequenceName + "_" + modelName + "_" + scanName
+
         reconstructionVolume = parameterNode.GetNodeReference("ReconstructionVolume")
-        reconstructionName = self.getUniqueName(reconstructionVolume, f"{modelName.split(os.sep)[-2]}_ReconstructionVolume")
+        reconstructionName = self.getUniqueName(reconstructionVolume, volumeName)
         reconstructionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", reconstructionName)
         reconstructionVolume.CreateDefaultDisplayNodes()
         parameterNode.SetNodeReferenceID("ReconstructionVolume", reconstructionVolume.GetID())
@@ -1007,7 +1044,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         reconstructionNode.SetAndObserveInputROINode(roiNode)
 
         # Set reconstruction output volume
-        reconstructionVolume = self.addReconstructionVolume(modelName)
+        sequenceName = sequenceBrowser.GetName()
+        reconstructionVolume = self.addReconstructionVolume(modelName, sequenceName)
         reconstructionNode.SetAndObserveOutputVolumeNode(reconstructionVolume)
 
         # Set volume rendering properties
