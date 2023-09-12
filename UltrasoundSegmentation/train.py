@@ -196,13 +196,17 @@ def main(args):
     )
 
     # Construct model
+
+    dropout_rate = config["dropout_rate"] if "dropout_rate" in config else 0.0
+
     if config["model_name"].lower() == "attentionunet":
         model = monai.networks.nets.AttentionUnet(
             spatial_dims=2,
             in_channels=config["in_channels"],
             out_channels=config["out_channels"],
             channels=(16, 32, 64, 128, 256),
-            strides=(2, 2, 2, 2)
+            strides=(2, 2, 2, 2),
+            dropout=dropout_rate
         )
     elif config["model_name"].lower() == "effnetunet":
         model = monai.networks.nets.FlexibleUNet(
@@ -222,6 +226,7 @@ def main(args):
             in_channels=config["in_channels"],
             out_channels=config["out_channels"],
             img_size=config["image_size"],
+            dropout_rate=dropout_rate,
             spatial_dims=2
         )
     elif config["model_name"].lower() == "swinunetr":
@@ -244,7 +249,8 @@ def main(args):
             out_channels=config["out_channels"],
             channels=(16, 32, 64, 128, 256),
             strides=(2, 2, 2, 2),
-            num_res_units=2
+            num_res_units=2,
+            dropout=dropout_rate
         )
     model = model.to(device=device)
     
@@ -414,20 +420,23 @@ def main(args):
             logging.info(f"Current learning rate: {current_lr}")
 
         # Log metrics and examples together to maintain global step == epoch
-        run.log({
-            "train_loss": epoch_loss, 
-            "val_loss": val_loss,
-            "dice": dice,
-            "iou": iou,
-            "accuracy": acc,
-            "precision": pre,
-            "sensitivity": sen,
-            "specificity": spe,
-            "f1_score": f1,
-            "lr": current_lr,
-            "examples": wandb.Image(fig)})
-
-        plt.close(fig)
+        try:
+            run.log({
+                "train_loss": epoch_loss, 
+                "val_loss": val_loss,
+                "dice": dice,
+                "iou": iou,
+                "accuracy": acc,
+                "precision": pre,
+                "sensitivity": sen,
+                "specificity": spe,
+                "f1_score": f1,
+                "lr": current_lr,
+                "examples": wandb.Image(fig)})
+        except FileNotFoundError:
+            logging.error("Failed to log examples to Weights & Biases. Temporary image file not found.")
+        finally:
+            plt.close(fig)
         
         # Save model checkpoint (if not the last epoch)
         if (args.save_ckpt_freq > 0 
