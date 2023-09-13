@@ -6,6 +6,9 @@ For experiment tracking:
     - Log training metrics to Weights & Biases
 """
 
+import matplotlib
+matplotlib.use("Agg")  # Use non-interactive backend to avoid error when running on server without GUI
+
 import argparse
 import logging
 import monai
