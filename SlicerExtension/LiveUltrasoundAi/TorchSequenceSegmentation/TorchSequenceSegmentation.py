@@ -241,6 +241,9 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.logic.loadScanConversion(lastScanConversionPath)
         self.ui.scanConversionPathLineEdit.connect("currentPathChanged(const QString)", self.updateSettingsFromGUI)
 
+        lastOutputFolder = slicer.util.settingsValue(self.logic.LAST_OUTPUT_FOLDER_SETTING, "")
+        if lastOutputFolder:
+            self.ui.outputDirectoryButton.directory = lastOutputFolder 
         self.ui.outputDirectoryButton.connect("directoryChanged(const QString)", self.updateSettingsFromGUI)
 
         # Buttons
@@ -1106,7 +1109,10 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             # Add image to array
             currentImage = sequenceNode.GetNthDataNode(itemIndex)
             resizedImage = np.expand_dims(slicer.util.arrayFromVolume(currentImage), axis=3)
-            outputArray[itemIndex, ...] = resizedImage
+            if resizedImage.max() > 1:
+                outputArray[itemIndex, ...] = resizedImage
+            else:
+                outputArray[itemIndex, ...] = resizedImage * 255
 
         return outputArray
 
