@@ -1,7 +1,9 @@
 import os
 import glob
+from monai.config import KeysCollection
 import numpy as np
 from torch.utils.data import Dataset
+from monai.transforms.transform import MapTransform
 
 
 class UltrasoundDataset(Dataset):
@@ -62,3 +64,14 @@ class UltrasoundDataset(Dataset):
             data = self.transform(data)
 
         return data
+    
+
+class ZScoreNormalized(MapTransform):
+    def __init__(self, keys: KeysCollection, allow_missing_keys: bool = False) -> None:
+        super().__init__(keys, allow_missing_keys)
+    
+    def __call__(self, data):
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = (d[key] - np.mean(d[key])) / max(np.std(d[key]), 1e-8)
+        return d
