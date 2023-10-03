@@ -2,10 +2,12 @@ import tqdm
 import argparse
 import datetime
 import time
+import os
 import yaml
 import torch
 import monai
 import statistics
+import numpy as np
 from pathlib import Path
 from PIL import Image
 
@@ -16,10 +18,14 @@ from UltrasoundDataset import UltrasoundDataset
 from metrics import FuzzyMetrics
 
 
-LIMIT_TEST_BATCHES = 50  # Make this None to process all test batches
+LIMIT_TEST_BATCHES = None # Make this None to process all test batches
 
 
-def main(args):
+def test_model(model_path: str,
+               test_data_path: str,
+               output_csv_file: str,
+               num_sample_images: int = 10,
+               output_dir: str = "output"):
     # Ensure reproducibility
     monai.utils.set_determinism(seed=42)
     torch.backends.cudnn.deterministic = True
@@ -27,11 +33,11 @@ def main(args):
 
     # Load the trained model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.jit.load(args.model_path).to(device)
+    model = torch.jit.load(model_path).to(device)
     model.eval()
 
     # Get number of output channels from config file in model folder
-    with open(Path(args.model_path).parent / "train_config.yaml", "r") as config_file:
+    with open(Path(model_path).parent / "train_config.yaml", "r") as config_file:
         config = yaml.safe_load(config_file)
     num_classes = config["out_channels"]
 
@@ -42,7 +48,7 @@ def main(args):
     ])
 
     # Create test dataset and dataloader
-    test_ds = UltrasoundDataset(args.test_data_path, transform=test_transforms)
+    test_ds = UltrasoundDataset(test_data_path, transform=test_transforms)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False)
 
     # Initialize metrics
@@ -58,17 +64,17 @@ def main(args):
     print(f"Sample label value range: {sample_label.min()} to {sample_label.max()}")
 
     # Generate a list of random indices for sample images to save
-    sample_indices = torch.randint(0, len(test_ds), (args.num_sample_images,))
+    sample_indices = torch.randint(0, len(test_ds), (num_sample_images,))
     sample_indices = sample_indices.tolist()
 
     if LIMIT_TEST_BATCHES is not None:
         print(f"\nLimiting test batches to {LIMIT_TEST_BATCHES} batches.")
-        sample_indices = torch.randint(0, LIMIT_TEST_BATCHES, (args.num_sample_images,))
+        sample_indices = torch.randint(0, LIMIT_TEST_BATCHES, (num_sample_images,))
         sample_indices = sample_indices.tolist()
 
     # Create output directory if it doesn't already exist
-    if args.num_sample_images > 0:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    if num_sample_images > 0:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Test loop
     with torch.no_grad():
@@ -128,7 +134,7 @@ def main(args):
                 input_image = input_image.astype("uint8")
                 input_image = input_image[:, :, 0]
                 input_image = Image.fromarray(input_image)
-                input_image.save(Path(args.output_dir) / f"{batch_index:04}_input.png")
+                input_image.save(Path(output_dir) / f"{batch_index:04}_input.png")
 
                 # Save labels
                 label_image = labels[0].permute(1, 2, 0).cpu().numpy()
@@ -136,7 +142,7 @@ def main(args):
                 label_image = label_image.astype("uint8")
                 label_image = label_image[:, :, 0]
                 label_image = Image.fromarray(label_image)
-                label_image.save(Path(args.output_dir) / f"{batch_index:04}_label.png")
+                label_image.save(Path(output_dir) / f"{batch_index:04}_label.png")
 
                 # Save output image
                 output_image = outputs[0].permute(1, 2, 0).cpu().numpy()
@@ -144,7 +150,7 @@ def main(args):
                 output_image = output_image.astype("uint8")
                 output_image = output_image[:, :, 0]
                 output_image = Image.fromarray(output_image)
-                output_image.save(Path(args.output_dir) / f"{batch_index:04}_output.png")
+                output_image.save(Path(output_dir) / f"{batch_index:04}_output.png")
 
             # Limit the number of test batches to process
             if LIMIT_TEST_BATCHES is not None:
@@ -178,15 +184,14 @@ def main(args):
     metrics_df = fm.get_metrics_as_dataframe()
     metrics_df.at["num_test_images", "total"] = len(test_ds)
     metrics_df.at["median_inference_time", "total"] = statistics.median(inference_times)
-    metrics_df.at["median_fps", "total"] = 1 / statistics.median(inference_times)
-    metrics_df.at["average_inference_time", "total"] = statistics.mean(inference_times)
-    metrics_df.at["inference_time_sd", "total"] = statistics.stdev(inference_times)
-    metrics_df.at["maximum_time", "total"] = max(inference_times)
-    metrics_df.at["minimum_time", "total"] = min(inference_times)
+    metrics_df.at["median_fps", "total"] = np.float32(1 / statistics.median(inference_times))
+    metrics_df.at["average_inference_time", "total"] = np.float32(statistics.mean(inference_times))
+    metrics_df.at["inference_time_sd", "total"] = np.float32(statistics.stdev(inference_times))
+    metrics_df.at["maximum_time", "total"] = np.float32(max(inference_times))
+    metrics_df.at["minimum_time", "total"] = np.float32(min(inference_times))
 
     # Create the CSV folder path if it doesn't exist and save
-    output_csv_file = Path(args.output_dir) / f"test_results_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-    output_csv_file.parent.mkdir(parents=True, exist_ok=True)
+    os.makedirs(os.path.dirname(output_csv_file), exist_ok=True)
     metrics_df.to_csv(output_csv_file)
 
     print("\nMetrics written to CSV file: " + str(output_csv_file))
@@ -195,7 +200,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test the trained segmentation model.")
     parser.add_argument("--model_path", type=str, required=True, help="Path to the trained model.")
     parser.add_argument("--test_data_path", type=str, required=True, help="Path to the test dataset already in slices format.")
+    parser.add_argument("--output_csv_file", type=str, default="test_results.csv", help="Path to the output CSV file.")
     parser.add_argument("--num_sample_images", type=int, default=10, help="Number of sample images to save in the output folder.")
     parser.add_argument("--output_dir", type=str, default="output", help="Path to the output folder.")
     args = parser.parse_args()
-    main(args)
+    test_model(args.model_path, args.test_data_path, args.output_csv_file, args.num_sample_images, args.output_dir)
