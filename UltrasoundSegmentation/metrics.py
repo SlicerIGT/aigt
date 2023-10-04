@@ -170,16 +170,16 @@ class FuzzyMetrics:
                avg_f1_by_class, avg_dice_by_class, avg_iou_by_class
     
     def get_total_mean_metrics(self):
-        """Returns the mean for all metrics, averaged over all classes."""
+        """Returns the mean for all metrics, averaged over all classes (including background)."""
         avg_acc_by_class, avg_pre_by_class, avg_sen_by_class, avg_spe_by_class, \
         avg_f1_by_class, avg_dice_by_class, avg_iou_by_class = self.get_mean_metrics_by_class()
-        avg_acc = np.mean(avg_acc_by_class[1:])
-        avg_pre = np.mean(avg_pre_by_class[1:])
-        avg_sen = np.mean(avg_sen_by_class[1:])
-        avg_spe = np.mean(avg_spe_by_class[1:])
-        avg_f1 = np.mean(avg_f1_by_class[1:])
-        avg_dice = np.mean(avg_dice_by_class[1:])
-        avg_iou = np.mean(avg_iou_by_class[1:])
+        avg_acc = np.mean(avg_acc_by_class)
+        avg_pre = np.mean(avg_pre_by_class)
+        avg_sen = np.mean(avg_sen_by_class)
+        avg_spe = np.mean(avg_spe_by_class)
+        avg_f1 = np.mean(avg_f1_by_class)
+        avg_dice = np.mean(avg_dice_by_class)
+        avg_iou = np.mean(avg_iou_by_class)
         return avg_acc, avg_pre, avg_sen, avg_spe, avg_f1, avg_dice, avg_iou
 
     def get_metrics_as_dataframe(self):
@@ -190,16 +190,17 @@ class FuzzyMetrics:
 
         metrics_df = pd.DataFrame(
             columns=[class_idx for class_idx in range(self.num_classes)],
-            index=["accuracy", "precision", "sensitivity", "specificity", "f1_score", "dice", "iou"]
+            index=["accuracy_fuzzy", "precision_fuzzy", "sensitivity_fuzzy", 
+                   "specificity_fuzzy", "f1_score_fuzzy", "dice_fuzzy", "iou_fuzzy"]
         )
-        metrics_df.loc["accuracy"] = avg_acc_by_class
-        metrics_df.loc["precision"] = avg_pre_by_class
-        metrics_df.loc["sensitivity"] = avg_sen_by_class
-        metrics_df.loc["specificity"] = avg_spe_by_class
-        metrics_df.loc["f1_score"] = avg_f1_by_class
-        metrics_df.loc["dice"] = avg_dice_by_class
-        metrics_df.loc["iou"] = avg_iou_by_class
-        metrics_df["total"] = [avg_acc, avg_pre, avg_sen, avg_spe, avg_f1, avg_dice, avg_iou]
+        metrics_df.loc["accuracy_fuzzy"] = avg_acc_by_class
+        metrics_df.loc["precision_fuzzy"] = avg_pre_by_class
+        metrics_df.loc["sensitivity_fuzzy"] = avg_sen_by_class
+        metrics_df.loc["specificity_fuzzy"] = avg_spe_by_class
+        metrics_df.loc["f1_score_fuzzy"] = avg_f1_by_class
+        metrics_df.loc["dice_fuzzy"] = avg_dice_by_class
+        metrics_df.loc["iou_fuzzy"] = avg_iou_by_class
+        metrics_df["average"] = [avg_acc, avg_pre, avg_sen, avg_spe, avg_f1, avg_dice, avg_iou]
 
         return metrics_df
 

@@ -11,8 +11,9 @@ import numpy as np
 from pathlib import Path
 from PIL import Image
 
+from monai.metrics import DiceMetric, MeanIoU, ConfusionMatrixMetric
 from monai.data import DataLoader
-from monai.transforms import Compose, Activations, AsDiscrete
+from monai.transforms import Compose, AsDiscrete
 from UltrasoundDataset import UltrasoundDataset
 
 from metrics import FuzzyMetrics
@@ -51,6 +52,28 @@ def test_model(model_path: str,
     test_ds = UltrasoundDataset(test_data_path, transform=test_transforms)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False)
 
+    # Initialize crisp metrics
+    # Confusion matrix labels
+    cm_labels_dict = {
+        "accuracy": 0,
+        "precision": 1,
+        "sensitivity": 2,
+        "specificity": 3,
+        "f1_score": 4
+    }
+
+    # Build a list of labels for the confusion matrix
+    cm_labels = [label for label in cm_labels_dict]
+
+    # Metrics
+    dice_metric = DiceMetric(include_background=True)
+    iou_metric = MeanIoU(include_background=True)
+    confusion_matrix_metric = ConfusionMatrixMetric(
+        include_background=True, 
+        metric_name=cm_labels,
+        compute_sample=True
+    )
+
     # Initialize metrics
     fm = FuzzyMetrics(num_classes=num_classes)
 
@@ -79,13 +102,6 @@ def test_model(model_path: str,
     # Test loop
     with torch.no_grad():
         inference_times = []
-        avg_acc = 0
-        avg_pre = 0
-        avg_sen = 0
-        avg_spe = 0
-        avg_f1 = 0
-        avg_dice = 0
-        avg_iou = 0
 
         # Make sure we have an index that increments by one with each iteration
         test_loader = enumerate(test_loader)
@@ -118,7 +134,15 @@ def test_model(model_path: str,
             # TODO: can remove this once debugging is done and change softmax arg to True below
             outputs = torch.softmax(outputs, dim=1)
 
-            # Update metrics
+            # Threshold output to get binary labels
+            outputs_crisp = AsDiscrete(threshold=0.5)(outputs)
+
+            # Update crisp metrics
+            dice_metric(y_pred=outputs_crisp, y=labels)
+            iou_metric(y_pred=outputs_crisp, y=labels)
+            confusion_matrix_metric(y_pred=outputs_crisp, y=labels)
+
+            # Update fuzzy metrics
             fm.update_metrics(outputs, labels, softmax=False)
 
             if LIMIT_TEST_BATCHES is not None:
@@ -157,11 +181,31 @@ def test_model(model_path: str,
                 if len(inference_times) >= LIMIT_TEST_BATCHES:
                     break
 
-    # Aggregate metrics
-    avg_acc, avg_pre, avg_sen, avg_spe, avg_f1, avg_dice, avg_iou = fm.get_total_mean_metrics()
+    # Aggregate binary metrics by class
+    cm_aggregate_batch = confusion_matrix_metric.aggregate(reduction="mean_batch")
+    avg_acc_cls = cm_aggregate_batch[cm_labels_dict["accuracy"]].cpu().numpy()
+    avg_pre_cls = cm_aggregate_batch[cm_labels_dict["precision"]].cpu().numpy()
+    avg_sen_cls = cm_aggregate_batch[cm_labels_dict["sensitivity"]].cpu().numpy()
+    avg_spe_cls = cm_aggregate_batch[cm_labels_dict["specificity"]].cpu().numpy()
+    avg_f1_cls = cm_aggregate_batch[cm_labels_dict["f1_score"]].cpu().numpy()
+    avg_dice_cls = dice_metric.aggregate(reduction="mean_batch").cpu().numpy()
+    avg_iou_cls = iou_metric.aggregate(reduction="mean_batch").cpu().numpy()
+
+    # Aggregate binary metrics with average
+    cm_aggregate = confusion_matrix_metric.aggregate(reduction="mean")
+    avg_acc = cm_aggregate[cm_labels_dict["accuracy"]].item()
+    avg_pre = cm_aggregate[cm_labels_dict["precision"]].item()
+    avg_sen = cm_aggregate[cm_labels_dict["sensitivity"]].item()
+    avg_spe = cm_aggregate[cm_labels_dict["specificity"]].item()
+    avg_f1 = cm_aggregate[cm_labels_dict["f1_score"]].item()
+    avg_dice = dice_metric.aggregate(reduction="mean").item()
+    avg_iou = iou_metric.aggregate(reduction="mean").item()
+
+    # Aggregate fuzzy metrics
+    avg_acc_f, avg_pre_f, avg_sen_f, avg_spe_f, avg_f1_f, avg_dice_f, avg_iou_f = fm.get_total_mean_metrics()
     
     # Printing metrics
-    print("\nPerformance metrics:")
+    print("\nCrisp Performance metrics:")
     print(f"    Accuracy:    {avg_acc:.3f}")
     print(f"    Precision:   {avg_pre:.3f}")
     print(f"    Sensitivity: {avg_sen:.3f}")
@@ -169,6 +213,15 @@ def test_model(model_path: str,
     print(f"    F1 score:    {avg_f1:.3f}")
     print(f"    Dice score:  {avg_dice:.3f}")
     print(f"    IoU:         {avg_iou:.3f}")
+
+    print("\nFuzzy Performance metrics:")
+    print(f"    Accuracy:    {avg_acc_f:.3f}")
+    print(f"    Precision:   {avg_pre_f:.3f}")
+    print(f"    Sensitivity: {avg_sen_f:.3f}")
+    print(f"    Specificity: {avg_spe_f:.3f}")
+    print(f"    F1 score:    {avg_f1_f:.3f}")
+    print(f"    Dice score:  {avg_dice_f:.3f}")
+    print(f"    IoU:         {avg_iou_f:.3f}")
 
     # Printing performance statistics
     print("\nPerformance statistics:")
@@ -182,20 +235,29 @@ def test_model(model_path: str,
 
     # Create Pandas dataframe for metrics
     metrics_df = fm.get_metrics_as_dataframe()
-    metrics_df.at["num_test_images", "total"] = len(test_ds)
-    metrics_df.at["median_inference_time", "total"] = statistics.median(inference_times)
-    metrics_df.at["median_fps", "total"] = np.float32(1 / statistics.median(inference_times))
-    metrics_df.at["average_inference_time", "total"] = np.float32(statistics.mean(inference_times))
-    metrics_df.at["inference_time_sd", "total"] = np.float32(statistics.stdev(inference_times))
-    metrics_df.at["maximum_time", "total"] = np.float32(max(inference_times))
-    metrics_df.at["minimum_time", "total"] = np.float32(min(inference_times))
+    metrics_df.loc["accuracy"] = np.append(avg_acc_cls, avg_acc)
+    metrics_df.loc["precision"] = np.append(avg_pre_cls, avg_pre)
+    metrics_df.loc["sensitivity"] = np.append(avg_sen_cls, avg_sen)
+    metrics_df.loc["specificity"] = np.append(avg_spe_cls, avg_spe)
+    metrics_df.loc["f1_score"] = np.append(avg_f1_cls, avg_f1)
+    metrics_df.loc["dice"] = np.append(avg_dice_cls, avg_dice)
+    metrics_df.loc["iou"] = np.append(avg_iou_cls, avg_iou)
+
+    # Add performance metrics
+    metrics_df.loc["num_test_images"] = np.repeat(len(test_ds), len(metrics_df.columns))
+    metrics_df.loc["median_inference_time"] = np.repeat(statistics.median(inference_times), len(metrics_df.columns))
+    metrics_df.loc["median_fps"] = np.repeat(np.float32(1 / statistics.median(inference_times)), len(metrics_df.columns))
+    metrics_df.loc["average_inference_time"] = np.repeat(np.float32(statistics.mean(inference_times)), len(metrics_df.columns))
+    metrics_df.loc["inference_time_sd"] = np.repeat(np.float32(statistics.stdev(inference_times)), len(metrics_df.columns))
+    metrics_df.loc["maximum_time"] = np.repeat(np.float32(max(inference_times)), len(metrics_df.columns))
+    metrics_df.loc["minimum_time"] = np.repeat(np.float32(min(inference_times)), len(metrics_df.columns))
 
     # Make sure only forward slashes are used in the file paths
     output_csv_file = output_csv_file.replace("\\", "/")
     
     # Create the CSV folder path if it doesn't exist and save
     os.makedirs(os.path.dirname(output_csv_file), exist_ok=True)
-    metrics_df.to_csv(output_csv_file)
+    metrics_df.to_csv(output_csv_file, index_label="class")
 
     print("\nMetrics written to CSV file: " + str(output_csv_file))
 
