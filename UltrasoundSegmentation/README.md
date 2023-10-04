@@ -205,6 +205,28 @@ To configure the JSON file for train.py, open the launch.json again. Copy and pa
 
 Similar to the configuration for prepare_data.py, `"name"` can be changed, but `"type"`, `"request"`, `"program"`, `"console"`, and `"justmycode"` should be untouched. Argument parameters are outlined above, but should be in string format and separated by commas in the configuration.
 
+## Testing trained models
+
+- You may use `test_models.py` to run metric calculations on a list of trained models on a specified test dataset. Look at the comment in `test_models.py` for how to specify input for that script.
+- `test_models.py` uses `test.py`, which may also be used directly if you only have one trained model to test.
+- Test result metrics will be exported in CSV files as they are specified in by the `--models_csv` argument.
+
+Example entry for VSCode's `launch.json`:
+```
+{
+    "name": "test_models: Study",
+    "type": "python",
+    "request": "launch",
+    "program": "${file}",
+    "console": "integratedTerminal",
+    "justMyCode": true,
+    "args": ["--models_csv", "f:/SpineUs/SegStudy/Round2/Round2ModelsTest.csv",
+              "--test_data_path", "f:/SpineUs/SegStudy/TestingData_sc_0_128_Slices",
+              "--num_sample_images", "10"
+            ]
+}
+```
+
 ## Supported networks
 
 The network architectures that are currently supported (and their required `names` in the config file) are listed below:

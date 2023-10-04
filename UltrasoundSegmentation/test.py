@@ -190,6 +190,9 @@ def test_model(model_path: str,
     metrics_df.at["maximum_time", "total"] = np.float32(max(inference_times))
     metrics_df.at["minimum_time", "total"] = np.float32(min(inference_times))
 
+    # Make sure only forward slashes are used in the file paths
+    output_csv_file = output_csv_file.replace("\\", "/")
+    
     # Create the CSV folder path if it doesn't exist and save
     os.makedirs(os.path.dirname(output_csv_file), exist_ok=True)
     metrics_df.to_csv(output_csv_file)
