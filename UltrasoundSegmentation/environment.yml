@@ -8,6 +8,7 @@ dependencies:
   - python=3.9
   - pytorch-cuda=11.8
   - torchvision
+  - pandas
   - wandb
   - pip:
     - requests

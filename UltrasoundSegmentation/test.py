@@ -1,6 +1,5 @@
 import tqdm
 import argparse
-import datetime
 import time
 import os
 import yaml
@@ -100,7 +99,7 @@ def test_model(model_path: str,
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # Test loop
-    with torch.no_grad():
+    with torch.inference_mode():
         inference_times = []
 
         # Make sure we have an index that increments by one with each iteration
