@@ -7,6 +7,7 @@ import torch
 import monai
 import statistics
 import numpy as np
+import matplotlib.pyplot as plt
 from pathlib import Path
 from PIL import Image
 
@@ -98,6 +99,11 @@ def test_model(model_path: str,
     if num_sample_images > 0:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
+    # Create plot for sample images
+    if num_sample_images > 0:
+        fig, axs = plt.subplots(num_sample_images, 3, figsize=(15, 15 * num_sample_images / 3))
+        plot_idx = 0
+
     # Test loop
     with torch.inference_mode():
         inference_times = []
@@ -155,29 +161,46 @@ def test_model(model_path: str,
                     input_image = input_image * 255
                 input_image = input_image.astype("uint8")
                 input_image = input_image[:, :, 0]
-                input_image = Image.fromarray(input_image)
-                input_image.save(Path(output_dir) / f"{batch_index:04}_input.png")
+                input_image = np.flip(input_image, axis=0)  # Flip the image vertically
+                input_image_pil = Image.fromarray(input_image)
+                input_image_pil.save(Path(output_dir) / f"{batch_index:04}_input.png")
 
                 # Save labels
                 label_image = labels[0].permute(1, 2, 0).cpu().numpy()
                 label_image = (1.0 - label_image) * 255
                 label_image = label_image.astype("uint8")
                 label_image = label_image[:, :, 0]
-                label_image = Image.fromarray(label_image)
-                label_image.save(Path(output_dir) / f"{batch_index:04}_label.png")
+                label_image = np.flip(label_image, axis=0)
+                label_image_pil = Image.fromarray(label_image)
+                label_image_pil.save(Path(output_dir) / f"{batch_index:04}_label.png")
 
                 # Save output image
                 output_image = outputs[0].permute(1, 2, 0).cpu().numpy()
                 output_image = (1.0 - output_image) * 255  # Invert the background, which results in the sum of all labels
                 output_image = output_image.astype("uint8")
                 output_image = output_image[:, :, 0]
-                output_image = Image.fromarray(output_image)
-                output_image.save(Path(output_dir) / f"{batch_index:04}_output.png")
+                output_image = np.flip(output_image, axis=0)
+                output_image_pil = Image.fromarray(output_image)
+                output_image_pil.save(Path(output_dir) / f"{batch_index:04}_output.png")
+
+                # Plot the input, label, and output images
+                if plot_idx == 0:
+                    axs[plot_idx, 0].set_title("Input")
+                    axs[plot_idx, 1].set_title("Label")
+                    axs[plot_idx, 2].set_title("Output")
+                axs[plot_idx, 0].imshow(input_image, cmap="gray")
+                axs[plot_idx, 1].imshow(label_image, cmap="gray")
+                axs[plot_idx, 2].imshow(output_image, cmap="gray")
+                plot_idx += 1
 
             # Limit the number of test batches to process
             if LIMIT_TEST_BATCHES is not None:
                 if len(inference_times) >= LIMIT_TEST_BATCHES:
                     break
+
+    # Save the plot of sample images
+    if num_sample_images > 0:
+        fig.savefig(Path(output_dir) / "sample_images.png")
 
     # Aggregate binary metrics by class
     cm_aggregate_batch = confusion_matrix_metric.aggregate(reduction="mean_batch")
