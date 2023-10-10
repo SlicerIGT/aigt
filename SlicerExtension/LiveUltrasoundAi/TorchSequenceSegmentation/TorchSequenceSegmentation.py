@@ -420,6 +420,17 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         modelInputSize = self._parameterNode.GetParameter("ModelInputSize")
         self.ui.modelInputSizeSpinbox.setValue(int(modelInputSize) if modelInputSize else 0)
+
+        # Change output transform to parent of input volume
+        if inputVolume:
+            inputVolumeParent = inputVolume.GetParentTransformNode()
+            if inputVolumeParent:
+                self._parameterNode.SetNodeReferenceID("OutputTransform", inputVolumeParent.GetID())
+            else:
+                self._parameterNode.SetNodeReferenceID("OutputTransform", None)
+            wasBlocked = self.ui.outputTransformSelector.blockSignals(True)
+            self.ui.outputTransformSelector.setCurrentNode(inputVolumeParent)
+            self.ui.outputTransformSelector.blockSignals(wasBlocked)
             
         # Enable/disable buttons
         if self.ui.reconstructCheckBox.checked:
@@ -944,13 +955,6 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         return outputArray
     
-    def updateOutputTransform(self, volumeNode, outputTransformNode):
-        imageTransformNode = volumeNode.GetParentTransformNode()
-        if imageTransformNode is not None and outputTransformNode is not None:
-            inputTransformMatrix = vtk.vtkMatrix4x4()
-            imageTransformNode.GetMatrixTransformToWorld(inputTransformMatrix)
-            outputTransformNode.SetMatrixTransformToParent(inputTransformMatrix)
-    
     def segmentSequence(self, modelName):
         self.isProcessing = True
 
@@ -977,7 +981,6 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             sequenceBrowser.SetSelectedItemNumber(itemIndex)
             prediction = self.getPrediction(currentImage)
             slicer.util.updateVolumeFromArray(predictionVolume, prediction)
-            self.updateOutputTransform(inputVolume, outputTransform)
 
             # Add segmentation to sequence browser
             indexValue = inputSequence.GetNthIndexValue(itemIndex)
