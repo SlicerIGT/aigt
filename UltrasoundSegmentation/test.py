@@ -103,8 +103,7 @@ def test_model(model_path: str,
         inference_times = []
 
         # Make sure we have an index that increments by one with each iteration
-        test_loader = enumerate(test_loader)
-        for batch_index, test_data in tqdm.tqdm(test_loader):
+        for batch_index, test_data in enumerate(tqdm.tqdm(test_loader)):
             inputs, labels = test_data["image"].to(device), test_data["label"].to(device)
             inputs = inputs.float()
             inputs = inputs.permute(0, 3, 1, 2)
