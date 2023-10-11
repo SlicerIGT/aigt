@@ -1,20 +1,18 @@
 import logging
 import os
-import glob
-import qt
 from typing import Annotated, Optional
 
 import vtk
 
 import slicer
+from slicer.i18n import tr as _
+from slicer.i18n import translate
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from slicer.parameterNodeWrapper import (
     parameterNodeWrapper,
     WithinRange,
 )
-
-from slicer import vtkMRMLScalarVolumeNode
 
 
 #
@@ -29,7 +27,7 @@ class LumpNavAISimulation(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = "LumpNavAISimulation"  # TODO: make this more human readable by adding spaces
-        self.parent.categories = ["Ultrasound"]  # TODO: set categories (folders where the module shows up in the module selector)
+        self.parent.categories = [translate(self.__class__.__name__, "Ultrasound")]  # TODO: set categories (folders where the module shows up in the module selector)
         self.parent.dependencies = []  # TODO: add here list of module names that this module requires
         self.parent.contributors = ["Chris Yeung (Queen's Univ.)"]  # TODO: replace with "Firstname Lastname (Organization)"
         # TODO: update with short description of the module and a link to online module documentation
@@ -105,18 +103,16 @@ def registerSampleData():
 class LumpNavAISimulationParameterNode:
     """
     The parameters needed by module.
-
-    inputVolume - The volume to threshold.
-    imageThreshold - The value at which to threshold the input volume.
-    invertThreshold - If true, will invert the threshold.
-    thresholdedVolume - The output volume that will contain the thresholded volume.
-    invertedVolume - The output volume that will contain the inverted thresholded volume.
     """
-    inputVolume: vtkMRMLScalarVolumeNode
-    imageThreshold: Annotated[float, WithinRange(-100, 500)] = 100
-    invertThreshold: bool = False
-    thresholdedVolume: vtkMRMLScalarVolumeNode
-    invertedVolume: vtkMRMLScalarVolumeNode
+    # Nodes
+    trackingSeqBr: slicer.vtkMRMLSequenceBrowserNode
+    inputVolume: slicer.vtkMRMLScalarVolumeNode
+    tumorModel: slicer.vtkMRMLModelNode
+
+    # Other parameters
+    threshold: float = 100.0
+    smooth: Annotated[float, WithinRange(0, 50)] = 15
+    decimate: Annotated[float, WithinRange(0.05, 1.0)] = 0.25
 
 
 #
@@ -165,17 +161,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        # Volume reconstruction
-        self.ui.modelPathLineEdit.connect("currentPathChanged(QString)", self.onModelPathChanged)
-
-        # File paths (settings)
-        lastCasePath = slicer.util.settingsValue(self.logic.LAST_CASE_PATH_SETTING, "")
-        if lastCasePath:
-            self.ui.caseDirectoryButton.directory = lastCasePath
-            self.logic.loadCase(lastCasePath)
-        self.ui.caseDirectoryButton.connect("directoryChanged(QString)", self.updateSettingsFromGUI)
-
         # Buttons
+        self.ui.createSurfaceButton.connect("clicked()", self.onCreateSurface)
+        self.ui.restoreDefaultsButton.connect("clicked()", self.onRestoreDefaults)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -201,6 +189,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
 
     def onSceneStartClose(self, caller, event) -> None:
         """
@@ -226,12 +215,6 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         self.setParameterNode(self.logic.getParameterNode())
 
-        # Select default input nodes if nothing is selected yet to save a few clicks for the user
-        if not self._parameterNode.inputVolume:
-            firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-            if firstVolumeNode:
-                self._parameterNode.inputVolume = firstVolumeNode
-
     def setParameterNode(self, inputParameterNode: Optional[LumpNavAISimulationParameterNode]) -> None:
         """
         Set and observe parameter node.
@@ -240,24 +223,34 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanApply)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
-
-    def updateSettingsFromGUI(self, caller=None, event=None):
-        settings = qt.QSettings()
-
-        # Update last case path
-        casePath = self.ui.caseDirectoryButton.directory
-        if casePath != slicer.util.settingsValue(self.logic.LAST_CASE_PATH_SETTING, ""):
-            settings.setValue(self.logic.LAST_CASE_PATH_SETTING, casePath)
-            self.logic.loadCase(casePath)
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
+            self._checkCanCreateSurface()
     
-    def onModelPathChanged(self, modelPath):
-        self.logic.torchseqseg.loadModel(modelPath)
+    def _checkCanCreateSurface(self, caller=None, event=None) -> None:
+        if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.tumorModel:
+            self.ui.createSurfaceButton.toolTip = _("Create 3D surface model from input volume")
+            self.ui.createSurfaceButton.enabled = True
+        else:
+            self.ui.createSurfaceButton.toolTip = _("Select input volume and output model nodes")
+            self.ui.createSurfaceButton.enabled = False
+    
+    def onCreateSurface(self) -> None:
+        logging.info("Creating surface model from input volume")
+        blockSignals = self.ui.createSurfaceButton.blockSignals(True)
+        self.logic.createSurfaceFromVolume()
+        self.ui.createSurfaceButton.blockSignals(blockSignals)
+    
+    def onRestoreDefaults(self) -> None:
+        logging.info("Restoring defaults")
+        self.ui.thresholdSpinBox.value = self.logic.DEFAULT_THRESHOLD
+        self.ui.smoothSliderWidget.value = self.logic.DEFAULT_SMOOTH
+        self.ui.decimateSliderWidget.value = self.logic.DEFAULT_DECIMATE
 
 
 #
@@ -274,7 +267,9 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    LAST_CASE_PATH_SETTING = "LumpNavAISimulation/LastCasePath"
+    DEFAULT_THRESHOLD = 100.0
+    DEFAULT_SMOOTH = 15
+    DEFAULT_DECIMATE = 0.25
 
     def __init__(self) -> None:
         """
@@ -282,15 +277,55 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         """
         ScriptedLoadableModuleLogic.__init__(self)
 
-        self.torchseqseg = slicer.modules.torchsequencesegmentation.widgetRepresentation().self().logic
-
     def getParameterNode(self):
         return LumpNavAISimulationParameterNode(super().getParameterNode())
     
-    def loadCase(self, casePath):
-        ultrasoundSeqBrowser = slicer.util.loadNodeFromFile(
-            glob.glob(os.path.join(casePath, "LumpNavRecording*.mhd")[0])
-        )
+    def createSurfaceFromVolume(self) -> None:
+        # Get input/output nodes
+        parameterNode = self.getParameterNode()
+        inputVolume = parameterNode.inputVolume
+        tumorModel = parameterNode.tumorModel
+
+        # Set up grayscale model maker CLI node
+        parameters = {
+            "InputVolume": inputVolume.GetID(),
+            "OutputGeometry": tumorModel.GetID(),
+            "Threshold": parameterNode.threshold,
+            "Smooth": parameterNode.smooth,
+            "Decimate": parameterNode.decimate,
+            "SplitNormals": True,
+            "PointNormals": True
+        }
+        modelMaker = slicer.modules.grayscalemodelmaker
+
+        # Run the CLI
+        cliNode = slicer.cli.runSync(modelMaker, None, parameters)
+
+        # Process results
+        if cliNode.GetStatus() & cliNode.ErrorsMask:
+            # error
+            errorText = cliNode.GetErrorText()
+            slicer.mrmlScene.RemoveNode(cliNode)
+            raise ValueError("CLI execution failed: " + errorText)
+        # success
+        slicer.mrmlScene.RemoveNode(cliNode)
+        
+        # Change color to green
+        displayNode = tumorModel.GetDisplayNode()
+        displayNode.SetColor(0, 1, 0)
+
+        # Extract largest portion
+        surfaceTbxLogic = slicer.modules.surfacetoolbox.widgetRepresentation().self().logic
+        surfaceTbxLogic.clean(tumorModel, tumorModel)
+        surfaceTbxLogic.extractLargestConnectedComponent(tumorModel, tumorModel)
+
+        # Convert to convex hull
+        convexHull = vtk.vtkDelaunay3D()
+        convexHull.SetInputData(tumorModel.GetPolyData())
+        outerSurface = vtk.vtkGeometryFilter()
+        outerSurface.SetInputConnection(convexHull.GetOutputPort())
+        outerSurface.Update()
+        tumorModel.SetAndObservePolyData(outerSurface.GetOutput())
 
 
 #
