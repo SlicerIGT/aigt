@@ -3,20 +3,32 @@ import os
 import argparse
 import pandas as pd
 
-def consolidate_metrics(input_folder, output_csv_path):
+def consolidate_metrics(input_csv, output_csv_path, usecol):
+# Read the input CSV file which contains the list of result CSV files to aggregate
+    input_df = pd.read_csv(input_csv)
+    
+    # Assume that the column holding the model file names is named 'model_file'
+    csv_files = input_df['FileName'].tolist()
+    
     # Initialize an empty dictionary to hold DataFrames for each AI model
     model_data_dict = {}
-    csv_files = [f for f in os.listdir(input_folder) if f.endswith('.csv')]
     
+    # Assume that the result CSV files are in the same directory as input_csv
+    input_folder = os.path.dirname(input_csv)
+
     # Loop through each CSV file and read it into a DataFrame
     for i, csv_file in enumerate(csv_files):
-        model_name = f"Model_{i+1}"
+        model_name = os.path.splitext(os.path.basename(csv_file))[0]
         csv_file_path = os.path.join(input_folder, csv_file)
         
-        df = pd.read_csv(csv_file_path)
+        # Check if usecol can be converted to an integer, if not, assume it's a column name
+        try:
+            usecol_int = int(usecol) + 1  # if it's an index, convert to int and adjust
+            cols_to_use = [0, usecol_int]  # using integer indices
+        except ValueError:
+            cols_to_use = ['class', usecol]  # using column names
         
-        # Drop the second and last columns, keeping only the column corresponding to class "1"
-        df = df.drop(df.columns[[1, -1]], axis=1)
+        df = pd.read_csv(csv_file_path, usecols=cols_to_use)
         
         # Store the DataFrame in the dictionary with the short name as the key
         model_data_dict[model_name] = df
@@ -26,7 +38,7 @@ def consolidate_metrics(input_folder, output_csv_path):
     
     # Loop through the model data and extract metrics for class "1"
     for model_name, df in model_data_dict.items():
-        metrics = df.set_index('class')['1'].to_dict()
+        metrics = df.set_index('class')[usecol].to_dict()
         metrics['Model'] = model_name
         metrics_df = pd.DataFrame([metrics])  # Convert dict to DataFrame
         consolidated_metrics_df = pd.concat([consolidated_metrics_df, metrics_df], ignore_index=True)
@@ -41,8 +53,9 @@ def consolidate_metrics(input_folder, output_csv_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Consolidate metrics from multiple CSV files.')
-    parser.add_argument('--input_folder', type=str, help='Path to the input folder containing CSV files.')
+    parser.add_argument('--input_csv', type=str, help='Path to the input folder containing CSV files.')
     parser.add_argument('--output_csv_path', type=str, help='Path to the output consolidated CSV file.')
+    parser.add_argument('--usecol', type=str, help='Column number to be used for metrics.')
     
     args = parser.parse_args()
-    consolidate_metrics(args.input_folder, args.output_csv_path)
+    consolidate_metrics(args.input_csv, args.output_csv_path, args.usecol)
