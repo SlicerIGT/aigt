@@ -105,14 +105,17 @@ class LumpNavAISimulationParameterNode:
     The parameters needed by module.
     """
     # Nodes
-    trackingSeqBr: slicer.vtkMRMLSequenceBrowserNode
     inputVolume: slicer.vtkMRMLScalarVolumeNode
     tumorModel: slicer.vtkMRMLModelNode
+    trackingSeqBr: slicer.vtkMRMLSequenceBrowserNode
+    needleTipToNeedle: slicer.vtkMRMLLinearTransformNode
+    cauteryTipToCautery: slicer.vtkMRMLLinearTransformNode
+    needleCoord: slicer.vtkMRMLLinearTransformNode
 
     # Other parameters
-    threshold: float = 100.0
+    threshold: float = 127.0
     smooth: Annotated[float, WithinRange(0, 50)] = 15
-    decimate: Annotated[float, WithinRange(0.05, 1.0)] = 0.25
+    decimate: Annotated[float, WithinRange(0, 1.0)] = 0.25
 
 
 #
@@ -223,14 +226,28 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleCoord)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
             # ui element that needs connection.
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
+
+            # Observer for needle coordinate system transform
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleCoord)
+            self._setNeedleCoord()
+
+            # Observer for create surface button
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
             self._checkCanCreateSurface()
+    
+    def _setNeedleCoord(self, caller=None, event=None) -> None:
+        if (self._parameterNode 
+            and not self._parameterNode.needleCoord 
+            and self._parameterNode.needleTipToNeedle 
+            and self._parameterNode.needleTipToNeedle.GetParentTransformNode()):
+            self.ui.needleCoordComboBox.setCurrentNode(self._parameterNode.needleTipToNeedle.GetParentTransformNode())
     
     def _checkCanCreateSurface(self, caller=None, event=None) -> None:
         if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.tumorModel:
@@ -248,6 +265,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     
     def onRestoreDefaults(self) -> None:
         logging.info("Restoring defaults")
+        self._parameterNode.needleCoord = None
         self.ui.thresholdSpinBox.value = self.logic.DEFAULT_THRESHOLD
         self.ui.smoothSliderWidget.value = self.logic.DEFAULT_SMOOTH
         self.ui.decimateSliderWidget.value = self.logic.DEFAULT_DECIMATE
@@ -286,6 +304,10 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         inputVolume = parameterNode.inputVolume
         tumorModel = parameterNode.tumorModel
 
+        # Move to needle coordinate system if it exists
+        if parameterNode.needleCoord:
+            tumorModel.SetAndObserveTransformNodeID(parameterNode.needleCoord.GetID())
+
         # Set up grayscale model maker CLI node
         parameters = {
             "InputVolume": inputVolume.GetID(),
@@ -313,6 +335,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         # Change color to green
         displayNode = tumorModel.GetDisplayNode()
         displayNode.SetColor(0, 1, 0)
+        displayNode.SetOpacity(0.3)
 
         # Extract largest portion
         surfaceTbxLogic = slicer.modules.surfacetoolbox.widgetRepresentation().self().logic
