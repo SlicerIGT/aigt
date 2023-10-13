@@ -222,6 +222,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.verticalFlipCheckbox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.modelInputSizeSpinbox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.applyLogCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
 
         # File paths
         # Set last model folder in UI
@@ -418,6 +419,9 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         flipVertical = self._parameterNode.GetParameter("FlipVertical").lower() == "true"
         self.ui.verticalFlipCheckbox.setChecked(flipVertical)
 
+        applyLog = self._parameterNode.GetParameter("ApplyLogTransform").lower() == "true"
+        self.ui.applyLogCheckBox.setChecked(applyLog)
+
         modelInputSize = self._parameterNode.GetParameter("ModelInputSize")
         self.ui.modelInputSizeSpinbox.setValue(int(modelInputSize) if modelInputSize else 0)
 
@@ -468,6 +472,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         # Update other parameters
         self._parameterNode.SetParameter("FlipVertical", "true" if self.ui.verticalFlipCheckbox.checked else "false")
+        self._parameterNode.SetParameter("ApplyLogTransform", "true" if self.ui.applyLogCheckBox.checked else "false")
         self._parameterNode.SetParameter("ModelInputSize", str(self.ui.modelInputSizeSpinbox.value))
 
         # Update individual model to use
@@ -583,6 +588,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.reconstructCheckBox.setEnabled(False)
 
         self.ui.verticalFlipCheckbox.setEnabled(False)
+        self.ui.applyLogCheckBox.setEnabled(False)
         self.ui.modelInputSizeSpinbox.setEnabled(False)
         self.ui.outputTransformSelector.setEnabled(False)
         self.ui.scanConversionPathLineEdit.setEnabled(False)
@@ -652,6 +658,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.reconstructCheckBox.setEnabled(True)
 
         self.ui.verticalFlipCheckbox.setEnabled(True)
+        self.ui.applyLogCheckBox.setEnabled(True)
         self.ui.modelInputSizeSpinbox.setEnabled(True)
         self.ui.outputTransformSelector.setEnabled(True)
         self.ui.scanConversionPathLineEdit.setEnabled(True)
@@ -726,6 +733,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
     LAST_MODEL_FOLDER_SETTING = "TorchSequenceSegmentation/LastModelFolder"
     LAST_SCAN_CONVERSION_PATH_SETTING = "TorchSequenceSegmentation/LastScanConversionPath"
     LAST_OUTPUT_FOLDER_SETTING = "TorchSequenceSegmentation/LastOutputFolder"
+
+    LOGARITHMIC_TRANSFORMATION_DECIMALS = 4
 
     def __init__(self):
         """
@@ -927,6 +936,10 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             inputSize = int(parameterNode.GetParameter("ModelInputSize"))
             inputArray = cv2.resize(imageArray[0, :, :], (inputSize, inputSize))  # default is bilinear
 
+        # Normalize input if needed
+        if inputArray.max() > 1.0:
+            inputArray = inputArray.astype(float) / inputArray.max()
+
         # Convert to tensor and add batch dimension
         inputTensor = torch.from_numpy(inputArray).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
 
@@ -940,13 +953,18 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         # Scan convert or resize
         if self.scanConversionDict:
-            outputArray = output.detach().cpu().numpy() * 255
+            outputArray = output.detach().cpu().numpy()
             outputArray = self.scanConvert(outputArray[0, 1, :, :])
             outputArray *= self.curvilinear_mask
         else:
-            outputArray = output.squeeze().detach().cpu().numpy() * 255
+            outputArray = output.squeeze().detach().cpu().numpy()
             outputArray = cv2.resize(outputArray[1], (imageArray.shape[2], imageArray.shape[1]))
 
+        if parameterNode.GetParameter("ApplyLogTransform").lower() == "true":
+            e = self.LOGARITHMIC_TRANSFORMATION_DECIMALS
+            outputArray = np.log10(np.clip(outputArray, 10 ** (-e), 1.0) * (10 ** e)) / e
+
+        outputArray *= 255
         outputArray = outputArray.astype(np.uint8)[np.newaxis, ...]
 
         # Flip output back if needed
@@ -961,7 +979,6 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         parameterNode = self.getParameterNode()
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
         inputVolume = parameterNode.GetNodeReference("InputVolume")
-        outputTransform = parameterNode.GetNodeReference("OutputTransform")
         inputSequence = sequenceBrowser.GetSequenceNode(inputVolume)
 
         # Create prediction sequence
