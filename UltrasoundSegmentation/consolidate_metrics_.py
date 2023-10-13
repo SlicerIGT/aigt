@@ -1,4 +1,8 @@
-
+'''
+This program consolidates metrics from multiple CSV files into a single CSV file.
+The input CSV file should contain a single column (FileName) with the CSV files to aggregate in rows.
+All input CSV files should have a column named the same as the usecol argument.
+'''
 import os
 import argparse
 import pandas as pd
@@ -53,7 +57,7 @@ def consolidate_metrics(input_csv, output_csv_path, usecol):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Consolidate metrics from multiple CSV files.')
-    parser.add_argument('--input_csv', type=str, help='Path to the input folder containing CSV files.')
+    parser.add_argument('--input_csv', type=str, help='Input CSV file that contains a single column (FileName) with the CSV files to aggregate.')
     parser.add_argument('--output_csv_path', type=str, help='Path to the output consolidated CSV file.')
     parser.add_argument('--usecol', type=str, help='Column number to be used for metrics.')
     
