@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Annotated, Optional
 
+import qt
 import vtk
 
 import slicer
@@ -111,11 +112,14 @@ class LumpNavAISimulationParameterNode:
     needleTipToNeedle: slicer.vtkMRMLLinearTransformNode
     cauteryTipToCautery: slicer.vtkMRMLLinearTransformNode
     needleCoord: slicer.vtkMRMLLinearTransformNode
+    breachWarning: slicer.vtkMRMLBreachWarningNode
+    currentResultsTable: slicer.vtkMRMLTableNode
 
     # Other parameters
     threshold: float = 127.0
     smooth: Annotated[float, WithinRange(0, 50)] = 15
     decimate: Annotated[float, WithinRange(0, 1.0)] = 0.25
+    closeMarginThreshold: float = 1.0
 
 
 #
@@ -136,6 +140,8 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.logic = None
         self._parameterNode = None
         self._parameterNodeGuiTag = None
+        self.lastSeqBr = None
+        self.lastResultsTable = None
 
     def setup(self) -> None:
         """
@@ -167,6 +173,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Buttons
         self.ui.createSurfaceButton.connect("clicked()", self.onCreateSurface)
         self.ui.restoreDefaultsButton.connect("clicked()", self.onRestoreDefaults)
+        self.ui.setStartButton.connect("clicked()", self.onSetStart)
+        self.ui.setStopButton.connect("clicked()", self.onSetStop)
+        self.ui.runButton.connect("clicked()", self.onRun)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -228,6 +237,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleCoord)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
@@ -241,6 +253,17 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             # Observer for create surface button
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
             self._checkCanCreateSurface()
+
+            # Observer for trim slider
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
+            self._setMinMaxTrim()
+
+            # Observer for run button
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
+            self._checkCanRun()
+
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
+            self._populateTable()
     
     def _setNeedleCoord(self, caller=None, event=None) -> None:
         if (self._parameterNode 
@@ -248,6 +271,8 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             and self._parameterNode.needleTipToNeedle 
             and self._parameterNode.needleTipToNeedle.GetParentTransformNode()):
             self.ui.needleCoordComboBox.setCurrentNode(self._parameterNode.needleTipToNeedle.GetParentTransformNode())
+        if self._parameterNode.needleCoord and self._parameterNode.tumorModel:
+            self._parameterNode.tumorModel.SetAndObserveTransformNodeID(self._parameterNode.needleCoord.GetID())
     
     def _checkCanCreateSurface(self, caller=None, event=None) -> None:
         if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.tumorModel:
@@ -258,17 +283,70 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.createSurfaceButton.enabled = False
     
     def onCreateSurface(self) -> None:
-        logging.info("Creating surface model from input volume")
         blockSignals = self.ui.createSurfaceButton.blockSignals(True)
         self.logic.createSurfaceFromVolume()
         self.ui.createSurfaceButton.blockSignals(blockSignals)
     
     def onRestoreDefaults(self) -> None:
-        logging.info("Restoring defaults")
-        self._parameterNode.needleCoord = None
-        self.ui.thresholdSpinBox.value = self.logic.DEFAULT_THRESHOLD
-        self.ui.smoothSliderWidget.value = self.logic.DEFAULT_SMOOTH
-        self.ui.decimateSliderWidget.value = self.logic.DEFAULT_DECIMATE
+        if self._parameterNode:
+            self._parameterNode.needleCoord = None
+            self.ui.thresholdSpinBox.value = self.logic.DEFAULT_THRESHOLD
+            self.ui.smoothSliderWidget.value = self.logic.DEFAULT_SMOOTH
+            self.ui.decimateSliderWidget.value = self.logic.DEFAULT_DECIMATE
+            self.ui.closeMarginSpinBox.value = self.logic.DEFAULT_CLOSE_MARGIN
+    
+    def _setMinMaxTrim(self, caller=None, event=None) -> None:
+        if (self._parameterNode 
+            and self._parameterNode.trackingSeqBr 
+            and self.lastSeqBr != self._parameterNode.trackingSeqBr):
+            self.lastSeqBr = self._parameterNode.trackingSeqBr
+            sequenceNode = self._parameterNode.trackingSeqBr.GetMasterSequenceNode()
+            maxItems = self._parameterNode.trackingSeqBr.GetNumberOfItems()
+            maxTime = float(sequenceNode.GetNthIndexValue(maxItems - 1))
+            minTime = float(sequenceNode.GetNthIndexValue(0))
+            self.ui.trimRangeWidget.minimum = minTime
+            self.ui.trimRangeWidget.maximum = maxTime
+            self.ui.trimRangeWidget.minimumValue = minTime
+            self.ui.trimRangeWidget.maximumValue = maxTime
+    
+    def onSetStart(self) -> None:
+        currentTime = self.logic.getCurrentTime()
+        if currentTime > self.ui.trimRangeWidget.maximumValue:
+            self.ui.trimRangeWidget.maximumValue = currentTime
+        self.ui.trimRangeWidget.minimumValue = currentTime
+
+    def onSetStop(self) -> None:
+        currentTime = self.logic.getCurrentTime()
+        if currentTime < self.ui.trimRangeWidget.minimumValue:
+            self.ui.trimRangeWidget.minimumValue = currentTime
+        self.ui.trimRangeWidget.maximumValue = currentTime
+
+    def _checkCanRun(self, caller=None, event=None) -> None:
+        if (self._parameterNode
+            and self._parameterNode.tumorModel
+            and self._parameterNode.trackingSeqBr
+            and self._parameterNode.needleTipToNeedle
+            and self._parameterNode.cauteryTipToCautery):
+            self.ui.runButton.toolTip = _("Replay cautery tracking relative to tumor model and record breaches")
+            self.ui.runButton.enabled = True
+        else:
+            self.ui.runButton.toolTip = _("Select tumor model, tracking sequence browser, "
+                                          "and needle and cautery tip transforms")
+            self.ui.runButton.enabled = False
+
+    def onRun(self) -> None:
+        start = self.ui.trimRangeWidget.minimumValue
+        stop = self.ui.trimRangeWidget.maximumValue
+        self.logic.runSimulation(start, stop)
+    
+    def _populateTable(self, caller=None, event=None) -> None:
+        if (self._parameterNode 
+            and self._parameterNode.currentResultsTable
+            and self.lastResultsTable != self._parameterNode.currentResultsTable):
+            self.lastResultsTable = self._parameterNode.currentResultsTable
+            self.ui.resultsTableComboBox.setCurrentNode(self._parameterNode.currentResultsTable)
+            self.ui.resultsTableView.setMRMLTableNode(self._parameterNode.currentResultsTable)
+            self.ui.resultsTableView.horizontalHeader().setSectionResizeMode(qt.QHeaderView.Stretch)
 
 
 #
@@ -288,6 +366,13 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
     DEFAULT_THRESHOLD = 100.0
     DEFAULT_SMOOTH = 15
     DEFAULT_DECIMATE = 0.25
+    DEFAULT_CLOSE_MARGIN = 1.0
+
+    RESULTS_TABLE_SUFFIX = "_results"
+    TIME_COLUMN = 0
+    MARGIN_STATUS_COLUMN = 1
+    DISTANCE_COLUMN = 2
+    LOCATION_COLUMN = 3
 
     def __init__(self) -> None:
         """
@@ -299,6 +384,8 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         return LumpNavAISimulationParameterNode(super().getParameterNode())
     
     def createSurfaceFromVolume(self) -> None:
+        logging.info("Creating surface model from volume")
+
         # Get input/output nodes
         parameterNode = self.getParameterNode()
         inputVolume = parameterNode.inputVolume
@@ -337,10 +424,18 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         displayNode.SetColor(0, 1, 0)
         displayNode.SetOpacity(0.3)
 
+        # Clean up model
+        cleanFilter = vtk.vtkCleanPolyData()
+        cleanFilter.SetInputData(tumorModel.GetPolyData())
+        cleanFilter.Update()
+        tumorModel.SetAndObservePolyData(cleanFilter.GetOutput())
+
         # Extract largest portion
-        surfaceTbxLogic = slicer.modules.surfacetoolbox.widgetRepresentation().self().logic
-        surfaceTbxLogic.clean(tumorModel, tumorModel)
-        surfaceTbxLogic.extractLargestConnectedComponent(tumorModel, tumorModel)
+        connectivityFilter = vtk.vtkPolyDataConnectivityFilter()
+        connectivityFilter.SetInputData(tumorModel.GetPolyData())
+        connectivityFilter.SetExtractionModeToLargestRegion()
+        connectivityFilter.Update()
+        tumorModel.SetAndObservePolyData(connectivityFilter.GetOutput())
 
         # Convert to convex hull
         convexHull = vtk.vtkDelaunay3D()
@@ -349,6 +444,93 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         outerSurface.SetInputConnection(convexHull.GetOutputPort())
         outerSurface.Update()
         tumorModel.SetAndObservePolyData(outerSurface.GetOutput())
+    
+    def getCurrentTime(self) -> float:
+        """
+        Get the current time of the tracking sequence browser.
+        """
+        parameterNode = self.getParameterNode()
+        if parameterNode.trackingSeqBr:
+            sequenceNode = parameterNode.trackingSeqBr.GetMasterSequenceNode()
+            currentItem = parameterNode.trackingSeqBr.GetSelectedItemNumber()
+            currentIndex = sequenceNode.GetNthIndexValue(currentItem)
+            return float(currentIndex)
+        else:
+            return 0.0
+    
+    def createResultsTable(self, name) -> slicer.vtkMRMLTableNode:
+        parameterNode = self.getParameterNode()
+        parameterNode.currentResultsTable = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", name)
+        
+        # Add columns to table
+        parameterNode.currentResultsTable.AddColumn()
+        parameterNode.currentResultsTable.RenameColumn(self.TIME_COLUMN, "Time")
+        parameterNode.currentResultsTable.SetColumnProperty(self.TIME_COLUMN, "type", "float")
+        parameterNode.currentResultsTable.SetColumnUnitLabel("Time", "s")
+
+        parameterNode.currentResultsTable.AddColumn()
+        parameterNode.currentResultsTable.RenameColumn(self.MARGIN_STATUS_COLUMN, "Margin Status")
+        parameterNode.currentResultsTable.SetColumnProperty(self.MARGIN_STATUS_COLUMN, "type", "string")
+
+        parameterNode.currentResultsTable.AddColumn()
+        parameterNode.currentResultsTable.RenameColumn(self.DISTANCE_COLUMN, "Distance to Tumor")
+        parameterNode.currentResultsTable.SetColumnProperty(self.DISTANCE_COLUMN, "type", "float")
+        parameterNode.currentResultsTable.SetColumnUnitLabel("Distance to Tumor", "mm")
+
+        parameterNode.currentResultsTable.AddColumn()
+        parameterNode.currentResultsTable.RenameColumn(self.LOCATION_COLUMN, "Location")
+        parameterNode.currentResultsTable.SetColumnProperty(self.LOCATION_COLUMN, "type", "string")
+
+        # Set table node parameters
+        parameterNode.currentResultsTable.SetUseColumnNameAsColumnHeader(True)
+        parameterNode.currentResultsTable.SetLocked(True)
+
+    def getRelativePosition(self, cauteryTipToRas, needleTipToRas) -> int:
+        # TODO: add enum for int to string conversion
+        pass
+    
+    def runSimulation(self, start, stop) -> None:
+        logging.info("Simulation started")
+
+        parameterNode = self.getParameterNode()
+        sequenceNode = parameterNode.trackingSeqBr.GetMasterSequenceNode()
+        if not parameterNode.breachWarning:
+            parameterNode.breachWarning = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLBreachWarningNode")
+
+        # Set breach warning node parameters
+        parameterNode.breachWarning.SetOriginalColor(*parameterNode.tumorModel.GetDisplayNode().GetColor())
+        parameterNode.breachWarning.SetAndObserveWatchedModelNodeID(parameterNode.tumorModel.GetID())
+        parameterNode.breachWarning.SetAndObserveToolTransformNodeId(parameterNode.cauteryTipToCautery.GetID())
+
+        # Create results table
+        if parameterNode.inputVolume:
+            modelName = parameterNode.inputVolume.GetName()
+        else:
+            modelName = parameterNode.tumorModel.GetName()
+        resultsTableName = modelName + self.RESULTS_TABLE_SUFFIX
+        self.createResultsTable(resultsTableName)
+
+        selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
+        try:
+            qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+            startItem = sequenceNode.GetItemNumberFromIndexValue(str(start), False)
+            stopItem = sequenceNode.GetItemNumberFromIndexValue(str(stop), False)
+            for item in range(startItem, stopItem + 1):
+                parameterNode.trackingSeqBr.SetSelectedItemNumber(item)
+                distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
+                # TODO: only add row if cautery wasn't breached or close before
+                if distanceToTumor < self.DEFAULT_CLOSE_MARGIN:
+                    rowIdx = parameterNode.currentResultsTable.AddEmptyRow()
+                    parameterNode.currentResultsTable.SetCellText(
+                        rowIdx, self.TIME_COLUMN, sequenceNode.GetNthIndexValue(item)
+                    )
+                    parameterNode.currentResultsTable.SetCellText(rowIdx, self.DISTANCE_COLUMN, str(distanceToTumor))
+                    if distanceToTumor <= 0:
+                        parameterNode.currentResultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Breach")
+                    else:
+                        parameterNode.currentResultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Close margin")
+        finally:
+            qt.QApplication.restoreOverrideCursor()
 
 
 #

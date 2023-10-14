@@ -6,9 +6,15 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>260</width>
-    <height>509</height>
+    <width>292</width>
+    <height>812</height>
    </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -36,6 +42,9 @@
         </property>
         <property name="hideChildNodeTypes">
          <stringlist notr="true"/>
+        </property>
+        <property name="baseName">
+         <string>TumorModelAI</string>
         </property>
         <property name="addEnabled">
          <bool>true</bool>
@@ -217,13 +226,59 @@
         </property>
        </widget>
       </item>
+      <item row="6" column="0" colspan="2">
+       <widget class="ctkCollapsibleButton" name="trimSeqCollapsibleButton">
+        <property name="text">
+         <string>Trim Sequence</string>
+        </property>
+        <property name="collapsed">
+         <bool>true</bool>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <item>
+          <widget class="ctkRangeWidget" name="trimRangeWidget">
+           <property name="singleStep">
+            <double>0.010000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>99.000000000000000</double>
+           </property>
+           <property name="maximumValue">
+            <double>99.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="setStartButton">
+           <property name="text">
+            <string>Set current time as start</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="setStopButton">
+           <property name="text">
+            <string>Set current time as stop</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QPushButton" name="createSurfaceButton">
      <property name="text">
-      <string>Create surface model</string>
+      <string>Generate surface model</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="runButton">
+     <property name="text">
+      <string>Run simulation</string>
      </property>
     </widget>
    </item>
@@ -251,6 +306,51 @@
      <property name="collapsed">
       <bool>true</bool>
      </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="qMRMLNodeComboBox" name="resultsTableComboBox">
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLTableNode</string>
+         </stringlist>
+        </property>
+        <property name="hideChildNodeTypes">
+         <stringlist notr="true"/>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="renameEnabled">
+         <bool>true</bool>
+        </property>
+        <property name="interactionNodeSingletonTag">
+         <string notr="true"/>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>currentResultsTable</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="qMRMLTableView" name="resultsTableView">
+        <property name="sizeAdjustPolicy">
+         <enum>QAbstractScrollArea::AdjustIgnored</enum>
+        </property>
+        <property name="selectionBehavior">
+         <enum>QAbstractItemView::SelectRows</enum>
+        </property>
+        <property name="horizontalScrollMode">
+         <enum>QAbstractItemView::ScrollPerItem</enum>
+        </property>
+        <attribute name="horizontalHeaderCascadingSectionResizes">
+         <bool>false</bool>
+        </attribute>
+        <attribute name="verticalHeaderCascadingSectionResizes">
+         <bool>false</bool>
+        </attribute>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -346,7 +446,7 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0" colspan="2">
+      <item row="5" column="0" colspan="2">
        <widget class="QPushButton" name="restoreDefaultsButton">
         <property name="text">
          <string>Restore defaults</string>
@@ -393,6 +493,29 @@
         </property>
        </widget>
       </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="label_10">
+        <property name="text">
+         <string>Close margin (mm):</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QDoubleSpinBox" name="closeMarginSpinBox">
+        <property name="decimals">
+         <number>1</number>
+        </property>
+        <property name="singleStep">
+         <double>0.100000000000000</double>
+        </property>
+        <property name="value">
+         <double>1.000000000000000</double>
+        </property>
+        <property name="SlicerParameterName" stdset="0">
+         <string>closeMarginThreshold</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -419,6 +542,11 @@
    <container>1</container>
   </customwidget>
   <customwidget>
+   <class>ctkRangeWidget</class>
+   <extends>QWidget</extends>
+   <header>ctkRangeWidget.h</header>
+  </customwidget>
+  <customwidget>
    <class>ctkSliderWidget</class>
    <extends>QWidget</extends>
    <header>ctkSliderWidget.h</header>
@@ -427,6 +555,11 @@
    <class>qMRMLNodeComboBox</class>
    <extends>QWidget</extends>
    <header>qMRMLNodeComboBox.h</header>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLTableView</class>
+   <extends>QTableView</extends>
+   <header>qMRMLTableView.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
@@ -528,8 +661,24 @@
      <y>501</y>
     </hint>
     <hint type="destinationlabel">
-     <x>197</x>
-     <y>319</y>
+     <x>269</x>
+     <y>398</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>LumpNavAISimulation</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>resultsTableComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>278</x>
+     <y>629</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>262</x>
+     <y>348</y>
     </hint>
    </hints>
   </connection>
