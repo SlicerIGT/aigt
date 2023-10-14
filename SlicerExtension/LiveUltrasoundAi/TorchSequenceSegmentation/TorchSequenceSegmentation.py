@@ -922,12 +922,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             return
         
         imageArray = slicer.util.arrayFromVolume(image)
-
-        # Flip image vertically if specified by user
         parameterNode = self.getParameterNode()
-        toFlip = parameterNode.GetParameter("FlipVertical").lower() == "true"
-        if toFlip:
-            imageArray = np.flip(imageArray, axis=0)
         
         # Use inverse scan conversion if specified by user, otherwise resize
         if self.scanConversionDict:
@@ -935,6 +930,11 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         else:
             inputSize = int(parameterNode.GetParameter("ModelInputSize"))
             inputArray = cv2.resize(imageArray[0, :, :], (inputSize, inputSize))  # default is bilinear
+        
+        # Flip image vertically if specified by user
+        toFlip = parameterNode.GetParameter("FlipVertical").lower() == "true"
+        if toFlip:
+            inputArray = np.flip(inputArray, axis=0)
 
         # Normalize input if needed
         if inputArray.max() > 1.0:
@@ -950,26 +950,27 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         if isinstance(output, list):
             output = output[0]
         output = torch.nn.functional.softmax(output, dim=1)
+        outputArray = output.detach().cpu().numpy()
+        outputArray = outputArray[0, 1, :, :]
+        
+        # Flip output back if needed
+        if toFlip:
+            outputArray = np.flip(outputArray, axis=0)
 
         # Scan convert or resize
         if self.scanConversionDict:
-            outputArray = output.detach().cpu().numpy()
-            outputArray = self.scanConvert(outputArray[0, 1, :, :])
+            outputArray = self.scanConvert(outputArray)
             outputArray *= self.curvilinear_mask
         else:
-            outputArray = output.squeeze().detach().cpu().numpy()
-            outputArray = cv2.resize(outputArray[1], (imageArray.shape[2], imageArray.shape[1]))
+            outputArray = cv2.resize(outputArray, (imageArray.shape[2], imageArray.shape[1]))
 
         if parameterNode.GetParameter("ApplyLogTransform").lower() == "true":
             e = self.LOGARITHMIC_TRANSFORMATION_DECIMALS
             outputArray = np.log10(np.clip(outputArray, 10 ** (-e), 1.0) * (10 ** e)) / e
 
         outputArray *= 255
+        outputArray = np.clip(outputArray, 0, 255)
         outputArray = outputArray.astype(np.uint8)[np.newaxis, ...]
-
-        # Flip output back if needed
-        if toFlip:
-            outputArray = np.flip(outputArray, axis=0)
 
         return outputArray
     
