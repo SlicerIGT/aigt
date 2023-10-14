@@ -1,6 +1,8 @@
 import logging
 import os
-from typing import Annotated, Optional
+import numpy as np
+import numpy.typing as npt
+from typing import Annotated, Optional, Literal
 
 import qt
 import vtk
@@ -109,9 +111,8 @@ class LumpNavAISimulationParameterNode:
     inputVolume: slicer.vtkMRMLScalarVolumeNode
     tumorModel: slicer.vtkMRMLModelNode
     trackingSeqBr: slicer.vtkMRMLSequenceBrowserNode
-    needleTipToNeedle: slicer.vtkMRMLLinearTransformNode
+    needleToReference: slicer.vtkMRMLLinearTransformNode
     cauteryTipToCautery: slicer.vtkMRMLLinearTransformNode
-    needleCoord: slicer.vtkMRMLLinearTransformNode
     breachWarning: slicer.vtkMRMLBreachWarningNode
     currentResultsTable: slicer.vtkMRMLTableNode
 
@@ -201,7 +202,11 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
             self._parameterNodeGuiTag = None
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleToReference)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
 
     def onSceneStartClose(self, caller, event) -> None:
         """
@@ -235,7 +240,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         if self._parameterNode:
             self._parameterNode.disconnectGui(self._parameterNodeGuiTag)
-            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleCoord)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleToReference)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
@@ -247,8 +252,8 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self._parameterNodeGuiTag = self._parameterNode.connectGui(self.ui)
 
             # Observer for needle coordinate system transform
-            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleCoord)
-            self._setNeedleCoord()
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleToReference)
+            self._setNeedleToReference()
 
             # Observer for create surface button
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
@@ -265,14 +270,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
             self._populateTable()
     
-    def _setNeedleCoord(self, caller=None, event=None) -> None:
-        if (self._parameterNode 
-            and not self._parameterNode.needleCoord 
-            and self._parameterNode.needleTipToNeedle 
-            and self._parameterNode.needleTipToNeedle.GetParentTransformNode()):
-            self.ui.needleCoordComboBox.setCurrentNode(self._parameterNode.needleTipToNeedle.GetParentTransformNode())
-        if self._parameterNode.needleCoord and self._parameterNode.tumorModel:
-            self._parameterNode.tumorModel.SetAndObserveTransformNodeID(self._parameterNode.needleCoord.GetID())
+    def _setNeedleToReference(self, caller=None, event=None) -> None:
+        if self._parameterNode and self._parameterNode.needleToReference and self._parameterNode.tumorModel:
+            self._parameterNode.tumorModel.SetAndObserveTransformNodeID(self._parameterNode.needleToReference.GetID())
     
     def _checkCanCreateSurface(self, caller=None, event=None) -> None:
         if self._parameterNode and self._parameterNode.inputVolume and self._parameterNode.tumorModel:
@@ -289,7 +289,6 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     
     def onRestoreDefaults(self) -> None:
         if self._parameterNode:
-            self._parameterNode.needleCoord = None
             self.ui.thresholdSpinBox.value = self.logic.DEFAULT_THRESHOLD
             self.ui.smoothSliderWidget.value = self.logic.DEFAULT_SMOOTH
             self.ui.decimateSliderWidget.value = self.logic.DEFAULT_DECIMATE
@@ -325,7 +324,6 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if (self._parameterNode
             and self._parameterNode.tumorModel
             and self._parameterNode.trackingSeqBr
-            and self._parameterNode.needleTipToNeedle
             and self._parameterNode.cauteryTipToCautery):
             self.ui.runButton.toolTip = _("Replay cautery tracking relative to tumor model and record breaches")
             self.ui.runButton.enabled = True
@@ -337,7 +335,11 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
     def onRun(self) -> None:
         start = self.ui.trimRangeWidget.minimumValue
         stop = self.ui.trimRangeWidget.maximumValue
-        self.logic.runSimulation(start, stop)
+        runStatus = self.logic.runSimulation(start, stop)
+        # Display results if successful
+        if runStatus == 0:
+            self.ui.inputsCollapsibleButton.collapsed = True
+            self.ui.resultsCollapsibleButton.collapsed = False
     
     def _populateTable(self, caller=None, event=None) -> None:
         if (self._parameterNode 
@@ -392,8 +394,8 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         tumorModel = parameterNode.tumorModel
 
         # Move to needle coordinate system if it exists
-        if parameterNode.needleCoord:
-            tumorModel.SetAndObserveTransformNodeID(parameterNode.needleCoord.GetID())
+        if parameterNode.needleToReference:
+            tumorModel.SetAndObserveTransformNodeID(parameterNode.needleToReference.GetID())
 
         # Set up grayscale model maker CLI node
         parameters = {
@@ -485,11 +487,56 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         parameterNode.currentResultsTable.SetUseColumnNameAsColumnHeader(True)
         parameterNode.currentResultsTable.SetLocked(True)
 
-    def getRelativePosition(self, cauteryTipToRas, needleTipToRas) -> int:
-        # TODO: add enum for int to string conversion
-        pass
+    def getRelativeCoordinates(self) -> Annotated[npt.NDArray, Literal[3]]:
+        parameterNode = self.getParameterNode()
+
+        # Get cautery tip to RAS transform
+        cauteryTipToRasMatrix = vtk.vtkMatrix4x4()
+        parameterNode.cauteryTipToCautery.GetMatrixTransformToWorld(cauteryTipToRasMatrix)
+        cauteryTipToRas = cauteryTipToRasMatrix.MultiplyFloatPoint([0, 0, 0, 1])
+        cauteryTipToRas = np.array(cauteryTipToRas)
+
+        # Get tumor center
+        tumorModel = parameterNode.tumorModel
+        centerOfMassFilter = vtk.vtkCenterOfMass()
+        centerOfMassFilter.SetInputData(tumorModel.GetPolyData())
+        centerOfMassFilter.SetUseScalarsAsWeights(False)
+        centerOfMassFilter.Update()
+        center = centerOfMassFilter.GetCenter()
+
+        # Get tumor center to RAS transform
+        needleToReference = tumorModel.GetParentTransformNode()
+        needleToRasMatrix = vtk.vtkMatrix4x4()
+        needleToReference.GetMatrixTransformToWorld(needleToRasMatrix)
+        tumorCenterToRas = needleToRasMatrix.MultiplyFloatPoint([center[0], center[1], center[2], 1])
+        tumorCenterToRas = np.array(tumorCenterToRas)
+
+        # Subtract to get relative position
+        cauteryTipToTumorCenter = cauteryTipToRas[:3] - tumorCenterToRas[:3]
+        return cauteryTipToTumorCenter
     
-    def runSimulation(self, start, stop) -> None:
+    @staticmethod
+    def getAnatomicalPositionFromRelativeCoords(relativeCoordinates) -> str:
+        absMax = max(relativeCoordinates.min(), relativeCoordinates.max(), key=abs)
+        if absMax > 0:
+            position = np.argmax(relativeCoordinates)
+            if position == 0:
+                return "Right"
+            elif position == 1:
+                return "Anterior"
+            else:
+                return "Superior"
+        else:
+            position = np.argmin(relativeCoordinates)
+            if position == 0:
+                return "Left"
+            elif position == 1:
+                return "Posterior"
+            else:
+                return "Inferior"
+    
+    # TODO: add progress bar for simulation
+    def runSimulation(self, start, stop) -> int:
         logging.info("Simulation started")
 
         parameterNode = self.getParameterNode()
@@ -517,20 +564,35 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
             stopItem = sequenceNode.GetItemNumberFromIndexValue(str(stop), False)
             for item in range(startItem, stopItem + 1):
                 parameterNode.trackingSeqBr.SetSelectedItemNumber(item)
-                distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
+
                 # TODO: only add row if cautery wasn't breached or close before
+                # Check distance of cautery to tumor and record in table
+                distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
                 if distanceToTumor < self.DEFAULT_CLOSE_MARGIN:
                     rowIdx = parameterNode.currentResultsTable.AddEmptyRow()
                     parameterNode.currentResultsTable.SetCellText(
                         rowIdx, self.TIME_COLUMN, sequenceNode.GetNthIndexValue(item)
                     )
                     parameterNode.currentResultsTable.SetCellText(rowIdx, self.DISTANCE_COLUMN, str(distanceToTumor))
-                    if distanceToTumor <= 0:
+                    location = self.getAnatomicalPositionFromRelativeCoords(self.getRelativeCoordinates())
+                    parameterNode.currentResultsTable.SetCellText(rowIdx, self.LOCATION_COLUMN, location)
+                    
+                    if distanceToTumor <= 0:  # Tumor breach
                         parameterNode.currentResultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Breach")
-                    else:
+                    else:  # Close margin
                         parameterNode.currentResultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Close margin")
+
+            logging.info("Simulation completed")
+            exitCode = 0
+
+        except Exception as e:
+            logging.error(str(e))
+            exitCode = 1
+
         finally:
             qt.QApplication.restoreOverrideCursor()
+            parameterNode.trackingSeqBr.SetSelectedItemNumber(selectedItemNumber)
+            return exitCode
 
 
 #

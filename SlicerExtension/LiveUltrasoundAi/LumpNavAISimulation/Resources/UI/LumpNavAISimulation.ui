@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>292</width>
+    <width>260</width>
     <height>812</height>
    </rect>
   </property>
@@ -34,6 +34,12 @@
        <widget class="qMRMLNodeComboBox" name="tumorModelComboBox">
         <property name="enabled">
          <bool>false</bool>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
         </property>
         <property name="nodeTypes">
          <stringlist notr="true">
@@ -78,6 +84,12 @@
         <property name="enabled">
          <bool>false</bool>
         </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="nodeTypes">
          <stringlist notr="true">
           <string>vtkMRMLScalarVolumeNode</string>
@@ -118,6 +130,12 @@
         <property name="enabled">
          <bool>false</bool>
         </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="nodeTypes">
          <stringlist notr="true">
           <string>vtkMRMLSequenceBrowserNode</string>
@@ -149,21 +167,27 @@
       <item row="4" column="0">
        <widget class="QLabel" name="label_7">
         <property name="text">
-         <string>Needle tip transform:</string>
+         <string>NeedleToReference:</string>
         </property>
        </widget>
       </item>
       <item row="5" column="0">
        <widget class="QLabel" name="label_8">
         <property name="text">
-         <string>Cautery tip transform:</string>
+         <string>CauteryTipToCautery:</string>
         </property>
        </widget>
       </item>
       <item row="4" column="1">
-       <widget class="qMRMLNodeComboBox" name="needleTipComboBox">
+       <widget class="qMRMLNodeComboBox" name="needleToRefComboBox">
         <property name="enabled">
          <bool>false</bool>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
         </property>
         <property name="nodeTypes">
          <stringlist notr="true">
@@ -189,7 +213,7 @@
          <string notr="true"/>
         </property>
         <property name="SlicerParameterName" stdset="0">
-         <string>needleTipToNeedle</string>
+         <string>needleToReference</string>
         </property>
        </widget>
       </item>
@@ -197,6 +221,12 @@
        <widget class="qMRMLNodeComboBox" name="cauteryTipComboBox">
         <property name="enabled">
          <bool>false</bool>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
         </property>
         <property name="nodeTypes">
          <stringlist notr="true">
@@ -229,7 +259,7 @@
       <item row="6" column="0" colspan="2">
        <widget class="ctkCollapsibleButton" name="trimSeqCollapsibleButton">
         <property name="text">
-         <string>Trim Sequence</string>
+         <string>Trim sequence</string>
         </property>
         <property name="collapsed">
          <bool>true</bool>
@@ -237,6 +267,12 @@
         <layout class="QVBoxLayout" name="verticalLayout_2">
          <item>
           <widget class="ctkRangeWidget" name="trimRangeWidget">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
            <property name="singleStep">
             <double>0.010000000000000</double>
            </property>
@@ -309,6 +345,12 @@
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
        <widget class="qMRMLNodeComboBox" name="resultsTableComboBox">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="nodeTypes">
          <stringlist notr="true">
           <string>vtkMRMLTableNode</string>
@@ -333,6 +375,12 @@
       </item>
       <item>
        <widget class="qMRMLTableView" name="resultsTableView">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="sizeAdjustPolicy">
          <enum>QAbstractScrollArea::AdjustIgnored</enum>
         </property>
@@ -354,6 +402,22 @@
     </widget>
    </item>
    <item>
+    <spacer name="verticalSpacer_3">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeType">
+      <enum>QSizePolicy::Fixed</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>10</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
     <widget class="ctkCollapsibleButton" name="advancedCollapsibleButton">
      <property name="enabled">
       <bool>true</bool>
@@ -365,14 +429,14 @@
       <bool>true</bool>
      </property>
      <layout class="QFormLayout" name="formLayout_4">
-      <item row="1" column="0">
+      <item row="0" column="0">
        <widget class="QLabel" name="label_4">
         <property name="text">
          <string>Threshold:</string>
         </property>
        </widget>
       </item>
-      <item row="1" column="1">
+      <item row="0" column="1">
        <widget class="QDoubleSpinBox" name="thresholdSpinBox">
         <property name="decimals">
          <number>1</number>
@@ -394,22 +458,21 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
+      <item row="1" column="0">
        <widget class="QLabel" name="label_5">
         <property name="text">
          <string>Smooth:</string>
         </property>
        </widget>
       </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="label_6">
-        <property name="text">
-         <string>Decimate:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
+      <item row="1" column="1">
        <widget class="ctkSliderWidget" name="smoothSliderWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="decimals">
          <number>0</number>
         </property>
@@ -427,8 +490,21 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="1">
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_6">
+        <property name="text">
+         <string>Decimate:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
        <widget class="ctkSliderWidget" name="decimateSliderWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="singleStep">
          <double>0.100000000000000</double>
         </property>
@@ -446,61 +522,14 @@
         </property>
        </widget>
       </item>
-      <item row="5" column="0" colspan="2">
-       <widget class="QPushButton" name="restoreDefaultsButton">
-        <property name="text">
-         <string>Restore defaults</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="0">
-       <widget class="QLabel" name="label_9">
-        <property name="text">
-         <string>NeedleTo:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="qMRMLNodeComboBox" name="needleCoordComboBox">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="nodeTypes">
-         <stringlist notr="true">
-          <string>vtkMRMLLinearTransformNode</string>
-         </stringlist>
-        </property>
-        <property name="hideChildNodeTypes">
-         <stringlist notr="true"/>
-        </property>
-        <property name="addEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="removeEnabled">
-         <bool>false</bool>
-        </property>
-        <property name="editEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="renameEnabled">
-         <bool>true</bool>
-        </property>
-        <property name="interactionNodeSingletonTag">
-         <string notr="true"/>
-        </property>
-        <property name="SlicerParameterName" stdset="0">
-         <string>needleCoord</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0">
+      <item row="3" column="0">
        <widget class="QLabel" name="label_10">
         <property name="text">
          <string>Close margin (mm):</string>
         </property>
        </widget>
       </item>
-      <item row="4" column="1">
+      <item row="3" column="1">
        <widget class="QDoubleSpinBox" name="closeMarginSpinBox">
         <property name="decimals">
          <number>1</number>
@@ -513,6 +542,13 @@
         </property>
         <property name="SlicerParameterName" stdset="0">
          <string>closeMarginThreshold</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0" colspan="2">
+       <widget class="QPushButton" name="restoreDefaultsButton">
+        <property name="text">
+         <string>Restore defaults</string>
         </property>
        </widget>
       </item>
@@ -621,7 +657,7 @@
   <connection>
    <sender>LumpNavAISimulation</sender>
    <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>needleTipComboBox</receiver>
+   <receiver>needleToRefComboBox</receiver>
    <slot>setMRMLScene(vtkMRMLScene*)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -647,22 +683,6 @@
     <hint type="destinationlabel">
      <x>228</x>
      <y>163</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>LumpNavAISimulation</sender>
-   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
-   <receiver>needleCoordComboBox</receiver>
-   <slot>setMRMLScene(vtkMRMLScene*)</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>84</x>
-     <y>501</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>269</x>
-     <y>398</y>
     </hint>
    </hints>
   </connection>
