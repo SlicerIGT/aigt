@@ -475,9 +475,9 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         parameterNode.currentResultsTable.SetColumnProperty(self.MARGIN_STATUS_COLUMN, "type", "string")
 
         parameterNode.currentResultsTable.AddColumn()
-        parameterNode.currentResultsTable.RenameColumn(self.DISTANCE_COLUMN, "Distance to Tumor")
+        parameterNode.currentResultsTable.RenameColumn(self.DISTANCE_COLUMN, "Distance to Margin")
         parameterNode.currentResultsTable.SetColumnProperty(self.DISTANCE_COLUMN, "type", "float")
-        parameterNode.currentResultsTable.SetColumnUnitLabel("Distance to Tumor", "mm")
+        parameterNode.currentResultsTable.SetColumnUnitLabel("Distance to Margin", "mm")
 
         parameterNode.currentResultsTable.AddColumn()
         parameterNode.currentResultsTable.RenameColumn(self.LOCATION_COLUMN, "Location")
