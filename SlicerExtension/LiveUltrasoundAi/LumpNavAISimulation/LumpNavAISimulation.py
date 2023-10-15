@@ -121,6 +121,7 @@ class LumpNavAISimulationParameterNode:
     smooth: Annotated[float, WithinRange(0, 50)] = 15
     decimate: Annotated[float, WithinRange(0, 1.0)] = 0.25
     closeMarginThreshold: float = 1.0
+    cooldown: float = 5.0
 
 
 #
@@ -164,6 +165,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Create logic class. Logic implements all computations that should be possible to run
         # in batch mode, without a graphical user interface.
         self.logic = LumpNavAISimulationLogic()
+        self.logic.updateProgressBarCallback = self.updateProgressBar
 
         # Connections
 
@@ -341,6 +343,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.inputsCollapsibleButton.collapsed = True
             self.ui.resultsCollapsibleButton.collapsed = False
     
+    def updateProgressBar(self, value) -> None:
+        self.ui.progressBar.setValue(value)
+    
     def _populateTable(self, caller=None, event=None) -> None:
         if (self._parameterNode 
             and self._parameterNode.currentResultsTable
@@ -381,9 +386,14 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         Called when the logic class is instantiated. Can be used for initializing member variables.
         """
         ScriptedLoadableModuleLogic.__init__(self)
+        self.updateProgressBarCallback = None
 
     def getParameterNode(self):
         return LumpNavAISimulationParameterNode(super().getParameterNode())
+
+    def updateProgress(self, value) -> None:
+        if self.updateProgressBarCallback:
+            self.updateProgressBarCallback(value)
     
     def createSurfaceFromVolume(self) -> None:
         logging.info("Creating surface model from volume")
@@ -486,6 +496,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         # Set table node parameters
         parameterNode.currentResultsTable.SetUseColumnNameAsColumnHeader(True)
         parameterNode.currentResultsTable.SetLocked(True)
+        return parameterNode.currentResultsTable
 
     def getRelativeCoordinates(self) -> Annotated[npt.NDArray, Literal[3]]:
         parameterNode = self.getParameterNode()
@@ -535,7 +546,6 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
             else:
                 return "Inferior"
     
-    # TODO: add progress bar for simulation
     def runSimulation(self, start, stop) -> int:
         logging.info("Simulation started")
 
@@ -555,42 +565,70 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         else:
             modelName = parameterNode.tumorModel.GetName()
         resultsTableName = modelName + self.RESULTS_TABLE_SUFFIX
-        self.createResultsTable(resultsTableName)
+        resultsTable = self.createResultsTable(resultsTableName)
 
         selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             startItem = sequenceNode.GetItemNumberFromIndexValue(str(start), False)
             stopItem = sequenceNode.GetItemNumberFromIndexValue(str(stop), False)
+            numItems = stopItem - startItem
             for item in range(startItem, stopItem + 1):
+                self.updateProgress((item - startItem) / numItems * 100)
+                slicer.app.processEvents(qt.QEventLoop.ExcludeUserInputEvents)
                 parameterNode.trackingSeqBr.SetSelectedItemNumber(item)
+                recordBreach = False
 
-                # TODO: only add row if cautery wasn't breached or close before
                 # Check distance of cautery to tumor and record in table
                 distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
                 if distanceToTumor < self.DEFAULT_CLOSE_MARGIN:
-                    rowIdx = parameterNode.currentResultsTable.AddEmptyRow()
-                    parameterNode.currentResultsTable.SetCellText(
-                        rowIdx, self.TIME_COLUMN, sequenceNode.GetNthIndexValue(item)
-                    )
-                    parameterNode.currentResultsTable.SetCellText(rowIdx, self.DISTANCE_COLUMN, str(distanceToTumor))
+                    # Record first breach warning
+                    if resultsTable.GetNumberOfRows() == 0:
+                        recordBreach = True
+                    else:
+                        # Get last breach warning
+                        lastRow = resultsTable.GetNumberOfRows() - 1
+                        lastDistance = float(resultsTable.GetCellText(lastRow, self.DISTANCE_COLUMN))
+                        if lastDistance > 0 and distanceToTumor <= 0:
+                            # Always record new breaches (i.e. it was close margin before)
+                            recordBreach = True
+                        else:
+                            # If last location was different, also record
+                            lastLocation = resultsTable.GetCellText(lastRow, self.LOCATION_COLUMN)
+                            location = self.getAnatomicalPositionFromRelativeCoords(self.getRelativeCoordinates())
+                            if location != lastLocation:
+                                recordBreach = True
+                            else:
+                                # Otherwise, only record if cooldown period has passed
+                                lastTime = float(resultsTable.GetCellText(lastRow, self.TIME_COLUMN))
+                                currentTime = float(sequenceNode.GetNthIndexValue(item))
+                                if currentTime - lastTime > parameterNode.cooldown:
+                                    recordBreach = True
+                
+                # Add new row to table if conditions are satisfied
+                if recordBreach:
+                    rowIdx = resultsTable.AddEmptyRow()
+                    resultsTable.SetCellText(rowIdx, self.TIME_COLUMN, sequenceNode.GetNthIndexValue(item))
+                    resultsTable.SetCellText(rowIdx, self.DISTANCE_COLUMN, str(distanceToTumor))
                     location = self.getAnatomicalPositionFromRelativeCoords(self.getRelativeCoordinates())
-                    parameterNode.currentResultsTable.SetCellText(rowIdx, self.LOCATION_COLUMN, location)
-                    
+                    resultsTable.SetCellText(rowIdx, self.LOCATION_COLUMN, location)
+
                     if distanceToTumor <= 0:  # Tumor breach
-                        parameterNode.currentResultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Breach")
+                        resultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Breach")
                     else:  # Close margin
-                        parameterNode.currentResultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Close margin")
+                        resultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Close margin")
 
             logging.info("Simulation completed")
             exitCode = 0
 
         except Exception as e:
             logging.error(str(e))
+            self.updateProgressBarCallback(0)
             exitCode = 1
 
         finally:
             qt.QApplication.restoreOverrideCursor()
+            slicer.app.processEvents()
             parameterNode.trackingSeqBr.SetSelectedItemNumber(selectedItemNumber)
             return exitCode
 
