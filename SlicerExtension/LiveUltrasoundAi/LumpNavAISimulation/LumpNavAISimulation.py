@@ -295,6 +295,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.smoothSliderWidget.value = self.logic.DEFAULT_SMOOTH
             self.ui.decimateSliderWidget.value = self.logic.DEFAULT_DECIMATE
             self.ui.closeMarginSpinBox.value = self.logic.DEFAULT_CLOSE_MARGIN
+            self.ui.cooldownSpinBox.value = self.logic.DEFAULT_COOLDOWN
     
     def _setMinMaxTrim(self, caller=None, event=None) -> None:
         if (self._parameterNode 
@@ -370,10 +371,11 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    DEFAULT_THRESHOLD = 100.0
+    DEFAULT_THRESHOLD = 127.0
     DEFAULT_SMOOTH = 15
     DEFAULT_DECIMATE = 0.25
     DEFAULT_CLOSE_MARGIN = 1.0
+    DEFAULT_COOLDOWN = 5.0
 
     RESULTS_TABLE_SUFFIX = "_results"
     TIME_COLUMN = 0
