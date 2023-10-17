@@ -173,12 +173,23 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
+        # Update output directory path from settings
+        lastOutputFolder = slicer.util.settingsValue(self.logic.LAST_OUTPUT_FOLDER_SETTING, None)
+        if lastOutputFolder:
+            self.ui.outputDirectoryButton.directory = lastOutputFolder
+
+        # Make some collapsible buttons exclusive
+        self.ui.inputsCollapsibleButton.connect("contentsCollapsed(bool)", self.onInputsCollapsed)
+        self.ui.resultsCollapsibleButton.connect("contentsCollapsed(bool)", self.onResultsCollapsed)
+
         # Buttons
         self.ui.createSurfaceButton.connect("clicked()", self.onCreateSurface)
         self.ui.restoreDefaultsButton.connect("clicked()", self.onRestoreDefaults)
         self.ui.setStartButton.connect("clicked()", self.onSetStart)
         self.ui.setStopButton.connect("clicked()", self.onSetStop)
         self.ui.runButton.connect("clicked()", self.onRun)
+        self.ui.outputDirectoryButton.connect("directoryChanged(QString)", self.onFolderChanged)
+        self.ui.exportButton.connect("clicked()", self.onExport)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -271,6 +282,14 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
             self._populateTable()
+
+    def onInputsCollapsed(self, collapsed) -> None:
+        if not collapsed:
+            self.ui.resultsCollapsibleButton.collapsed = True
+    
+    def onResultsCollapsed(self, collapsed) -> None:
+        if not collapsed:
+            self.ui.inputsCollapsibleButton.collapsed = True
     
     def _setNeedleToReference(self, caller=None, event=None) -> None:
         if self._parameterNode and self._parameterNode.needleToReference and self._parameterNode.tumorModel:
@@ -355,6 +374,27 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.resultsTableComboBox.setCurrentNode(self._parameterNode.currentResultsTable)
             self.ui.resultsTableView.setMRMLTableNode(self._parameterNode.currentResultsTable)
             self.ui.resultsTableView.horizontalHeader().setSectionResizeMode(qt.QHeaderView.Stretch)
+            self.ui.filenameEdit.text = self._parameterNode.currentResultsTable.GetName()
+
+    def onFolderChanged(self, outputFolder) -> None:
+        settings = qt.QSettings()
+        if not outputFolder:
+            settings.setValue(self.logic.LAST_OUTPUT_FOLDER_SETTING, "")
+        else:
+            settings.setValue(self.logic.LAST_OUTPUT_FOLDER_SETTING, outputFolder)
+
+    def onExport(self) -> None:
+        filename = self.ui.filenameEdit.text
+        resultsTable = self._parameterNode.currentResultsTable
+        if resultsTable:
+            try:
+                outputDirectory = self.ui.outputDirectoryButton.directory
+                fullpath = os.path.join(outputDirectory, filename + self.logic.RESULTS_CSV_SUFFIX)
+                slicer.util.saveNode(resultsTable, fullpath)
+                logging.info("Results table exported to " + fullpath)
+                slicer.util.infoDisplay("Results table saved to " + fullpath)
+            except Exception as e:
+                slicer.util.errorDisplay("Failed to export results table: " + str(e))
 
 
 #
@@ -377,7 +417,9 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
     DEFAULT_CLOSE_MARGIN = 1.0
     DEFAULT_COOLDOWN = 5.0
 
-    RESULTS_TABLE_SUFFIX = "_results"
+    RESULTS_TABLE_SUFFIX = "results"
+    LAST_OUTPUT_FOLDER_SETTING =  "LumpNavAISimulation/LastOutputFolder"
+    RESULTS_CSV_SUFFIX = ".csv"
     TIME_COLUMN = 0
     MARGIN_STATUS_COLUMN = 1
     DISTANCE_COLUMN = 2
@@ -561,20 +603,18 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         parameterNode.breachWarning.SetAndObserveWatchedModelNodeID(parameterNode.tumorModel.GetID())
         parameterNode.breachWarning.SetAndObserveToolTransformNodeId(parameterNode.cauteryTipToCautery.GetID())
 
+        startItem = sequenceNode.GetItemNumberFromIndexValue(str(start), False)
+        stopItem = sequenceNode.GetItemNumberFromIndexValue(str(stop), False)
+        numItems = stopItem - startItem
+
         # Create results table
-        if parameterNode.inputVolume:
-            modelName = parameterNode.inputVolume.GetName()
-        else:
-            modelName = parameterNode.tumorModel.GetName()
-        resultsTableName = modelName + self.RESULTS_TABLE_SUFFIX
+        modelName = parameterNode.tumorModel.GetName()
+        resultsTableName = f"{modelName}_{str(int(start))}-{str(int(stop))}_{self.RESULTS_TABLE_SUFFIX}"
         resultsTable = self.createResultsTable(resultsTableName)
 
         selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
-            startItem = sequenceNode.GetItemNumberFromIndexValue(str(start), False)
-            stopItem = sequenceNode.GetItemNumberFromIndexValue(str(stop), False)
-            numItems = stopItem - startItem
             for item in range(startItem, stopItem + 1):
                 self.updateProgress((item - startItem) / numItems * 100)
                 slicer.app.processEvents(qt.QEventLoop.ExcludeUserInputEvents)
