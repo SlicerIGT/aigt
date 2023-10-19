@@ -1464,8 +1464,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           recordingTime = timeLabel.text
           self.lastRecordedTime = float(recordingTime)
           if not addingtoexisting:
-            self.imageLabels = self.imageLabels.append({'FileName': fileName, 'Time Recorded':self.lastRecordedTime, self.labelType: self.labelName},
-                                                     ignore_index=True)
+            self.imageLabels = pandas.concat([self.imageLabels,pandas.DataFrame({'FileName': [fileName], 'Time Recorded':[self.lastRecordedTime], self.labelType: [self.labelName]})])
+            self.imageLabels.index = [i for i in range(len(self.imageLabels.index))]
           else:
             #self.imageLabels[self.labelType].iloc[entry] = self.labelName
             #self.imageLabels[self.labelType].iloc._setitem_with_indexer(entry, self.labelName)
