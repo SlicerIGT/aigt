@@ -1414,7 +1414,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       fileName = self.videoID + "_" + self.imageSubtype + "_" + str(self.numImagesInFile).zfill(5) + self.fileType
       if self.fromSequence:
         if not self.imageLabels.empty:
-          dataframeEntry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - recordingTime) <= 0.2)]
+          dataframeEntry = self.imageLabels.loc[(abs(self.imageLabels["Time Recorded"] - recordingTime) <= 0.01)]
           if not dataframeEntry.empty:
             addingtoexisting = True
             entry = dataframeEntry.index[-1]
