@@ -480,22 +480,18 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         displayNode.SetColor(0, 1, 0)
         displayNode.SetOpacity(0.3)
 
-        # Clean up model
-        cleanFilter = vtk.vtkCleanPolyData()
-        cleanFilter.SetInputData(tumorModel.GetPolyData())
-        cleanFilter.Update()
-        tumorModel.SetAndObservePolyData(cleanFilter.GetOutput())
-
         # Extract largest portion
         connectivityFilter = vtk.vtkPolyDataConnectivityFilter()
         connectivityFilter.SetInputData(tumorModel.GetPolyData())
         connectivityFilter.SetExtractionModeToLargestRegion()
-        connectivityFilter.Update()
-        tumorModel.SetAndObservePolyData(connectivityFilter.GetOutput())
+
+        # Clean up model
+        cleanFilter = vtk.vtkCleanPolyData()
+        cleanFilter.SetInputConnection(connectivityFilter.GetOutputPort())
 
         # Convert to convex hull
         convexHull = vtk.vtkDelaunay3D()
-        convexHull.SetInputData(tumorModel.GetPolyData())
+        convexHull.SetInputConnection(cleanFilter.GetOutputPort())
         outerSurface = vtk.vtkGeometryFilter()
         outerSurface.SetInputConnection(convexHull.GetOutputPort())
         outerSurface.Update()
