@@ -1354,30 +1354,38 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           self.imageLabels[self.labelType] = ['None' for i in range(self.imageLabels.index.max()+1)]
         else:
           logging.info("Cannot relabel images recorded from live sequence")
+      if not self.fromSequence:
+        if self.collectingImages == False:
+          if self.recordingVolumeNode.GetClassName() == "vtkMRMLStreamingVolumeNode":
+            self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameModifiedEvent,self.onStartCollectingImages)
+          elif self.recordingVolumeNode.GetClassName() == "vtkMRMLVectorVolumeNode":
+            self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLVectorVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
+          elif self.recordingVolumeNode.GetClassName() == "vtkMRMLScalarVolumeNode":
+            self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
+          else:
+            logging.info(self.recordingVolumeNode.GetClassName() + " is not a supported recording volume type")
+          logging.info("Start collecting images")
 
-      if self.collectingImages == False:
-        if self.recordingVolumeNode.GetClassName() == "vtkMRMLStreamingVolumeNode":
-          self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLStreamingVolumeNode.FrameModifiedEvent,self.onStartCollectingImages)
-        elif self.recordingVolumeNode.GetClassName() == "vtkMRMLVectorVolumeNode":
-          self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLVectorVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
-        elif self.recordingVolumeNode.GetClassName() == "vtkMRMLScalarVolumeNode":
-          self.recordingVolumeNodeObserver = self.recordingVolumeNode.AddObserver(slicer.vtkMRMLScalarVolumeNode.ImageDataModifiedEvent, self.onStartCollectingImages)
         else:
-          logging.info(self.recordingVolumeNode.GetClassName() + " is not a supported recording volume type")
-        logging.info("Start collecting images")
-
-      else:
-        self.recordingVolumeNode.RemoveObserver(self.recordingVolumeNodeObserver)
-        self.recordingVolumeNodeObserver = None
-        self.numImagesInFile = len(os.listdir(os.path.dirname(self.labelFilePath)))
-        logging.info("Saved " + str(self.numImagesInFile) + " to directory : " + str(os.path.dirname(self.labelFilePath)))
+          self.recordingVolumeNode.RemoveObserver(self.recordingVolumeNodeObserver)
+          self.recordingVolumeNodeObserver = None
+          self.numImagesInFile = len(os.listdir(os.path.dirname(self.labelFilePath)))
+          logging.info("Saved " + str(self.numImagesInFile) + " to directory : " + str(os.path.dirname(self.labelFilePath)))
 
       if self.fromSequence:
         try:
           if not self.finishedVideo:
-            playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
-            playWidgetButtons = playWidget[0].findChildren('QPushButton')
-            playWidgetButtons[2].click()
+            seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
+            seekWidget = seekWidget[0]
+            seekSlider = seekWidget.findChildren("QSlider")
+            seekSlider = seekSlider[0]
+            while seekSlider.value < seekSlider.maximum and not self.finishedVideo:
+              print("{}/{}".format(seekSlider.value,seekSlider.maximum))
+              playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
+              playWidgetButtons = playWidget[0].findChildren('QPushButton')
+              playWidgetButtons[3].click()
+              self.onStartCollectingImages(None,None)
+
           else:
             logging.info("Video processing complete")
         except AttributeError:
@@ -1392,6 +1400,7 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
     :param eventID:
     :return:
     """
+
     if self.fromSequence:
       seekWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserSeekWidget")
       seekWidget = seekWidget[0]
@@ -1400,6 +1409,8 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
       timeLabel = seekWidget.findChildren("QLabel")
       timeLabel = timeLabel[1]
       recordingTime = float(timeLabel.text)
+      print(recordingTime)
+      print(self.lastRecordedTime)
       if seekSlider.value < seekSlider.maximum and recordingTime >= self.lastRecordedTime:
         self.continueRecording = True
       else:
@@ -1475,10 +1486,19 @@ class DataCollectionLogic(ScriptedLoadableModuleLogic):
           self.imageLabels = [i for i in range(len(self.imageLabels.index))]
       self.imageLabels.to_csv(self.labelFilePath)
     elif not self.continueRecording:
+      '''playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
+      playWidgetButtons = playWidget[0].findChildren('QPushButton')
+      playWidgetButtons[2].click()'''
+      self.finishedVideo = True
+    ''' print(self.fromSequence)
+    print(self.videoStartedRecording)
+    print(self.continueRecording)
+    if self.fromSequence and self.videoStartedRecording and self.continueRecording:
+      print("calling click next")
       playWidget = slicer.util.mainWindow().findChildren("qMRMLSequenceBrowserPlayWidget")
       playWidgetButtons = playWidget[0].findChildren('QPushButton')
-      playWidgetButtons[2].click()
-      self.finishedVideo = True
+      playWidgetButtons[3].click()
+    slicer.mrmlScene.Modified()'''
 
   def exportImagesFromSequence(self):
     """
