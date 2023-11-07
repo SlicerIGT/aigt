@@ -498,12 +498,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             progressbar.close()
 
     def onRemoveHidden(self):
-        # Input parameters
-        us_probe = "UsProbe_Transd"
-        reference_hold = "ReferenceHolder"
-        skel = "SkeletonModel_Articulated"
-        keepModelNodes = [us_probe, reference_hold, skel]
-
+        keepModelNodes = [""] # Not used for now.
         # Delete all volume nodes, except for those that are in the keep list
         print("")
         print("*** Removing modelNodes")
