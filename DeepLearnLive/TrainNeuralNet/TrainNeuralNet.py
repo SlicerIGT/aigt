@@ -969,7 +969,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           self.availableIndexes.append(self.availableImages)
           for i in range(0,len(self.Labels)):
             temp[self.Labels[i]] = [trainSamples[self.Labels[i]][x] for x in trainSamples.index]
-        csvDataFrame = csvDataFrame.append(temp, ignore_index=True)
+        csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe(temp)])
 
         '''csvDataFrame = csvDataFrame.append({"Fold": fold,
                                                 "Set": setType,
@@ -998,7 +998,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           self.availableIndexes[j] = self.availableImages
           for i in range(0,len(self.Labels)):
             temp[self.Labels[i]] = [valSamples[self.Labels[i]][x] for x in valSamples.index]
-        csvDataFrame = csvDataFrame.append(temp, ignore_index=True)
+        csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe(temp)])
 
 
         '''for row in range(0, len(labelCSV.index)):
@@ -1028,7 +1028,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           temp["FileName"] = [testSamples["FileName"][i] for i in testSamples.index]
           for i in range(0,len(self.Labels)):
             temp[self.Labels[i]] = [testSamples[self.Labels[i]][x] for x in testSamples.index]
-        csvDataFrame = csvDataFrame.append(temp, ignore_index=True)
+        csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe(temp)])
         '''for row in range(0, len(labelCSV.index)):
           csvDataFrame = csvDataFrame.append({"Fold": fold,
                                               "Set": setType,
@@ -1068,13 +1068,13 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           fileID = file["_id"]
           fileName = file["name"]
           if not ".csv" in fileName:
-            csvDataFrame = csvDataFrame.append({"Fold": fold,
-                                                "Set": setType,
-                                                "Girder_URL": self.girderURL,
-                                                "Collection_Name": self.collectionName,
-                                                "Folder": folderName,
-                                                "FileName": fileName,
-                                                "GirderID": fileID}, ignore_index=True)
+            csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe({"Fold": [fold],
+                                                "Set": [setType],
+                                                "Girder_URL": [self.girderURL],
+                                                "Collection_Name": [self.collectionName],
+                                                "Folder": [folderName],
+                                                "FileName": [fileName],
+                                                "GirderID": [fileID]})])
 
             for i in range(len(self.Labels)):
               csvDataFrame[self.Labels[i]][totalRowCount] = labelCSV[self.Labels[i]][row]
@@ -1099,13 +1099,13 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           fileID = file["_id"]
           fileName = file["name"]
           if not ".csv" in fileName:
-            csvDataFrame = csvDataFrame.append({"Fold": fold,
-                                                "Set": setType,
-                                                "Girder_URL": self.girderURL,
-                                                "Collection_Name": self.collectionName,
-                                                "Folder": folderName,
-                                                "FileName": fileName,
-                                                "GirderID": fileID},ignore_index=True)
+            csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe({"Fold": [fold],
+                                                                          "Set": [setType],
+                                                                          "Girder_URL": [self.girderURL],
+                                                                          "Collection_Name": [self.collectionName],
+                                                                          "Folder": [folderName],
+                                                                          "FileName": [fileName],
+                                                                          "GirderID": [fileID]})])
             for i in range(len(self.Labels)):
               csvDataFrame[self.Labels[i]][totalRowCount] = labelCSV[self.Labels[i]][row]
             totalRowCount +=1
@@ -1129,13 +1129,13 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           fileID = file["_id"]
           fileName = file["name"]
           if not ".csv" in fileName:
-            csvDataFrame = csvDataFrame.append({"Fold": fold,
-                                                "Set": setType,
-                                                "Girder_URL": self.girderURL,
-                                                "Collection_Name": self.collectionName,
-                                                "Folder": folderName,
-                                                "FileName": fileName,
-                                                "GirderID": fileID}, ignore_index=True)
+            csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe({"Fold": [fold],
+                                                                          "Set": [setType],
+                                                                          "Girder_URL": [self.girderURL],
+                                                                          "Collection_Name": [self.collectionName],
+                                                                          "Folder": [folderName],
+                                                                          "FileName": [fileName],
+                                                                          "GirderID": [fileID]})])
             for i in range(len(self.Labels)):
               csvDataFrame[self.Labels[i]][totalRowCount] = labelCSV[self.Labels[i]][row]
             totalRowCount += 1
