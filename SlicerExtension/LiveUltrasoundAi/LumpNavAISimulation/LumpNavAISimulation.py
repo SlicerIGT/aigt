@@ -112,16 +112,18 @@ class LumpNavAISimulationParameterNode:
     tumorModel: slicer.vtkMRMLModelNode
     trackingSeqBr: slicer.vtkMRMLSequenceBrowserNode
     needleToReference: slicer.vtkMRMLLinearTransformNode
+    needleTipToNeedle: slicer.vtkMRMLLinearTransformNode
     cauteryTipToCautery: slicer.vtkMRMLLinearTransformNode
     breachWarning: slicer.vtkMRMLBreachWarningNode
     currentResultsTable: slicer.vtkMRMLTableNode
 
     # Other parameters
+    timestampBuffer: int = 5
     threshold: float = 127.0
     smooth: Annotated[float, WithinRange(0, 50)] = 15
     decimate: Annotated[float, WithinRange(0, 1.0)] = 0.25
     closeMarginThreshold: float = 1.0
-    cooldown: float = 5.0
+    cleanThreshold: float = 30.0
 
 
 #
@@ -144,6 +146,8 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self._parameterNodeGuiTag = None
         self.lastSeqBr = None
         self.lastResultsTable = None
+
+        slicer.mymodW = self  # for debugging
 
     def setup(self) -> None:
         """
@@ -185,11 +189,17 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         # Buttons
         self.ui.createSurfaceButton.connect("clicked()", self.onCreateSurface)
         self.ui.restoreDefaultsButton.connect("clicked()", self.onRestoreDefaults)
+        self.ui.trimRangeWidget.connect("minimumValueIsChanging(double)", self.onTrimRangeChanging)
+        self.ui.trimRangeWidget.connect("maximumValueIsChanging(double)", self.onTrimRangeChanging)
         self.ui.setStartButton.connect("clicked()", self.onSetStart)
         self.ui.setStopButton.connect("clicked()", self.onSetStop)
         self.ui.runButton.connect("clicked()", self.onRun)
-        self.ui.outputDirectoryButton.connect("directoryChanged(QString)", self.onFolderChanged)
+        self.ui.plotButton.connect("clicked()", self.onPlotFromSequence)
+        self.ui.resultsTableView.connect("selectionChanged()", self._checkCanPlotFromSelection)
+        self.ui.plotSelectionButton.connect("clicked()", self.onPlotFromSelection)
+        self.ui.outputDirectoryButton.connect("directoryChanged(QString&)", self.onFolderChanged)
         self.ui.exportButton.connect("clicked()", self.onExport)
+        self.ui.stopButton.connect("clicked()", self.onStop)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
@@ -219,7 +229,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanPlotFromSequence)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanPlotFromSelection)
 
     def onSceneStartClose(self, caller, event) -> None:
         """
@@ -257,7 +269,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanPlotFromSequence)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanPlotFromSelection)
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             # Note: in the .ui file, a Qt dynamic property called "SlicerParameterName" is set on each
@@ -280,8 +294,15 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
             self._checkCanRun()
 
+            # Observer for plot button
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanPlotFromSequence)
+            self._checkCanPlotFromSequence()
+
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
             self._populateTable()
+
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanPlotFromSelection)
+            self._checkCanPlotFromSelection()
 
     def onInputsCollapsed(self, collapsed) -> None:
         if not collapsed:
@@ -314,21 +335,29 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.smoothSliderWidget.value = self.logic.DEFAULT_SMOOTH
             self.ui.decimateSliderWidget.value = self.logic.DEFAULT_DECIMATE
             self.ui.closeMarginSpinBox.value = self.logic.DEFAULT_CLOSE_MARGIN
-            self.ui.cooldownSpinBox.value = self.logic.DEFAULT_COOLDOWN
+            self.ui.cleanCheckBox.checked = self.logic.DEFAULT_CLEAN
+            self.ui.cleanThresholdSpinBox.value = self.logic.DEFAULT_CLEAN_THRESHOLD
     
     def _setMinMaxTrim(self, caller=None, event=None) -> None:
         if (self._parameterNode 
             and self._parameterNode.trackingSeqBr 
             and self.lastSeqBr != self._parameterNode.trackingSeqBr):
+            self.ui.trimSeqCollapsibleButton.collapsed = False
             self.lastSeqBr = self._parameterNode.trackingSeqBr
             sequenceNode = self._parameterNode.trackingSeqBr.GetMasterSequenceNode()
             maxItems = self._parameterNode.trackingSeqBr.GetNumberOfItems()
             maxTime = float(sequenceNode.GetNthIndexValue(maxItems - 1))
             minTime = float(sequenceNode.GetNthIndexValue(0))
-            self.ui.trimRangeWidget.minimum = minTime
             self.ui.trimRangeWidget.maximum = maxTime
-            self.ui.trimRangeWidget.minimumValue = minTime
             self.ui.trimRangeWidget.maximumValue = maxTime
+            self.ui.trimRangeWidget.minimum = minTime
+            self.ui.trimRangeWidget.minimumValue = minTime
+    
+    def onTrimRangeChanging(self, value) -> None:
+        if self._parameterNode.trackingSeqBr:
+            sequenceNode = self._parameterNode.trackingSeqBr.GetMasterSequenceNode()
+            item = sequenceNode.GetItemNumberFromIndexValue(str(value), False)
+            self._parameterNode.trackingSeqBr.SetSelectedItemNumber(item)
     
     def onSetStart(self) -> None:
         currentTime = self.logic.getCurrentTime()
@@ -351,17 +380,87 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.runButton.enabled = True
         else:
             self.ui.runButton.toolTip = _("Select tumor model, tracking sequence browser, "
-                                          "and needle and cautery tip transforms")
+                                          "NeedleToReference, and cautery tip transforms")
             self.ui.runButton.enabled = False
 
     def onRun(self) -> None:
+        blockRun = self.ui.runButton.blockSignals(True)
+        blockPlot = self.ui.plotButton.blockSignals(True)
+        blockPlotSelection = self.ui.plotSelectionButton.blockSignals(True)
+
         start = self.ui.trimRangeWidget.minimumValue
         stop = self.ui.trimRangeWidget.maximumValue
-        runStatus = self.logic.runSimulation(start, stop)
+        runStatus = self.logic.runTrajectoryAnalysis(start, stop)
         # Display results if successful
         if runStatus == 0:
             self.ui.inputsCollapsibleButton.collapsed = True
             self.ui.resultsCollapsibleButton.collapsed = False
+        
+        self.ui.runButton.blockSignals(blockRun)
+        self.ui.plotButton.blockSignals(blockPlot)
+        self.ui.plotSelectionButton.blockSignals(blockPlotSelection)
+
+    def _checkCanPlotFromSequence(self, caller=None, event=None) -> None:
+        if (self._parameterNode 
+            and self._parameterNode.tumorModel
+            and self._parameterNode.trackingSeqBr 
+            and self._parameterNode.needleTipToNeedle
+            and self._parameterNode.cauteryTipToCautery):
+            self.ui.plotButton.toolTip = _("Plot cautery trajectory")
+            self.ui.plotButton.enabled = True
+        else:
+            self.ui.plotButton.toolTip = _("Select tumor model, tracking sequence browser, "
+                                           "needle and cautery tip transforms")
+            self.ui.plotButton.enabled = False
+    
+    def onPlotFromSequence(self) -> None:
+        blockRun = self.ui.runButton.blockSignals(True)
+        blockPlot = self.ui.plotButton.blockSignals(True)
+        blockPlotSelection = self.ui.plotSelectionButton.blockSignals(True)
+
+        start = self.ui.trimRangeWidget.minimumValue
+        stop = self.ui.trimRangeWidget.maximumValue
+        clean = self.ui.cleanCheckBox.checked
+        status = self.logic.plotCauteryTrajectory(start, stop, clean)
+        # Expand subject hierarchy if successful
+        if status == 0:
+            self.ui.trajectoryCollapsibleButton.collapsed = False
+        
+        self.ui.runButton.blockSignals(blockRun)
+        self.ui.plotButton.blockSignals(blockPlot)
+        self.ui.plotSelectionButton.blockSignals(blockPlotSelection)
+
+    def _checkCanPlotFromSelection(self, caller=None, event=None) -> None:
+        if (self._parameterNode 
+            and self._parameterNode.tumorModel 
+            and self._parameterNode.trackingSeqBr 
+            and self._parameterNode.needleTipToNeedle 
+            and self._parameterNode.cauteryTipToCautery 
+            and self._parameterNode.currentResultsTable 
+            and self.ui.resultsTableView.selectionModel().hasSelection):
+            self.ui.plotSelectionButton.toolTip = _("Plot cautery trajectory from selected row")
+            self.ui.plotSelectionButton.enabled = True
+        else:
+            self.ui.plotSelectionButton.toolTip = _("Select required nodes and timestamp to plot")
+            self.ui.plotSelectionButton.enabled = False
+
+    def onPlotFromSelection(self) -> None:
+        blockRun = self.ui.runButton.blockSignals(True)
+        blockPlot = self.ui.plotButton.blockSignals(True)
+        blockPlotSelection = self.ui.plotSelectionButton.blockSignals(True)
+
+        timestamp = float(self.ui.resultsTableView.selectionModel().selectedRows()[0].data())
+        start = timestamp - self._parameterNode.timestampBuffer
+        stop = timestamp + self._parameterNode.timestampBuffer
+        clean = self.ui.cleanCheckBox.checked
+        status = self.logic.plotCauteryTrajectory(start, stop, clean)
+        # Expand subject hierarchy if successful
+        if status == 0:
+            self.ui.trajectoryCollapsibleButton.collapsed = False
+        
+        self.ui.runButton.blockSignals(blockRun)
+        self.ui.plotButton.blockSignals(blockPlot)
+        self.ui.plotSelectionButton.blockSignals(blockPlotSelection)
     
     def updateProgressBar(self, value) -> None:
         self.ui.progressBar.setValue(value)
@@ -395,6 +494,10 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
                 slicer.util.infoDisplay("Results table saved to " + fullpath)
             except Exception as e:
                 slicer.util.errorDisplay("Failed to export results table: " + str(e))
+    
+    def onStop(self) -> None:
+        if self.logic.processing:
+            self.logic.stopProcess = True
 
 
 #
@@ -415,7 +518,8 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
     DEFAULT_SMOOTH = 15
     DEFAULT_DECIMATE = 0.25
     DEFAULT_CLOSE_MARGIN = 1.0
-    DEFAULT_COOLDOWN = 5.0
+    DEFAULT_CLEAN = True
+    DEFAULT_CLEAN_THRESHOLD = 30.0
 
     RESULTS_TABLE_SUFFIX = "results"
     LAST_OUTPUT_FOLDER_SETTING =  "LumpNavAISimulation/LastOutputFolder"
@@ -425,12 +529,19 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
     DISTANCE_COLUMN = 2
     LOCATION_COLUMN = 3
 
+    TRAJECTORY_MARKUPS_SUFFIX = "CauteryTipMarkups"
+    TRAJECTORY_MODEL_SUFFIX = "CauteryTipModel"
+
     def __init__(self) -> None:
         """
         Called when the logic class is instantiated. Can be used for initializing member variables.
         """
         ScriptedLoadableModuleLogic.__init__(self)
         self.updateProgressBarCallback = None
+        self.processing = False
+        self.stopProcess = False
+
+        slicer.mymodL = self  # for debugging
 
     def getParameterNode(self):
         return LumpNavAISimulationParameterNode(super().getParameterNode())
@@ -586,8 +697,9 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
             else:
                 return "Inferior"
     
-    def runSimulation(self, start, stop) -> int:
-        logging.info("Simulation started")
+    def runTrajectoryAnalysis(self, start, stop) -> int:
+        logging.info("Trajectory analysis started")
+        self.processing = True
 
         parameterNode = self.getParameterNode()
         sequenceNode = parameterNode.trackingSeqBr.GetMasterSequenceNode()
@@ -613,38 +725,15 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
             for item in range(startItem, stopItem + 1):
                 self.updateProgress((item - startItem) / numItems * 100)
-                slicer.app.processEvents(qt.QEventLoop.ExcludeUserInputEvents)
+                slicer.app.processEvents()
+                if self.stopProcess:
+                    raise RuntimeError("Trajectory analysis stopped by user")
+
                 parameterNode.trackingSeqBr.SetSelectedItemNumber(item)
-                recordBreach = False
 
                 # Check distance of cautery to tumor and record in table
                 distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
                 if distanceToTumor < self.DEFAULT_CLOSE_MARGIN:
-                    # Record first breach warning
-                    if resultsTable.GetNumberOfRows() == 0:
-                        recordBreach = True
-                    else:
-                        # Get last breach warning
-                        lastRow = resultsTable.GetNumberOfRows() - 1
-                        lastDistance = float(resultsTable.GetCellText(lastRow, self.DISTANCE_COLUMN))
-                        if lastDistance > 0 and distanceToTumor <= 0:
-                            # Always record new breaches (i.e. it was close margin before)
-                            recordBreach = True
-                        else:
-                            # If last location was different, also record
-                            lastLocation = resultsTable.GetCellText(lastRow, self.LOCATION_COLUMN)
-                            location = self.getAnatomicalPositionFromRelativeCoords(self.getRelativeCoordinates())
-                            if location != lastLocation:
-                                recordBreach = True
-                            else:
-                                # Otherwise, only record if cooldown period has passed
-                                lastTime = float(resultsTable.GetCellText(lastRow, self.TIME_COLUMN))
-                                currentTime = float(sequenceNode.GetNthIndexValue(item))
-                                if currentTime - lastTime > parameterNode.cooldown:
-                                    recordBreach = True
-                
-                # Add new row to table if conditions are satisfied
-                if recordBreach:
                     rowIdx = resultsTable.AddEmptyRow()
                     resultsTable.SetCellText(rowIdx, self.TIME_COLUMN, sequenceNode.GetNthIndexValue(item))
                     resultsTable.SetCellText(rowIdx, self.DISTANCE_COLUMN, str(distanceToTumor))
@@ -656,18 +745,120 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
                     else:  # Close margin
                         resultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Close margin")
 
-            logging.info("Simulation completed")
+            logging.info("Trajectory analysis completed")
             exitCode = 0
 
         except Exception as e:
             logging.error(str(e))
             self.updateProgressBarCallback(0)
+            self.stopProcess = False
             exitCode = 1
 
         finally:
             qt.QApplication.restoreOverrideCursor()
             slicer.app.processEvents()
             parameterNode.trackingSeqBr.SetSelectedItemNumber(selectedItemNumber)
+            self.processing = False
+            return exitCode
+        
+    def plotCauteryTrajectory(self, start, stop, clean) -> None:
+        logging.info("Plotting cautery trajectory")
+        self.processing = True
+
+        parameterNode = self.getParameterNode()
+        sequenceNode = parameterNode.trackingSeqBr.GetMasterSequenceNode()
+
+        # Breach warning node is needed if clean is enabled
+        if clean and not parameterNode.breachWarning:
+            parameterNode.breachWarning = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLBreachWarningNode")
+            parameterNode.breachWarning.SetOriginalColor(*parameterNode.tumorModel.GetDisplayNode().GetColor())
+            parameterNode.breachWarning.SetAndObserveWatchedModelNodeID(parameterNode.tumorModel.GetID())
+            parameterNode.breachWarning.SetAndObserveToolTransformNodeId(parameterNode.cauteryTipToCautery.GetID())
+
+        # Create new markups node
+        markupsNodeName = f"{str(int(start))}-{str(int(stop))}_{self.TRAJECTORY_MARKUPS_SUFFIX}"
+        markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", markupsNodeName)
+        markupsNode.SetAndObserveTransformNodeID(parameterNode.needleTipToNeedle.GetID())
+        markupsNode.CreateDefaultDisplayNodes()
+        markupsNode.GetMarkupsDisplayNode().SetTextScale(0)
+        markupsNode.SetDisplayVisibility(False)
+
+        startItem = sequenceNode.GetItemNumberFromIndexValue(str(start), False)
+        stopItem = sequenceNode.GetItemNumberFromIndexValue(str(stop), False)
+        numItems = stopItem - startItem
+
+        selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
+        try:
+            qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+            for item in range(startItem, stopItem + 1):
+                self.updateProgress((item - startItem) / numItems * 100)
+                slicer.app.processEvents()
+                if self.stopProcess:
+                    raise RuntimeError("Trajectory analysis stopped by user")
+                
+                parameterNode.trackingSeqBr.SetSelectedItemNumber(item)
+
+                # Check distance to tumor if needed
+                if clean:
+                    distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
+                    if distanceToTumor > parameterNode.cleanThreshold:
+                        continue  # skip this point
+
+                # Get cautery tip to RAS transform
+                cauteryTipToRasMatrix = vtk.vtkMatrix4x4()
+                parameterNode.cauteryTipToCautery.GetMatrixTransformToWorld(cauteryTipToRasMatrix)
+
+                # Get needle tip to RAS transform
+                needleTipToRasMatrix = vtk.vtkMatrix4x4()
+                parameterNode.needleTipToNeedle.GetMatrixTransformToWorld(needleTipToRasMatrix)
+
+                # Get cautery tip to needle tip
+                rasToNeedleTip = vtk.vtkMatrix4x4()
+                vtk.vtkMatrix4x4.Invert(needleTipToRasMatrix, rasToNeedleTip)
+                cauteryTipToNeedleTip = vtk.vtkMatrix4x4()
+                vtk.vtkMatrix4x4.Multiply4x4(rasToNeedleTip, cauteryTipToRasMatrix, cauteryTipToNeedleTip)
+
+                # Add markup of cautery tip in needle tip coordinate system
+                cauteryTip_NeedleTip = cauteryTipToNeedleTip.MultiplyFloatPoint([0, 0, 0, 1])
+                slicer.modules.markups.logic().AddControlPoint(
+                    cauteryTip_NeedleTip[0], cauteryTip_NeedleTip[1], cauteryTip_NeedleTip[2]
+                )
+            
+            # Create cylinder model
+            modelName = f"{str(int(start))}-{str(int(stop))}_{self.TRAJECTORY_MODEL_SUFFIX}"
+            modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", modelName)
+            modelNode.SetAndObserveTransformNodeID(parameterNode.needleTipToNeedle.GetID())
+            modelNode.CreateDefaultDisplayNodes()
+            modelNode.GetDisplayNode().SetColor(0.5, 0.5, 0.5)  # gray
+            modelNode.SetDisplayVisibility(True)
+            createModelsLogic = slicer.modules.createmodels.logic()
+            createModelsLogic.CreateCylinder(1.0, 1.0, modelNode)
+
+            # Convert markups to curve model
+            markupsToModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsToModelNode")
+            markupsToModelNode.SetAutoUpdateOutput(False)
+            markupsToModelNode.SetModelType(markupsToModelNode.Curve)
+            markupsToModelNode.SetAndObserveInputNodeID(markupsNode.GetID())
+            markupsToModelNode.SetAndObserveOutputModelNodeID(modelNode.GetID())
+            markupsToModelLogic = slicer.modules.markupstomodel.logic()
+            markupsToModelLogic.UpdateOutputModel(markupsToModelNode)
+
+            logging.info("Cautery trajectory plotted")
+            exitCode = 0
+        
+        except Exception as e:
+            logging.error(str(e))
+            self.updateProgressBarCallback(0)
+            self.stopProcess = False
+            exitCode = 1
+        
+        finally:
+            interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+            interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
+            qt.QApplication.restoreOverrideCursor()
+            slicer.app.processEvents()
+            parameterNode.trackingSeqBr.SetSelectedItemNumber(selectedItemNumber)
+            self.processing = False
             return exitCode
 
 
