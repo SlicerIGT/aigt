@@ -39,12 +39,18 @@ def ScanConversionInference():
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--input-port", type=int, default=18944)
     parser.add_argument("--output-port", type=int, default=18945)
+    parser.add_argument("--log_file", type=str, default=None, help="Path to log file. Optional.")
     try:
         args = parser.parse_args()
     except SystemExit as err:
         traceback.print_exc()
         sys.exit(err.code)
 
+    if args.log_file:
+        logging.basicConfig(filename=args.log_file, filemode='w', level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.INFO)
+    
     run_client(args)
 
 def run_client(args):
