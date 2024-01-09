@@ -20,6 +20,7 @@ import numpy as np
 import traceback
 import sys
 import pyigtl
+import time
 import torch
 import yaml
 
@@ -62,6 +63,20 @@ def run_client(args):
     output_server = pyigtl.OpenIGTLinkServer(port=args.output_port)
     model = None
 
+    # Initialize timer and counters for profiling
+
+    start_time = time.perf_counter()
+    preprocess_counter = 0
+    preprocess_total_time = 0
+    inference_counter = 0
+    inference_total_time = 0
+    postprocess_counter = 0
+    postprocess_total_time = 0
+    total_counter = 0
+    total_time = 0
+    image_message_counter = 0
+    transform_message_counter = 0
+
     # Load pytorch model
 
     logging.info("Loading model...")
@@ -72,6 +87,7 @@ def run_client(args):
     config = json.loads(extra_files["config.json"])
     input_size = config["shape"][-1]
     logging.info("Model loaded")
+    torch.inference_mode()
 
     # If scan conversion is enabled, compute x_cart, y_cart, vertices, and weights for conversion and interpolation
 
@@ -96,31 +112,78 @@ def run_client(args):
         mask_array = None
 
     while True:
+        # Print average inference time
+        if time.perf_counter() - start_time > 1.0:
+            logging.info("--------------------------------------------------")
+            logging.info(f"Image messages received:   {image_message_counter}")
+            logging.info(f"Transform messages received:   {transform_message_counter}")
+            if preprocess_counter > 0:
+                avg_preprocess_time = round((preprocess_total_time / preprocess_counter) * 1000, 1)
+                logging.info(f"Average preprocess time:  {avg_preprocess_time} ms")
+            if inference_counter > 0:
+                avg_inference_time = round((inference_total_time / inference_counter) * 1000, 1)
+                logging.info(f"Average inference time:   {avg_inference_time} ms")
+            if postprocess_counter > 0:
+                avg_postprocess_time = round((postprocess_total_time / postprocess_counter) * 1000, 1)
+                logging.info(f"Average postprocess time: {avg_postprocess_time} ms")
+            if total_counter > 0:
+                avg_total_time = round((total_time / total_counter) * 1000, 1)
+                logging.info(f"Average total time:       {avg_total_time} ms")
+            start_time = time.perf_counter()
+            preprocess_counter = 0
+            preprocess_total_time = 0
+            inference_counter = 0
+            inference_total_time = 0
+            postprocess_counter = 0
+            postprocess_total_time = 0
+            total_counter = 0
+            total_time = 0
+            image_message_counter = 0
+            transform_message_counter = 0
+        
+        # Receive messages from server
         messages = input_client.get_latest_messages()
         for message in messages:
             if message.device_name == args.input_device_name:  # Image message
+                image_message_counter += 1
+                total_start_time = time.perf_counter()
+        
                 if model is None:
                     logging.error("Model not loaded. Exiting...")
                     break
                 
                 # Resize image to model input size
                 orig_img_size = message.image.shape
-                image = preprocess_input(message.image, input_size, scanconversion_config, x_cart, y_cart).to(device)
-            
-                # Run inference
-                with torch.inference_mode():
-                    prediction = model(image)
 
+                # Preprocess input
+                preprocess_start_time = time.perf_counter()
+                image = preprocess_input(message.image, input_size, scanconversion_config, x_cart, y_cart).to(device)
+                preprocess_total_time += time.perf_counter() - preprocess_start_time
+                preprocess_counter += 1
+
+                # Run inference
+                inference_start_time = time.perf_counter()
+                prediction = model(image)                
                 if isinstance(prediction, list):
                     prediction = prediction[0]
-                    
+                inference_total_time += time.perf_counter() - inference_start_time
+                inference_counter += 1
+
+                # Postprocess prediction
+                postprocess_start_time = time.perf_counter()
                 prediction = torch.nn.functional.softmax(prediction, dim=1)
                 prediction = postprocess_prediction(prediction, orig_img_size, scanconversion_config, vertices, weights, mask_array)
+                postprocess_total_time += time.perf_counter() - postprocess_start_time
+                postprocess_counter += 1
 
                 image_message = pyigtl.ImageMessage(prediction, device_name=args.output_device_name)
                 output_server.send_message(image_message, wait=True)
+                
+                total_time += time.perf_counter() - total_start_time
+                total_counter += 1
 
             if message.message_type == "TRANSFORM" and "Image" in message.device_name:  # Image transform message
+                transform_message_counter += 1
                 output_tfm_name = message.device_name.replace("Image", "Prediction")
                 tfm_message = pyigtl.TransformMessage(message.matrix, device_name=output_tfm_name)
                 output_server.send_message(tfm_message, wait=True)
