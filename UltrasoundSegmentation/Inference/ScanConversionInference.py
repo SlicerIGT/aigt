@@ -314,8 +314,15 @@ def curvilinear_mask(scanconversion_config):
     # Convert mask_array to uint8
     mask_array = mask_array.astype(np.uint8)
 
-    # Erode mask by one pixel to avoid interpolation artifacts at the edges
-    mask_array = cv2.erode(mask_array, np.ones((3, 3), np.uint8), iterations=1)
+    # Repaint the borders of the mask to zero to allow erosion from all sides
+    mask_array[0, :] = 0
+    mask_array[:, 0] = 0
+    mask_array[-1, :] = 0
+    mask_array[:, -1] = 0
+    
+    # Erode mask by 10 percent of the image size to remove artifacts on the edges
+    erosion_size = int(0.1 * image_size)
+    mask_array = cv2.erode(mask_array, np.ones((erosion_size, erosion_size), np.uint8), iterations=1)
     
     return mask_array
 
