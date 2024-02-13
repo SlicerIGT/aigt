@@ -906,6 +906,9 @@ class SingleSliceSegmentationLogic(ScriptedLoadableModuleLogic):
       slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(selectedSegmentation,
                                                                                labelmapNode,
                                                                                selectedImage)
+      segmentationArray = slicer.util.arrayFromVolume(labelmapNode)
+      segmentationArray *= 255
+      slicer.util.updateVolumeFromArray(labelmapNode, segmentationArray)
       segmentedImageData = labelmapNode.GetImageData()
       ultrasoundData = selectedImage.GetImageData()
 
