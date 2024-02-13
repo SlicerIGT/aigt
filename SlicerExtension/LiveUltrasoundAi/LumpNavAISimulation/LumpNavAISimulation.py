@@ -761,7 +761,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
             self.processing = False
             return exitCode
         
-    def plotCauteryTrajectory(self, start, stop, clean) -> None:
+    def plotCauteryTrajectory(self, start, stop, clean) -> int:
         logging.info("Plotting cautery trajectory")
         self.processing = True
 
