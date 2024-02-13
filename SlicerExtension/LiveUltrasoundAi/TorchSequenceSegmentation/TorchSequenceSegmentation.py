@@ -224,6 +224,10 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.modelInputSizeSpinbox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
         self.ui.applyLogCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
 
+        lastNormalizeSetting = slicer.util.settingsValue(self.logic.LAST_NORMALIZE_SETTING, False, converter=slicer.util.toBool)
+        self.ui.normalizeCheckBox.checked = lastNormalizeSetting
+        self.ui.normalizeCheckBox.connect("toggled(bool)", self.updateSettingsFromGUI)
+
         # File paths
         # Set last model folder in UI
         lastModelFolder = slicer.util.settingsValue(self.logic.LAST_MODEL_FOLDER_SETTING, "")
@@ -507,6 +511,11 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         outputFolder = self.ui.outputDirectoryButton.directory
         if outputFolder != slicer.util.settingsValue(self.logic.LAST_OUTPUT_FOLDER_SETTING, ""):
             settings.setValue(self.logic.LAST_OUTPUT_FOLDER_SETTING, outputFolder)
+        
+        # Update normalize setting
+        normalizeInput = self.ui.normalizeCheckBox.checked
+        if normalizeInput != slicer.util.settingsValue(self.logic.LAST_NORMALIZE_SETTING, "", converter=slicer.util.toBool):
+            settings.setValue(self.logic.LAST_NORMALIZE_SETTING, normalizeInput)
     
     def onClearScanConversion(self):
         self.ui.scanConversionPathLineEdit.currentPath = ""
@@ -730,6 +739,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
+    LAST_NORMALIZE_SETTING = "TorchSequenceSegmentation/NormalizeInput"
     LAST_MODEL_FOLDER_SETTING = "TorchSequenceSegmentation/LastModelFolder"
     LAST_SCAN_CONVERSION_PATH_SETTING = "TorchSequenceSegmentation/LastScanConversionPath"
     LAST_OUTPUT_FOLDER_SETTING = "TorchSequenceSegmentation/LastOutputFolder"
@@ -937,8 +947,12 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             inputArray = np.flip(inputArray, axis=0)
 
         # Normalize input if needed
-        if inputArray.max() > 1.0:
-            inputArray = inputArray.astype(float) / inputArray.max()
+        normalizeInput = slicer.util.settingsValue(self.LAST_NORMALIZE_SETTING, False, converter=slicer.util.toBool)
+        if normalizeInput:
+            if inputArray.max() <= 1.0:
+                logging.info("Input image is already between 0 and 1, skipping normalization.")
+            else:
+                inputArray = inputArray.astype(float) / inputArray.max()
 
         # Convert to tensor and add batch dimension
         inputTensor = torch.from_numpy(inputArray).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
