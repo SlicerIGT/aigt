@@ -54,6 +54,14 @@ class UltrasoundDataset(Dataset):
         transform_data = (np.load(self.tfm_matrices[index]) 
                             if self.tfm_matrices else np.identity(4))
         
+        # If ultrasound_data is 2D, add a channel dimension as last dimension
+        if len(ultrasound_data.shape) == 2:
+            ultrasound_data = np.expand_dims(ultrasound_data, axis=-1)
+            
+        # If segmentation_data is 2D, add a channel dimension as last dimension
+        if len(segmentation_data.shape) == 2:
+            segmentation_data = np.expand_dims(segmentation_data, axis=-1)
+        
         data = {
             "image": ultrasound_data,
             "label": segmentation_data,

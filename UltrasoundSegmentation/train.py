@@ -408,7 +408,7 @@ def main(args):
             if config["out_channels"] == 1:
                 im = axes[i, 2].imshow(torch.sigmoid(outputs[i]).squeeze().detach().cpu(), cmap="gray")
             else:
-                im = axes[i, 2].imshow(torch.softmax(outputs[i], dim=0).detach().cpu()[1, :, :], cmap="gray")  # Show only first segmentation class
+                im = axes[i, 2].imshow(torch.softmax(outputs[i], dim=0).detach().cpu()[1, :, :], cmap="gray", vmin=0, vmax=1)  # Show only first segmentation class.
             
             # Create an additional axis for the colorbar
             cax = fig.add_axes([axes[i, 2].get_position().x1 + 0.01,
