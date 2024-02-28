@@ -11,13 +11,13 @@ class UltrasoundDataset(Dataset):
     Dataset class for ultrasound images, segmentations, and transformations.
     """
 
-    def __init__(self, data_folder, transform=None):
+    def __init__(self, root_folder, imgs_dir="images", gts_dir="labels", tfms_dir="transforms", transform=None):
         self.transform = transform
 
         # Find all data segmentation files and matching ultrasound files in input directory
-        self.images = sorted(glob.glob(os.path.join(data_folder, "**", "*_ultrasound*.npy"), recursive=True))
-        self.segmentations = sorted(glob.glob(os.path.join(data_folder, "**", "*_segmentation*.npy"), recursive=True))
-        self.tfm_matrices = sorted(glob.glob(os.path.join(data_folder, "**", "*_transform*.npy"), recursive=True))
+        self.images = glob.glob(os.path.join(root_folder, "**", imgs_dir, "**", "*.npy"), recursive=True)
+        self.segmentations = glob.glob(os.path.join(root_folder, "**", gts_dir, "**", "*.npy"), recursive=True)
+        self.tfm_matrices = glob.glob(os.path.join(root_folder, "**", tfms_dir, "**", "*.npy"), recursive=True)
 
     def __len__(self):
         """
