@@ -23,7 +23,7 @@ for i in range(videoArray.shape[0]):
     newVideoNode = slicer.vtkMRMLScalarVolumeNode()
 
     imageData = vtk.vtkImageData()
-    imageMat = videoArray[i]
+    imageMat = np.flip(np.rot90(videoArray[i], 3),axis=0)
 
     destinationArray = vtk.util.numpy_support.numpy_to_vtk(imageMat.transpose(2, 1, 0).ravel(), deep=True)
     imageData.SetDimensions(imageMat.shape)
@@ -35,3 +35,6 @@ for i in range(videoArray.shape[0]):
 sequenceBrowser = slicer.vtkMRMLSequenceBrowserNode()
 sequenceBrowser.AddSynchronizedSequenceNode(sequenceNode)
 slicer.mrmlScene.AddNode(sequenceBrowser)
+
+
+
