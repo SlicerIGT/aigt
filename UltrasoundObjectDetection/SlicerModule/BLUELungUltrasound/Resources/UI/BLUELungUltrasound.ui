@@ -90,19 +90,19 @@
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="generateMModeButton">
+    <widget class="QPushButton" name="toggleTestObserverButton">
      <property name="text">
-      <string>TEST-mmode</string>
+      <string>Start Recording</string>
+     </property>
+     <property name="checkable">
+      <bool>true</bool>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="toggleTestObserverButton">
+    <widget class="QPushButton" name="generateMModeButton">
      <property name="text">
-      <string>ToggleTestObserver</string>
-     </property>
-     <property name="checkable">
-      <bool>true</bool>
+      <string>Generate M-mode</string>
      </property>
     </widget>
    </item>

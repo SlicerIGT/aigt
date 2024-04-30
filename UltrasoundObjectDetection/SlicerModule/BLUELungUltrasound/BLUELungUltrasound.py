@@ -8,6 +8,7 @@ from ctypes import windll
 import cv2
 import torch
 from ultralytics import YOLO
+from scipy.ndimage import map_coordinates, zoom
 
 import vtk
 import qt
@@ -172,7 +173,6 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         if self.logic.plus_server_process:
             self.logic.plus_server_process.kill()
 
-        slicer.mrmlScene.RemoveNode(self.logic.InferenceIgtlConnectorNode)
         slicer.mrmlScene.RemoveNode(self.logic.RawInputIgtlConnectorNode)
         slicer.mrmlScene.RemoveNode(self.logic.InferenceOutputNode)
         slicer.mrmlScene.RemoveNode(self.logic.sequenceBrowserUltrasound)
@@ -237,11 +237,6 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         
         if self._parameterNode is not None:
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
-
-        if not self._parameterNode.scanlineMarkup:
-            scanlineMarkup = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", "Scanline")
-            scanlineMarkup.CreateDefaultDisplayNodes()
-            self._parameterNode.scanlineMarkup = scanlineMarkup
 
         # Initial GUI update
         self.updateGUIFromParameterNode()
@@ -322,34 +317,21 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         self.logic.SetCustomStyle(toggled)
 
     def onGenerateMModeButtonClicked(self):
-        self.logic.ProcessLungSlidingEvaluation(n_seconds=5)
+        #self.logic.ProcessLungSlidingEvaluation(n_seconds=5)
+        self.logic.GenerateMMode(self.logic.inputNode,
+                                 self.logic.outputVolume)
 
 
     def onToggleRecordingButtonClicked(self, toggled):
         if toggled:
+            self.ui.toggleTestObserverButton.text = "Stop Recording"
             self.logic.sequenceBrowserUltrasound.SetRecordingActive(True)
             print('recording started')
         else:
+            self.ui.toggleTestObserverButton.text = "Start Recording"
             self.logic.sequenceBrowserUltrasound.SetRecordingActive(False)
             print('recording stopped')
 
-
-    def OLD_onPlaceMarkupLineClicked(self):
-        layoutManager = slicer.app.layoutManager()
-        redSliceLogic = layoutManager.sliceWidget("Red").sliceLogic()
-        transducerCenter = [-95, 461, redSliceLogic.GetSliceOffset()]
-
-        lineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode")
-        lineNode.SetName("MMode_Line")
-        lineNode.AddControlPoint(transducerCenter)
-
-        selectionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLSelectionNodeSingleton")
-        selectionNode.SetActivePlaceNodeID(lineNode.GetID())
-        interactionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLInteractionNodeSingleton")
-        placeModePersistence = 1
-        interactionNode.SetPlaceModePersistence(placeModePersistence)
-        # mode 1 is Place, can also be accessed via slicer.vtkMRMLInteractionNode().Place
-        interactionNode.SetCurrentInteractionMode(1)
     
     def onPlaceMarkupLineClicked(self):
         scanlineNode = self.logic.getScanlineNode()
@@ -408,7 +390,12 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         self.sequenceBrowserUltrasound.SetPlaybackRateFps(40)
         slicer.mrmlScene.AddNode(self.sequenceNode)
 
-        self.model = YOLO(self.resourcePath(f'model/lung_yolov8_pretrained.pt'))        
+        self.scanlineMarkup = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", "Scanline")
+        self.scanlineMarkup.CreateDefaultDisplayNodes()
+
+        self.outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "M-mode")
+
+        self.object_detection_model = YOLO(self.resourcePath(f'model/lung_yolov8_pretrained.pt'))        
         
         
     def setupOpenIgtLink(self):
@@ -483,14 +470,6 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
                 
         print("No PLUS installation found")
         return None
-    
-    def ToggleInferenceMode(self, toggled):
-        if toggled:
-            self.InferenceIgtlConnectorNode.Start()
-            print("Inference running")
-        else:
-            self.InferenceIgtlConnectorNode.Stop()
-            print("Inference stopped")
 
     def SetCustomStyle(self, visible):
         """
@@ -523,13 +502,12 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
 
 
     def getScanlineNode(self):
-        parameterNode = self.getParameterNode()
-        scanlineNode = parameterNode.scanlineMarkup
+        scanlineNode = self.scanlineMarkup
         if not scanlineNode:
             scanlineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", "Scanline")
             scanlineNode.CreateDefaultDisplayNodes()
-            parameterNode.scanlineMarkup = scanlineNode
-        return scanlineNode    
+            self.scanlineMarkup = scanlineNode
+        return scanlineNode 
     
     def ProcessLungSlidingEvaluation(self, n_seconds=5):
         # 1: find center_point, r1, r2 to get the region of interest
@@ -552,17 +530,169 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         # 6: set view layout to side-by-side (layoutManager.setLayout(29))
         # 6: display M-mode image in yellow slice view
 
-    def GenerateMModeImage(self, usVol, imageHeight=128):
-        P1, P2 = [point[:2].astype(np.uint32) for point in slicer.util.arrayFromMarkupsControlPoints(slicer.util.getNode("MMode_Line"))]
-        #cv2.imshow('usvol', usVol[0])
-        print(f'P1: {P1}, P2: {P2}')
-        x, y = np.linspace(P1[0], P2[0], imageHeight).astype(np.uint32), np.linspace(P1[1], P2[1], imageHeight).astype(np.uint32) #A list of imageHeight indices between P1 and P2
-        print(f'first point: {x[0]}, {y[0]}; last point: {x[len(x)-1]}, {y[len(y)-1]}')
-        print(zip(x,y))
-        mFull = np.column_stack([[frame[xVal,yVal] for xVal, yVal in zip(x,y)] for frame in usVol]) #For each frame, for each [x,y], append the value
-        #cv2.imshow('mmode', mFull)
-        cv2.imshow('usvol', cv2.line(usVol[0], tuple(P1), tuple(P2), (255,255,255), 2))
-        return mFull
+    def sample_line(self, image, point1, point2, num_points=100, average_channels=False):
+        """
+        Sample pixel values along a line in an image, with an option to average across channels.
+
+        Parameters:
+        - image: np.array with shape (rows, columns, channels).
+        - point1: Tuple (x1, y1) defining the start of the line.
+        - point2: Tuple (x2, y2) defining the end of the line.
+        - num_points: Number of points to sample along the line.
+        - average_channels: If True, average the values across all channels.
+
+        Returns:
+        - samples: Array of sampled pixel values along the line. If average_channels is True,
+                returns a 1D array of averaged values; otherwise, a 2D array with shape (num_points, channels).
+        """
+
+        # Ensure image is in (rows, columns, channels) format, if there is a third dimension
+        if image.shape[0] < image.shape[1] and image.shape[0] < image.shape[2]:
+            image = np.transpose(image, (1, 2, 0))
+        rows, cols, channels = image.shape
+        
+        img_dtype = image.dtype
+
+        # If the second coordinate of point2 is greater than the second coordinate of point1, swap the points
+        if point2[1] > point1[1]:
+            point1, point2 = point2, point1
+
+        # Generate line coordinates
+        x = np.linspace(point1[0], point2[0], num_points)
+        y = np.linspace(point1[1], point2[1], num_points)
+
+        # Combine x and y coordinates
+        line_coords = np.vstack((y, x))  # map_coordinates expects (rows, cols)
+
+        # Sample along the line
+        if average_channels:
+            # Initialize an array for averaged samples
+            samples = np.zeros(num_points, dtype=img_dtype)
+            temp_samples = np.zeros(num_points)
+            for i in range(channels):
+                channel_samples = map_coordinates(image[:, :, i], line_coords, order=1)
+                temp_samples += channel_samples
+            temp_samples /= channels  # Average across channels
+            samples = np.round(temp_samples).astype(img_dtype)
+        else:
+            # Sample for each channel
+            samples = np.zeros((num_points, channels), dtype=img_dtype)
+            for i in range(channels):
+                samples[:, i] = map_coordinates(image[:, :, i], line_coords, order=1).astype(img_dtype)
+
+        return samples
+    
+    
+    def GenerateMMode(self,
+                      inputVolume: slicer.vtkMRMLScalarVolumeNode,
+                      outputVolume: slicer.vtkMRMLScalarVolumeNode,
+                      paperSpeed_mm_per_px: float = 25.0
+                      ) -> None:
+        """
+        Finds the sequence that the inputVolume is the proxy node of. Samples the inputVolume along the scanline across all frames of the sequence and writes the result to the outputVolume.
+        :param inputVolume: B-mode 2D ultrasound
+        :param scanlineMarkup: markup node that contains the scanline
+        :param outputVolume: M-mode ultrasound
+        """
+
+        if not inputVolume:
+            raise ValueError("Input volume is invalid")
+        
+        if not outputVolume:
+            raise ValueError("Output volume is invalid")
+        
+        scanlineMarkup = self.scanlineMarkup
+        
+        if (scanlineMarkup.GetNumberOfControlPoints() < 2):
+            raise ValueError("Scanline markup requires at least 2 control points")
+
+        # Get the scanline points in homogeneous RAS coordinates.
+        scanlinePoints_RAS = np.zeros((2, 4))
+        for i in range(2):
+            scanlineMarkup.GetNthControlPointPositionWorld(i, scanlinePoints_RAS[i, :3])
+            scanlinePoints_RAS[i, 3] = 1
+
+        # Get the rasToIjk matrix
+        rasToIjk = vtk.vtkMatrix4x4()
+        inputVolume.GetRASToIJKMatrix(rasToIjk)
+
+        # Convert the scanline points to IJK coordinates
+        scanlinePoints_IJK = np.zeros((2, 4))
+        for i in range(2):
+            rasToIjk.MultiplyPoint(scanlinePoints_RAS[i], scanlinePoints_IJK[i])
+
+        # Check all sequences of all sequence browsers in the scene to find which one uses inputVolume as proxy node
+        sequenceBrowsers = slicer.util.getNodesByClass("vtkMRMLSequenceBrowserNode")
+        sequenceNode = None
+        sequenceBrowser = None
+        for sequenceBrowser in sequenceBrowsers:
+            collection = vtk.vtkCollection()
+            sequenceBrowser.GetSynchronizedSequenceNodes(collection, True)
+            for i in range(collection.GetNumberOfItems()):
+                sequenceNode = collection.GetItemAsObject(i)
+                proxyNode = sequenceBrowser.GetProxyNode(sequenceNode)
+                if proxyNode.GetID() == inputVolume.GetID():
+                    break
+                
+        # Prepare np array to store the time series
+        numFrames = sequenceBrowser.GetNumberOfItems()
+        singleFrameArray = slicer.util.arrayFromVolume(inputVolume)
+        if len(singleFrameArray.shape) == 4:
+            singleFrameArray = singleFrameArray[0, :, :, :]  # Eliminate the first dimension
+        
+        # Prepare np array to store the time series
+        scanlineLength_px = int(round(np.linalg.norm(scanlinePoints_IJK[1, :3] - scanlinePoints_IJK[0, :3])))
+        mmodeArray = np.zeros((1, scanlineLength_px, numFrames), dtype=singleFrameArray.dtype)  # np.array should be in rows, columns order
+
+        for itemIndex in range(sequenceBrowser.GetNumberOfItems()):
+            sequenceBrowser.SetSelectedItemNumber(itemIndex)
+            singleFrameArray = slicer.util.arrayFromVolume(inputVolume)
+            if len(singleFrameArray.shape) == 4:
+                singleFrameArray = singleFrameArray[0, :, :, :]
+            mmodeArray[0, :, itemIndex] = self.sample_line(singleFrameArray, scanlinePoints_IJK[0, :3], scanlinePoints_IJK[1, :3], num_points=scanlineLength_px, average_channels=True)
+            slicer.app.processEvents()
+        
+        # Compute horizontal scaling factor
+        horizontalPixelSpacing_mm = paperSpeed_mm_per_px/20.0  # Assuming 20 FPS cine rate
+        horizontalPixelsPerFrame = horizontalPixelSpacing_mm / inputVolume.GetSpacing()[0]
+        
+        # Compute alternative horizontal scaling factor for square output
+        horizontalPixelsPerFrame_square = scanlineLength_px / numFrames
+        
+        # Keep the larger of the two scaling factors
+        horizontalPixelsPerFrame = max(horizontalPixelsPerFrame, horizontalPixelsPerFrame_square)
+        
+        # Scale mmodeArray along the time axis using linear interpolation
+        zoom_factors = [1, 1, horizontalPixelsPerFrame]
+        mmodeArray_scaled = zoom(mmodeArray, zoom_factors, order=1)
+        
+        # Flip the mmodeArray_scaled along the time axis
+        mmodeArray_scaled = np.flip(mmodeArray_scaled, axis=2)
+        # Horizontal flip
+        mmodeArray_scaled = np.flip(mmodeArray_scaled, axis=1)
+        
+        # Create output imagedata with the right dimensions and the same pixel type as the  input volume
+        outputImageData = vtk.vtkImageData()
+        outputImageData.SetDimensions(mmodeArray_scaled.shape[2], scanlineLength_px, 1)
+        outputImageData.AllocateScalars(inputVolume.GetImageData().GetScalarType(), 1)
+
+        # Set outputImageData as the image data of the outputVolume
+        outputVolume.SetAndObserveImageData(outputImageData)
+        
+        # Update the output volume with the mmodeArray
+        slicer.util.updateVolumeFromArray(outputVolume, mmodeArray_scaled)
+
+        # Make sure that the output volume has the same spacing as the input volume along the scanline, and increase the spacing by a factor along time
+        outputVolume.SetSpacing([inputVolume.GetSpacing()[0], inputVolume.GetSpacing()[1], inputVolume.GetSpacing()[2]])
+
+        # Set up default window/level for display
+        outputDisplayNode = outputVolume.GetDisplayNode()
+        if outputDisplayNode is None:
+            outputVolume.CreateDefaultDisplayNodes()
+            outputDisplayNode = outputVolume.GetDisplayNode()
+        outputDisplayNode.SetWindow(255)
+        outputDisplayNode.SetLevel(127)
+
     
     def preprocess_epiphan_image(self, image):
         image = np.rot90(np.transpose(image, (1,2,0)), 2)
@@ -575,7 +705,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         image = self.preprocess_epiphan_image(image)
         #cv2.imshow("input_img", image)
 
-        prediction = self.model(image, conf=self.CONFIDENCE_THRESHOLD, device=self.DEVICE)[0].plot()
+        prediction = self.object_detection_model(image, conf=self.CONFIDENCE_THRESHOLD, device=self.DEVICE)[0].plot()
         print(prediction.shape)
         #cv2.imshow("pred", prediction)
         prediction = np.flip(np.expand_dims(prediction, axis=0), axis=(1,2))
