@@ -218,6 +218,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
         self.setParameterNode(self.logic.getParameterNode())
 
+
     def setParameterNode(self, inputParameterNode):
         """
         Set and observe parameter node.
@@ -233,8 +234,14 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         if self._parameterNode is not None and self.hasObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode):
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
         self._parameterNode = inputParameterNode
+        
         if self._parameterNode is not None:
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+
+        if not self._parameterNode.scanlineMarkup:
+            scanlineMarkup = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", "Scanline")
+            scanlineMarkup.CreateDefaultDisplayNodes()
+            self._parameterNode.scanlineMarkup = scanlineMarkup
 
         # Initial GUI update
         self.updateGUIFromParameterNode()
@@ -327,7 +334,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             print('recording stopped')
 
 
-    def onPlaceMarkupLineClicked(self):
+    def OLD_onPlaceMarkupLineClicked(self):
         layoutManager = slicer.app.layoutManager()
         redSliceLogic = layoutManager.sliceWidget("Red").sliceLogic()
         transducerCenter = [-95, 461, redSliceLogic.GetSliceOffset()]
@@ -343,6 +350,15 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         interactionNode.SetPlaceModePersistence(placeModePersistence)
         # mode 1 is Place, can also be accessed via slicer.vtkMRMLInteractionNode().Place
         interactionNode.SetCurrentInteractionMode(1)
+    
+    def onPlaceMarkupLineClicked(self):
+        scanlineNode = self.logic.getScanlineNode()
+        scanlineNode.RemoveAllControlPoints()
+        selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+        selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsLineNode")
+        selectionNode.SetActivePlaceNodeID(scanlineNode.GetID())
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SwitchToSinglePlaceMode()
 
 #
 # BLUELungUltrasoundLogic
@@ -408,6 +424,8 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         Initialize parameter node with default settings.
         """
 
+        
+        
         if not parameterNode.GetParameter("PLUSConfigFile"):
             parameterNode.SetParameter("PLUSConfigFile", self.resourcePath(self.CONFIG_FILE_DEFAULT))
         
@@ -504,10 +522,14 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         #self.ui.customUiButton.checked = visible
 
 
-    def TestAddFrameToVolume(self, volumeNode, event):
-        #frame = np.expand_dims(slicer.util.arrayFromVolume(volumeNode)[0,:,:], axis=0).copy()
-        self.FRAMES.append(slicer.util.arrayFromVolume(volumeNode).copy())
-    
+    def getScanlineNode(self):
+        parameterNode = self.getParameterNode()
+        scanlineNode = parameterNode.scanlineMarkup
+        if not scanlineNode:
+            scanlineNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsLineNode", "Scanline")
+            scanlineNode.CreateDefaultDisplayNodes()
+            parameterNode.scanlineMarkup = scanlineNode
+        return scanlineNode    
     
     def ProcessLungSlidingEvaluation(self, n_seconds=5):
         # 1: find center_point, r1, r2 to get the region of interest
