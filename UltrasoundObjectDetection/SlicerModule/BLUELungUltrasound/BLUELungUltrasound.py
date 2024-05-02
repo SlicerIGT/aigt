@@ -27,7 +27,7 @@ try:
     import timm
 except ImportError:
     slicer.util.pip_install('timm')
-    import timmy
+    import timm
 
 try:
     from ultralytics import YOLO
