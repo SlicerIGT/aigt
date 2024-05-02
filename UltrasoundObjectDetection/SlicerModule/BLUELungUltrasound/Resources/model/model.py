@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import sys
+import slicer
 from pathlib import Path
 from torchvision.transforms import Resize, Compose, CenterCrop
 
