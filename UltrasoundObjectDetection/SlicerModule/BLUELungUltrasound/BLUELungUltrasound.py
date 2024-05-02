@@ -11,7 +11,6 @@ from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 from Resources.model.model import EnsembleClassifier
 
-
 try:
     import numpy as np
 except ImportError:

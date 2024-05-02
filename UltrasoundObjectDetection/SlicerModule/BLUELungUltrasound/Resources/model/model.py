@@ -1,10 +1,14 @@
 import torch
 import numpy as np
 import sys
-import yaml
 from pathlib import Path
-from torchvision.transforms import Resize, ToTensor, Compose, CenterCrop
-from monai.visualize.class_activation_maps import GradCAMpp
+from torchvision.transforms import Resize, Compose, CenterCrop
+
+try:
+    from monai.visualize.class_activation_maps import GradCAMpp
+except ImportError:
+    slicer.util.pip_install('monai')
+    from monai.visualize.class_activation_maps import GradCAMpp
 
 RESIZED_SIZE = 256
 ROOT = Path(__file__).parent.resolve()
