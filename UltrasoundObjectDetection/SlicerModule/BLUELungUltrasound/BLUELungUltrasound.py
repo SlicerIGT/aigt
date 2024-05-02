@@ -443,7 +443,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         self.outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "M-mode")
 
         # Model setup
-        self.object_detection_model = YOLO(self.resourcePath(f'model/object_detection/lung_yolov8_pretrained.pt'))
+        self.object_detection_model = YOLO(self.resourcePath(f'model/weights/object_detection/lung_yolov8_pretrained.pt'))
         self.classification_model = self.setupEnsembleClassifier()
         
         
@@ -459,7 +459,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
                                     drop_rate=0.5).to(self.DEVICE) for model_name in model_names]
 
         for i, model in enumerate(models):
-            model.load_state_dict(torch.load(self.resourcePath(f'model/classification/{model_names[i]}.pt'), map_location=self.DEVICE))
+            model.load_state_dict(torch.load(self.resourcePath(f'model/weights/classification/{model_names[i]}.pt'), map_location=self.DEVICE))
 
         model = EnsembleClassifier(models, model_target_layers)
         print('Ensemble classifier loaded')
