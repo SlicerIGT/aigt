@@ -42,7 +42,6 @@ except ImportError:
     from scipy.ndimage import map_coordinates, zoom
 
 
-
 #
 # BLUELungUltrasound
 #
@@ -444,7 +443,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         self.outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "M-mode")
 
         # Model setup
-        self.object_detection_model = YOLO(self.resourcePath(f'model/lung_yolov8_pretrained.pt'))
+        self.object_detection_model = YOLO(self.resourcePath(f'model/object_detection/lung_yolov8_pretrained.pt'))
         self.classification_model = self.setupEnsembleClassifier()
         
         
