@@ -40,15 +40,20 @@ class EnsembleClassifier(torch.nn.Module):
     def forward(self, x):
         return [model(x) for model in self.models]
 
-    def get_gradcams(self, x):
+    
+    def get_gradcam(self, x):
         if self.gradcams:
-            return [1-gradcam(x) for gradcam in self.gradcams]        
+            return torch.nanmean(torch.stack([1-gradcam(x) for gradcam in self.gradcams]), dim=0)         
 
+    
     def predict(self, x):
         self.eval()
         with torch.no_grad():
             individual_preds = self.forward(self.transforms(x))
 
         probabilities = np.stack([torch.softmax(pred, dim=1).cpu().numpy() for pred in individual_preds], axis=0)
+        
         ensemble_model_pred = probabilities.mean(axis=0).argmax(axis=1)
-        return CLASS_NAMES[ensemble_model_pred.item()]
+        prediction_probability = probabilities.mean(axis=0).max(axis=1)
+
+        return CLASS_NAMES[ensemble_model_pred.item()], prediction_probability.item()

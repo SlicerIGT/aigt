@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>417</width>
-    <height>316</height>
+    <width>354</width>
+    <height>648</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -47,6 +47,12 @@
    </item>
    <item>
     <widget class="QPushButton" name="startPlusButton">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>60</height>
+      </size>
+     </property>
      <property name="text">
       <string>Start PLUS Server</string>
      </property>
@@ -57,6 +63,12 @@
    </item>
    <item>
     <widget class="QPushButton" name="setViewButton">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>60</height>
+      </size>
+     </property>
      <property name="text">
       <string>Set Views</string>
      </property>
@@ -64,6 +76,12 @@
    </item>
    <item>
     <widget class="QPushButton" name="startInferenceButton">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>60</height>
+      </size>
+     </property>
      <property name="text">
       <string>Start Inference</string>
      </property>
@@ -74,6 +92,12 @@
    </item>
    <item>
     <widget class="QPushButton" name="setCustomUiButton">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>60</height>
+      </size>
+     </property>
      <property name="text">
       <string>Set Custom UI</string>
      </property>
@@ -84,6 +108,12 @@
    </item>
    <item>
     <widget class="QPushButton" name="placeMarkupLineButton">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>60</height>
+      </size>
+     </property>
      <property name="text">
       <string>Place Markup Line</string>
      </property>
@@ -91,6 +121,12 @@
    </item>
    <item>
     <widget class="QPushButton" name="toggleTestObserverButton">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>60</height>
+      </size>
+     </property>
      <property name="text">
       <string>Start Recording</string>
      </property>
@@ -101,6 +137,18 @@
    </item>
    <item>
     <widget class="QPushButton" name="generateMModeButton">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>60</height>
+      </size>
+     </property>
      <property name="text">
       <string>Generate M-mode</string>
      </property>

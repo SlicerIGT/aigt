@@ -355,8 +355,8 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         self.logic.GenerateMMode(self.logic.inputNode,
                                  self.logic.outputVolume)
         
-        pred = self.logic.ClassifyMMode(self.logic.outputVolume)
-        print(f'Classification: {pred}')
+        pred, probability = self.logic.ProcessMModeImage(self.logic.outputVolume)
+        print(f'Classification: {pred}, Prediction confidence: {probability}')
         
         slicer.util.getNode('vtkMRMLSliceNodeYellow').SetOrientationToAxial()
         slicer.app.layoutManager().sliceWidget("Yellow").sliceLogic().GetSliceCompositeNode().SetBackgroundVolumeID(self.logic.outputVolume.GetID())
@@ -441,6 +441,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         self.scanlineMarkup.CreateDefaultDisplayNodes()
 
         self.outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "M-mode")
+        self.gradcamOutputNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "GradCAM")
 
         # Model setup
         self.object_detection_model = YOLO(self.resourcePath(f'model/weights/object_detection/lung_yolov8_pretrained.pt'))
@@ -575,27 +576,6 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
             scanlineNode.CreateDefaultDisplayNodes()
             self.scanlineMarkup = scanlineNode
         return scanlineNode 
-    
-    
-    def ProcessLungSlidingEvaluation(self, n_seconds=5):
-        # 1: find center_point, r1, r2 to get the region of interest
-        # 2: Place line markup
-        
-        # 3: gather frames coming over OpenIGTLink for n_seconds, stitch them together as 3D np array
-
-        #ultrasound_volume = np.concatenate([np.expand_dims(np.rot90(frame[0,:,:],2), axis=0) for frame in self.FRAMES], axis=0)
-        ultrasound_volume = np.concatenate([np.expand_dims(frame[0,:,:], axis=0) for frame in self.FRAMES], axis=0)
-        test_us_im = Image.fromarray(ultrasound_volume[0,:,:])
-        test_us_im.save(f'D:/test_us.png')
-        
-        # 4: generate M-mode image
-        mmode_image = self.GenerateMModeImage(ultrasound_volume)
-        print(f'n_frames: {len(self.FRAMES)}, mmode shape: {mmode_image.shape}')
-        im = Image.fromarray(mmode_image)
-        im.save("D:/test_mmode.png")
-        # 5: run PTX inference / send M-mode image over OpenIGTLink for inference running script
-        # 6: set view layout to side-by-side (layoutManager.setLayout(29))
-        # 6: display M-mode image in yellow slice view
 
     
     def sample_line(self, image, point1, point2, num_points=100, average_channels=False):
@@ -769,14 +749,28 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         return np.ascontiguousarray(image)
     
     
-    def ClassifyMMode(self, mmode_node):
+    def ProcessMModeImage(self, mmode_node):
+        mmode_image = slicer.util.arrayFromVolume(mmode_node).copy()
+        
+        mmode_image_tensor = torch.from_numpy(mmode_image).unsqueeze(0).to(self.DEVICE)
+        mmode_image_tensor = mmode_image_tensor / 255
+        if mmode_image_tensor.shape[1] == 1:
+           mmode_image_tensor = torch.cat([mmode_image_tensor, mmode_image_tensor, mmode_image_tensor], dim=1)
+        
+        pred, probability = self.classification_model.predict(mmode_image_tensor)
+
+        return pred, probability
+    
+    
+    def GetGradCAM(self, mmode_node):
         mmode_image_tensor = torch.from_numpy(slicer.util.arrayFromVolume(mmode_node).copy()).unsqueeze(0).to(self.DEVICE)
         mmode_image_tensor = mmode_image_tensor / 255
         if mmode_image_tensor.shape[1] == 1:
             mmode_image_tensor = torch.cat([mmode_image_tensor, mmode_image_tensor, mmode_image_tensor], dim=1)
-        
-        pred = self.classification_model.predict(mmode_image_tensor)
-        return pred
+
+        gradcam = self.classification_model.get_gradcam(mmode_image_tensor)
+
+        return gradcam
     
     
     def PredictStaticSignsOnFrame(self, volumeNode, event):
