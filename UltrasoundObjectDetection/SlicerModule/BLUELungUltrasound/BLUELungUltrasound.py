@@ -2,23 +2,46 @@ import logging
 import os
 import subprocess
 import string
-from PIL import Image
-import numpy as np
 from ctypes import windll
-import cv2
-import torch
-import timm
-from ultralytics import YOLO
-from scipy.ndimage import map_coordinates, zoom
-
 import vtk
 import qt
-
 import slicer
+
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-
 from Resources.model.model import EnsembleClassifier
+
+
+try:
+    import numpy as np
+except ImportError:
+    slicer.util.pip_install('numpy')
+    import numpy as np
+
+try:
+    import torch
+except ImportError:
+    slicer.util.pip_install('torch')
+    import torch
+
+try:
+    import timm
+except ImportError:
+    slicer.util.pip_install('timm')
+    import timmy
+
+try:
+    from ultralytics import YOLO
+except ImportError:
+    slicer.util.pip_install('ultralytics')
+    from ultralytics import YOLO
+
+try:
+    from scypi.ndimage import map_coordinates, zoom
+except ImportError:
+    slicer.util.pip_install('scipy')
+    from scipy.ndimage import map_coordinates, zoom
+
 
 
 #
