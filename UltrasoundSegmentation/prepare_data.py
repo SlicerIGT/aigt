@@ -50,10 +50,10 @@ else:
 input_dir = args.input_dir
 data_files = []
 for seg_filename in os.listdir(input_dir):
-    if seg_filename.endswith(".npy") and "_segmentation" in seg_filename:
+    if (seg_filename.endswith(".npy") or seg_filename.endswith(".npz")) and "_segmentation" in seg_filename:
         data_files.append(os.path.join(input_dir, seg_filename))
 
-print(f"Found {len(data_files)} data files.")
+print(f"Found {len(data_files)} segmentation files.")
 
 # Read config file
 
@@ -66,11 +66,12 @@ with open(args.config_file, "r") as f:
 with open(os.path.join(args.output_dir, "prepare_data_config.yaml"), "w") as f:
     yaml.dump(config, f)
 
-
 # Read input files, process and filter data, and save new data to disk
 
 for seg_filename in tqdm(data_files):
     data = np.load(seg_filename)
+    if isinstance(data, np.lib.npyio.NpzFile):
+        data = data[data.files[0]]
     logging.info(f"Loaded {seg_filename} with shape {data.shape} and value range {np.min(data)} - {np.max(data)}")
 
     # Filter data. Keep only segmented ultrasound images with indices stored in _indices.npy file.
@@ -78,7 +79,10 @@ for seg_filename in tqdm(data_files):
     indices_filename = seg_filename.replace("_segmentation", "_indices")
     if os.path.exists(indices_filename):
         indices = np.load(indices_filename)
+        if isinstance(indices, np.lib.npyio.NpzFile):
+            indices = indices[indices.files[0]]
         logging.info(f"Loaded {indices_filename} with shape {indices.shape}")
+        logging.info(f"First 10 indices: {indices[:10]}")
         data = data[indices, :, :, :]
         logging.info(f"Filtered data to shape {data.shape}")
     else:
@@ -94,8 +98,11 @@ for seg_filename in tqdm(data_files):
     # Save resized images to disk
 
     output_filename = os.path.join(args.output_dir, os.path.basename(seg_filename))
+    if seg_filename.endswith(".npz"):
+        output_filename = output_filename.replace(".npz", ".npy")
     np.save(output_filename, resized_data)
     logging.info(f"Saved {output_filename} with shape {resized_data.shape} and value range {np.min(resized_data)} - {np.max(resized_data)}")
+    logging.info(f"Data type of {output_filename}: {resized_data.dtype}")
 
     # Find matching ultrasound file and read ultrasound data
 
@@ -105,6 +112,8 @@ for seg_filename in tqdm(data_files):
         sys.exit(1)
     
     ultrasound_data = np.load(ultrasound_filename)
+    if isinstance(ultrasound_data, np.lib.npyio.NpzFile):
+        ultrasound_data = ultrasound_data[ultrasound_data.files[0]]
     logging.info(f"Loaded {ultrasound_filename} with shape {ultrasound_data.shape} and value range {np.min(ultrasound_data)} - {np.max(ultrasound_data)}")
 
     # Keep only ultrasound images that have a corresponding segmentation image, with preceding ultrasound frames as requested in separate channels
@@ -124,6 +133,8 @@ for seg_filename in tqdm(data_files):
     # Save resized images to disk
 
     output_filename = os.path.join(args.output_dir, os.path.basename(ultrasound_filename))
+    if ultrasound_filename.endswith(".npz"):
+        output_filename = output_filename.replace(".npz", ".npy")
     np.save(output_filename, resized_data)
     logging.info(f"Saved {output_filename} with shape {resized_data.shape} and value range {np.min(resized_data)} - {np.max(resized_data)}")
 
@@ -132,9 +143,13 @@ for seg_filename in tqdm(data_files):
     transform_filename = seg_filename.replace("_segmentation", "_transform")
     if os.path.exists(transform_filename):
         transform_data = np.load(transform_filename)
+        if isinstance(transform_data, np.lib.npyio.NpzFile):
+            transform_data = transform_data[transform_data.files[0]]
         logging.info(f"Loaded {transform_filename} with shape {transform_data.shape}")
         transform_data = transform_data[indices, :, :]
         output_filename = os.path.join(args.output_dir, os.path.basename(transform_filename))
+        if transform_filename.endswith(".npz"):
+            output_filename = output_filename.replace(".npz", ".npy")
         np.save(output_filename, transform_data)
         logging.info(f"Saved {output_filename} with shape {transform_data.shape}")
     else:
