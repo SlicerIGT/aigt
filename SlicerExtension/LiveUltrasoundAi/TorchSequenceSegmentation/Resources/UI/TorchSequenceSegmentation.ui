@@ -184,6 +184,9 @@
         <property name="editable">
          <bool>false</bool>
         </property>
+        <property name="maxVisibleItems">
+         <number>100</number>
+        </property>
        </widget>
       </item>
       <item row="6" column="0">
@@ -511,6 +514,34 @@
         </property>
        </widget>
       </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_17">
+        <property name="text">
+         <string>Apply log transform:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QCheckBox" name="applyLogCheckBox">
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_18">
+        <property name="text">
+         <string>Normalize input to [0,1]:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QCheckBox" name="normalizeCheckBox">
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
       <item row="4" column="0">
        <widget class="QLabel" name="label_8">
         <property name="text">
@@ -604,31 +635,40 @@
         </item>
        </layout>
       </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label_17">
+      <item row="8" column="0">
+       <widget class="QLabel" name="label_19">
         <property name="text">
-         <string>Apply log transform:</string>
+         <string>Mask edge erosion x (%):</string>
         </property>
        </widget>
       </item>
-      <item row="2" column="1">
-       <widget class="QCheckBox" name="applyLogCheckBox">
-        <property name="text">
-         <string/>
+      <item row="8" column="1">
+       <widget class="QDoubleSpinBox" name="edgeErosionXSpinBox">
+        <property name="decimals">
+         <number>2</number>
+        </property>
+        <property name="maximum">
+         <double>1.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.100000000000000</double>
         </property>
        </widget>
       </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="label_18">
+      <item row="9" column="0">
+       <widget class="QLabel" name="label_20">
         <property name="text">
-         <string>Normalize input to [0,1]:</string>
+         <string>Mask edge erosion y (%):</string>
         </property>
        </widget>
       </item>
-      <item row="3" column="1">
-       <widget class="QCheckBox" name="normalizeCheckBox">
-        <property name="text">
-         <string/>
+      <item row="9" column="1">
+       <widget class="QDoubleSpinBox" name="edgeErosionYSpinBox">
+        <property name="maximum">
+         <double>1.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.100000000000000</double>
         </property>
        </widget>
       </item>
