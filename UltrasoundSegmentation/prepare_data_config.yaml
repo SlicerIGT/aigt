@@ -1,4 +1,4 @@
 # Example config file for prepare_data.py
 
 image_size: !!int 512
-num_preceding_ultrasound_frames: !!int 0  # Number of extra ultrasound images preceding segmented image to be exported
+num_preceding_ultrasound_frames: !!int 2  # Number of extra ultrasound images preceding segmented image to be exported

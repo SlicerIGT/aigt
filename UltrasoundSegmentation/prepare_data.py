@@ -129,6 +129,8 @@ for seg_filename in tqdm(data_files):
         for j in range(config["num_preceding_ultrasound_frames"] + 1):
             if i - j >= 0:
                 resized_data[i, :, :, j] = cv2.resize(ultrasound_data[indices[i - j], :, :, 0], (config["image_size"], config["image_size"]))
+            else:
+                resized_data[i, :, :, j] = cv2.resize(ultrasound_data[indices[i], :, :, 0], (config["image_size"], config["image_size"]))
     
     # Save resized images to disk
 
