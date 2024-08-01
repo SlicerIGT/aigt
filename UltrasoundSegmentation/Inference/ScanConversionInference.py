@@ -34,6 +34,7 @@ ROOT = Path(__file__).parent.resolve()
 def ScanConversionInference():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, help="Path to torchscript model file.")
+    parser.add_argument("--num-previous-frames", type=int, default=0, help="Number of previous frames to use for inference. Optional.")
     parser.add_argument("--scanconversion_config", type=str, help="Path to scan conversion config (.yaml) file. Optional.")
     parser.add_argument("--input-device-name", type=str, default="Image_Image")
     parser.add_argument("--output-device-name", type=str, default="Prediction")
@@ -184,7 +185,7 @@ def run_client(args):
 
             if message.message_type == "TRANSFORM" and "Image" in message.device_name:  # Image transform message
                 transform_message_counter += 1
-                output_tfm_name = message.device_name.replace("Image", "Prediction")
+                output_tfm_name = message.device_name.replace("Image", "Pred")
                 tfm_message = pyigtl.TransformMessage(message.matrix, device_name=output_tfm_name)
                 output_server.send_message(tfm_message, wait=True)
 
