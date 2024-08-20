@@ -1,4 +1,5 @@
 import logging
+import traceback
 import os
 import glob
 import json
@@ -666,6 +667,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
                     self.ui.overallStatusLabel.setText(f"Done using {modelName}")
             except Exception as e:
                 logging.info(f"Skipping {modelName} due to error: {e}")
+                logging.info(traceback.format_exc())
                 continue
             finally:
                 # Update overall progress bar
@@ -985,6 +987,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         self.isProcessing = True
 
         parameterNode = self.getParameterNode()
+        sequencesLogic = slicer.modules.sequences.logic()
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
         inputVolume = parameterNode.GetNodeReference("InputVolume")
         inputSequence = sequenceBrowser.GetSequenceNode(inputVolume)
@@ -1001,18 +1004,32 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         # Add a new sequence node to the sequence browser
         masterSequenceNode = sequenceBrowser.GetMasterSequenceNode()
-        sequenceName = self.getUniqueName(masterSequenceNode, f"{modelBasename}_PredictionSequence")
-        predictionSequenceNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", sequenceName)
-        sequenceBrowser.AddSynchronizedSequenceNode(predictionSequenceNode)
-        sequenceBrowser.AddProxyNode(predictionVolume, predictionSequenceNode, False)
+        predictionSequenceNode = sequencesLogic.AddSynchronizedNode(None, predictionVolume, sequenceBrowser)
+        sequenceBrowser.SetRecording(predictionSequenceNode, True)
 
         # Add segmentation node from prediction volume
         if recordAsSegmentation:
+            # Create new segmentation sequence browser with Image_Image, ImageToReference, Segmentation
+            segSeqBr = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", "SegmentationBrowser")
+            inputSequenceSeg = sequencesLogic.AddSynchronizedNode(None, inputVolume, segSeqBr)
+            segSeqBr.SetRecording(inputSequenceSeg, True)
+
+            # Add transforms up to ImageToReference to sequence browser
+            refTransformFound = False
+            currentTransform = inputVolume
+            while not refTransformFound:
+                parentNode = currentTransform.GetParentTransformNode()
+                transformSequenceNode = sequencesLogic.AddSynchronizedNode(None, parentNode, segSeqBr)
+                segSeqBr.SetRecording(transformSequenceNode, True)
+                if "ToRef" in parentNode.GetName():
+                    refTransformFound = True
+                else:
+                    currentTransform = parentNode
+            
             segmentationNode = parameterNode.GetNodeReference("Segmentation")
-            segmentationName = self.getUniqueName(segmentationNode, f"{modelBasename}_Segmentation")
-            segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", segmentationName)
+            segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Segmentation")
             segmentationNode.CreateDefaultDisplayNodes()
-            segmentationNode.GetDisplayNode().SetVisibility(False)
+            segmentationNode.GetDisplayNode().SetVisibility(True)
             segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(inputVolume)
             segmentationNode.GetSegmentation().AddEmptySegment(segmentName)
             ids = vtk.vtkStringArray()
@@ -1020,11 +1037,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             parameterNode.SetNodeReferenceID("Segmentation", segmentationNode.GetID())
             
             # Add segmentation node to sequence browser
-            segSeqName = self.getUniqueName(masterSequenceNode, f"{modelBasename}_SegmentationSequence")
-            segSequenceNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode", segSeqName)
-            sequenceBrowser.AddSynchronizedSequenceNode(segSequenceNode)
-            sequenceBrowser.AddProxyNode(segmentationNode, segSequenceNode, False)
-            sequenceBrowser.SetSaveChanges(segSequenceNode, True)
+            segSequenceNode = sequencesLogic.AddSynchronizedNode(None, segmentationNode, segSeqBr)
+            segSeqBr.SetRecording(segSequenceNode, True)
 
         # Place in output transform if it exists
         outputTransform = parameterNode.GetNodeReference("OutputTransform")
@@ -1088,15 +1102,16 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
                 # Fill label map by thresholding prediction
                 labelmapArray = slicer.util.arrayFromVolume(labelmapVolume)
-                labelmapArray[prediction < threshold] = 0
-                labelmapArray[prediction >= threshold] = 1
+                labelmapArray[:, prediction < threshold] = 0
+                labelmapArray[:, prediction >= threshold] = 1
                 slicer.util.arrayFromVolumeModified(labelmapVolume)
 
                 # Import label map to segmentation
                 slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolume, segmentationNode, ids)
 
                 # Add segmentation to sequence browser
-                segSequenceNode.SetDataNodeAtValue(segmentationNode, indexValue)
+                segSeqBr.SaveProxyNodesState()
+                # segSequenceNode.SetDataNodeAtValue(segmentationNode, indexValue)
                 slicer.mrmlScene.RemoveNode(labelmapVolume)
 
             # dequeue first frame and enqueue current frame
