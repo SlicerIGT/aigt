@@ -226,8 +226,10 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.applyLogCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.edgeErosionXSpinBox.connect("valueChanged(double)", self.onErodeEdgeX)
         self.ui.edgeErosionYSpinBox.connect("valueChanged(double)", self.onErodeEdgeY)
-        self.ui.segmentNameLineEdit.connect("textChanged(const QString)", self.updateParameterNodeFromGUI)
         self.ui.thresholdSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.segmentationBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.segmentationNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSegmentationNodeChanged)
+        self.ui.segmentComboBox.connect("currentIndexChanged(int)", self.onSegmentChanged)
         self.ui.skipFrameSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
 
         lastNormalizeSetting = slicer.util.settingsValue(self.logic.LAST_NORMALIZE_SETTING, False, converter=slicer.util.toBool)
@@ -427,6 +429,16 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.inputVolumeSelector.setCurrentNode(inputVolume)
         self.ui.inputVolumeSelector.blockSignals(wasBlocked)
 
+        segmentationBrowser = self._parameterNode.GetNodeReference("SegmentationBrowser")
+        wasBlocked = self.ui.segmentationBrowserSelector.blockSignals(True)
+        self.ui.segmentationBrowserSelector.setCurrentNode(segmentationBrowser)
+        self.ui.segmentationBrowserSelector.blockSignals(wasBlocked)
+
+        segmentationNode = self._parameterNode.GetNodeReference("Segmentation")
+        wasBlocked = self.ui.segmentationNodeSelector.blockSignals(True)
+        self.ui.segmentationNodeSelector.setCurrentNode(segmentationNode)
+        self.ui.segmentationNodeSelector.blockSignals(wasBlocked)
+
         numSkipFrames = int(self._parameterNode.GetParameter("NumSkipFrames"))
         self.ui.skipFrameSpinBox.setValue(numSkipFrames)
 
@@ -438,9 +450,6 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
         modelInputSize = self._parameterNode.GetParameter("ModelInputSize")
         self.ui.modelInputSizeSpinbox.setValue(int(modelInputSize) if modelInputSize else 0)
-
-        segmentName = self._parameterNode.GetParameter("SegmentName")
-        self.ui.segmentNameLineEdit.setText(segmentName)
 
         threshold = self._parameterNode.GetParameter("Threshold")
         self.ui.thresholdSpinBox.setValue(int(threshold) if threshold else 0)
@@ -489,13 +498,13 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode.SetParameter("UseAllBrowsers", "true" if self.ui.allBrowsersCheckBox.checked else "false")
         self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputVolumeSelector.currentNodeID)
         self._parameterNode.SetNodeReferenceID("OutputTransform", self.ui.outputTransformSelector.currentNodeID)
+        self._parameterNode.SetNodeReferenceID("SegmentationBrowser", self.ui.segmentationBrowserSelector.currentNodeID)
 
         # Update other parameters
         self._parameterNode.SetParameter("NumSkipFrames", str(self.ui.skipFrameSpinBox.value))
         self._parameterNode.SetParameter("FlipVertical", "true" if self.ui.verticalFlipCheckbox.checked else "false")
         self._parameterNode.SetParameter("ApplyLogTransform", "true" if self.ui.applyLogCheckBox.checked else "false")
         self._parameterNode.SetParameter("ModelInputSize", str(self.ui.modelInputSizeSpinbox.value))
-        self._parameterNode.SetParameter("SegmentName", self.ui.segmentNameLineEdit.text)
         self._parameterNode.SetParameter("Threshold", str(self.ui.thresholdSpinBox.value))
 
         # Update edge erosion parameters
@@ -550,6 +559,23 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onErodeEdgeY(self, value):
         self.logic.erodeCurvilinearMask(self.ui.edgeErosionXSpinBox.value, value)
+
+    def onSegmentationNodeChanged(self, caller=None, event=None):
+        self._parameterNode.SetNodeReferenceID("Segmentation", self.ui.segmentationNodeSelector.currentNodeID)
+        segmentationNode = self._parameterNode.GetNodeReference("Segmentation")
+        if segmentationNode:
+            segmentIds = vtk.vtkStringArray()
+            segmentationNode.GetSegmentation().GetSegmentIDs(segmentIds)
+            for i in range(segmentIds.GetNumberOfValues()):
+                segmentName = segmentationNode.GetSegmentation().GetSegment(segmentIds.GetValue(i)).GetName()
+                self.ui.segmentComboBox.addItem(segmentName)
+    
+    def onSegmentChanged(self, index):
+        segmentationNode = self._parameterNode.GetNodeReference("Segmentation")
+        if segmentationNode:
+            ids = vtk.vtkStringArray()
+            segmentationNode.GetSegmentation().GetSegmentIDs(ids)
+            self._parameterNode.SetParameter("SegmentId", ids.GetValue(index))
     
     def onModelSelectionMethodChanged(self, caller=None, event=None):
         useIndividualModel = self.ui.useIndividualRadioButton.checked
@@ -1005,9 +1031,9 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         # Make new prediction volume to not overwrite existing one
         predictionVolume = parameterNode.GetNodeReference("PredictionVolume")
-        volumeName = self.getUniqueName(predictionVolume, f"{modelBasename}_Prediction")
-        predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", volumeName)
-        # predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Prediction")
+        # volumeName = self.getUniqueName(predictionVolume, f"{modelBasename}_Prediction")
+        # predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", volumeName)
+        predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Prediction")
         predictionVolume.CreateDefaultDisplayNodes()
         parameterNode.SetNodeReferenceID("PredictionVolume", predictionVolume.GetID())
 
@@ -1018,37 +1044,47 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         # Add segmentation node from prediction volume
         if recordAsSegmentation:
-            # Create new segmentation sequence browser with Image_Image, ImageToReference, Segmentation
-            segSeqBr = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", "SegmentationBrowser")
-            inputSequenceSeg = sequencesLogic.AddSynchronizedNode(None, inputVolume, segSeqBr)
-            segSeqBr.SetRecording(inputSequenceSeg, True)
+            segSeqBr = parameterNode.GetNodeReference("SegmentationBrowser")
+            if not segSeqBr:
+                # Create new segmentation sequence browser with Image_Image, ImageToReference, Segmentation
+                segSeqBr = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode", "SegmentationBrowser")
+                parameterNode.SetNodeReferenceID("SegmentationBrowser", segSeqBr.GetID())
+                inputSequenceSeg = sequencesLogic.AddSynchronizedNode(None, inputVolume, segSeqBr)
+                segSeqBr.SetRecording(inputSequenceSeg, True)
 
-            # Add transforms up to ImageToReference to sequence browser
-            refTransformFound = False
-            currentTransform = inputVolume
-            while not refTransformFound:
-                parentNode = currentTransform.GetParentTransformNode()
-                transformSequenceNode = sequencesLogic.AddSynchronizedNode(None, parentNode, segSeqBr)
-                segSeqBr.SetRecording(transformSequenceNode, True)
-                if "ToRef" in parentNode.GetName():
-                    refTransformFound = True
-                else:
-                    currentTransform = parentNode
+                # Add transforms up to ImageToReference to sequence browser
+                refTransformFound = False
+                currentTransform = inputVolume
+                while not refTransformFound:
+                    parentNode = currentTransform.GetParentTransformNode()
+                    transformSequenceNode = sequencesLogic.AddSynchronizedNode(None, parentNode, segSeqBr)
+                    segSeqBr.SetRecording(transformSequenceNode, True)
+                    if "ToRef" in parentNode.GetName():
+                        refTransformFound = True
+                    else:
+                        currentTransform = parentNode
             
+            ids = vtk.vtkStringArray()
             segmentationNode = parameterNode.GetNodeReference("Segmentation")
             if not segmentationNode:
+                # Create new segmentation node
                 segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Segmentation")
                 segmentationNode.CreateDefaultDisplayNodes()
                 segmentationNode.GetDisplayNode().SetVisibility(True)
+                segmentId = segmentationNode.GetSegmentation().AddEmptySegment()
+                ids.InsertNextValue(segmentId)
                 # segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(inputVolume)
-                segmentationNode.GetSegmentation().AddEmptySegment(segmentName)
-                ids = vtk.vtkStringArray()
-                ids.InsertNextValue(segmentName)
                 parameterNode.SetNodeReferenceID("Segmentation", segmentationNode.GetID())
+
+                # Add segmentation node to sequence browser
+                segSequenceNode = sequencesLogic.AddSynchronizedNode(None, segmentationNode, segSeqBr)
+                segSeqBr.SetRecording(segSequenceNode, True)
             
-            # Add segmentation node to sequence browser
-            segSequenceNode = sequencesLogic.AddSynchronizedNode(None, segmentationNode, segSeqBr)
-            segSeqBr.SetRecording(segSequenceNode, True)
+            if segmentationNode.GetSegmentation().GetNumberOfSegments() == 0:
+                segmentId = segmentationNode.GetSegmentation().AddEmptySegment()
+            else:
+                segmentId = parameterNode.GetParameter("SegmentId")
+            ids.InsertNextValue(segmentId)
 
             numSkipFrames = int(parameterNode.GetParameter("NumSkipFrames"))
 
