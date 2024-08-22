@@ -276,6 +276,58 @@
         <property name="checkable">
          <bool>true</bool>
         </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="frame">
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Plain</enum>
+        </property>
+        <layout class="QFormLayout" name="formLayout_4">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_22">
+           <property name="text">
+            <string>Segment name:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="segmentNameLineEdit"/>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_21">
+           <property name="text">
+            <string>Segmentation threshold:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QSpinBox" name="thresholdSpinBox">
+           <property name="maximum">
+            <number>255</number>
+           </property>
+           <property name="value">
+            <number>127</number>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="label_24">
+           <property name="text">
+            <string>Skip frames:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QSpinBox" name="skipFrameSpinBox"/>
+         </item>
+        </layout>
        </widget>
       </item>
       <item>
@@ -666,33 +718,6 @@
         </property>
        </widget>
       </item>
-      <item row="6" column="0">
-       <widget class="QLabel" name="label_21">
-        <property name="text">
-         <string>Segmentation threshold:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="1">
-       <widget class="QSpinBox" name="thresholdSpinBox">
-        <property name="maximum">
-         <number>255</number>
-        </property>
-        <property name="value">
-         <number>127</number>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="0">
-       <widget class="QLabel" name="label_22">
-        <property name="text">
-         <string>Segment name:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="1">
-       <widget class="QLineEdit" name="segmentNameLineEdit"/>
-      </item>
       <item row="4" column="0">
        <widget class="QLabel" name="label_23">
         <property name="text">
@@ -763,8 +788,8 @@
      <y>307</y>
     </hint>
     <hint type="destinationlabel">
-     <x>306</x>
-     <y>86</y>
+     <x>376</x>
+     <y>272</y>
     </hint>
    </hints>
   </connection>
@@ -779,8 +804,8 @@
      <y>306</y>
     </hint>
     <hint type="destinationlabel">
-     <x>213</x>
-     <y>105</y>
+     <x>374</x>
+     <y>184</y>
     </hint>
    </hints>
   </connection>
@@ -795,8 +820,8 @@
      <y>308</y>
     </hint>
     <hint type="destinationlabel">
-     <x>174</x>
-     <y>130</y>
+     <x>294</x>
+     <y>231</y>
     </hint>
    </hints>
   </connection>
@@ -811,8 +836,24 @@
      <y>413</y>
     </hint>
     <hint type="destinationlabel">
-     <x>231</x>
-     <y>284</y>
+     <x>376</x>
+     <y>701</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>recordAsSegmentationButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>frame</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>193</x>
+     <y>333</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>164</x>
+     <y>350</y>
     </hint>
    </hints>
   </connection>

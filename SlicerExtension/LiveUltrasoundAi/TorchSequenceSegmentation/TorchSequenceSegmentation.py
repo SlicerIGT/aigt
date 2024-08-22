@@ -228,6 +228,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.edgeErosionYSpinBox.connect("valueChanged(double)", self.onErodeEdgeY)
         self.ui.segmentNameLineEdit.connect("textChanged(const QString)", self.updateParameterNodeFromGUI)
         self.ui.thresholdSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.skipFrameSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
 
         lastNormalizeSetting = slicer.util.settingsValue(self.logic.LAST_NORMALIZE_SETTING, False, converter=slicer.util.toBool)
         self.ui.normalizeCheckBox.checked = lastNormalizeSetting
@@ -263,6 +264,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.startButton.connect("clicked()", self.onStartButton)
         self.ui.exportButton.connect("clicked()", self.onExportButton)
         self.ui.clearScanConversionButton.connect("clicked()", self.onClearScanConversion)
+        self.ui.recordAsSegmentationButton.checked = False
 
         # Add custom 2D + 3D layout
         customLayout = """
@@ -425,6 +427,9 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.inputVolumeSelector.setCurrentNode(inputVolume)
         self.ui.inputVolumeSelector.blockSignals(wasBlocked)
 
+        numSkipFrames = int(self._parameterNode.GetParameter("NumSkipFrames"))
+        self.ui.skipFrameSpinBox.setValue(numSkipFrames)
+
         flipVertical = self._parameterNode.GetParameter("FlipVertical").lower() == "true"
         self.ui.verticalFlipCheckbox.setChecked(flipVertical)
 
@@ -486,6 +491,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode.SetNodeReferenceID("OutputTransform", self.ui.outputTransformSelector.currentNodeID)
 
         # Update other parameters
+        self._parameterNode.SetParameter("NumSkipFrames", str(self.ui.skipFrameSpinBox.value))
         self._parameterNode.SetParameter("FlipVertical", "true" if self.ui.verticalFlipCheckbox.checked else "false")
         self._parameterNode.SetParameter("ApplyLogTransform", "true" if self.ui.applyLogCheckBox.checked else "false")
         self._parameterNode.SetParameter("ModelInputSize", str(self.ui.modelInputSizeSpinbox.value))
@@ -803,6 +809,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             parameterNode.SetParameter("SegmentName", "Segmentation")
         if not parameterNode.GetParameter("Threshold"):
             parameterNode.SetParameter("Threshold", "127")
+        if not parameterNode.GetParameter("NumSkipFrames"):
+            parameterNode.SetParameter("NumSkipFrames", "0")
     
     def getAllModelPaths(self):
         modelFolder = slicer.util.settingsValue(self.LAST_MODEL_FOLDER_SETTING, "")
@@ -999,6 +1007,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         predictionVolume = parameterNode.GetNodeReference("PredictionVolume")
         volumeName = self.getUniqueName(predictionVolume, f"{modelBasename}_Prediction")
         predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", volumeName)
+        # predictionVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Prediction")
         predictionVolume.CreateDefaultDisplayNodes()
         parameterNode.SetNodeReferenceID("PredictionVolume", predictionVolume.GetID())
 
@@ -1027,18 +1036,21 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                     currentTransform = parentNode
             
             segmentationNode = parameterNode.GetNodeReference("Segmentation")
-            segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Segmentation")
-            segmentationNode.CreateDefaultDisplayNodes()
-            segmentationNode.GetDisplayNode().SetVisibility(True)
-            segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(inputVolume)
-            segmentationNode.GetSegmentation().AddEmptySegment(segmentName)
-            ids = vtk.vtkStringArray()
-            ids.InsertNextValue(segmentName)
-            parameterNode.SetNodeReferenceID("Segmentation", segmentationNode.GetID())
+            if not segmentationNode:
+                segmentationNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", "Segmentation")
+                segmentationNode.CreateDefaultDisplayNodes()
+                segmentationNode.GetDisplayNode().SetVisibility(True)
+                # segmentationNode.SetReferenceImageGeometryParameterFromVolumeNode(inputVolume)
+                segmentationNode.GetSegmentation().AddEmptySegment(segmentName)
+                ids = vtk.vtkStringArray()
+                ids.InsertNextValue(segmentName)
+                parameterNode.SetNodeReferenceID("Segmentation", segmentationNode.GetID())
             
             # Add segmentation node to sequence browser
             segSequenceNode = sequencesLogic.AddSynchronizedNode(None, segmentationNode, segSeqBr)
             segSeqBr.SetRecording(segSequenceNode, True)
+
+            numSkipFrames = int(parameterNode.GetParameter("NumSkipFrames"))
 
         # Place in output transform if it exists
         outputTransform = parameterNode.GetNodeReference("OutputTransform")
@@ -1096,23 +1108,25 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             predictionSequenceNode.SetDataNodeAtValue(predictionVolume, indexValue)
 
             if recordAsSegmentation:
-                # Create temporary label map
-                labelmapVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
-                slicer.modules.volumes.logic().CreateLabelVolumeFromVolume(slicer.mrmlScene, labelmapVolume, predictionVolume)
+                # only record proxy nodes every NumSkipFrames frames
+                if itemIndex % (numSkipFrames + 1) == 0:
+                    # Create temporary label map
+                    labelmapVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLabelMapVolumeNode")
+                    slicer.modules.volumes.logic().CreateLabelVolumeFromVolume(slicer.mrmlScene, labelmapVolume, predictionVolume)
 
-                # Fill label map by thresholding prediction
-                labelmapArray = slicer.util.arrayFromVolume(labelmapVolume)
-                labelmapArray[:, prediction < threshold] = 0
-                labelmapArray[:, prediction >= threshold] = 1
-                slicer.util.arrayFromVolumeModified(labelmapVolume)
+                    # Fill label map by thresholding prediction
+                    labelmapArray = slicer.util.arrayFromVolume(labelmapVolume)
+                    labelmapArray[:, prediction < threshold] = 0
+                    labelmapArray[:, prediction >= threshold] = 1
+                    slicer.util.arrayFromVolumeModified(labelmapVolume)
 
-                # Import label map to segmentation
-                slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolume, segmentationNode, ids)
+                    # Import label map to segmentation
+                    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolume, segmentationNode, ids)
 
-                # Add segmentation to sequence browser
-                segSeqBr.SaveProxyNodesState()
-                # segSequenceNode.SetDataNodeAtValue(segmentationNode, indexValue)
-                slicer.mrmlScene.RemoveNode(labelmapVolume)
+                    # Add segmentation to sequence browser
+                    segSeqBr.SaveProxyNodesState()
+                    # segSequenceNode.SetDataNodeAtValue(segmentationNode, indexValue)
+                    slicer.mrmlScene.RemoveNode(labelmapVolume)
 
             # dequeue first frame and enqueue current frame
             if numPreviousFrames > 0:
