@@ -801,6 +801,9 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
     LAST_SCAN_CONVERSION_PATH_SETTING = "TorchSequenceSegmentation/LastScanConversionPath"
     LAST_OUTPUT_FOLDER_SETTING = "TorchSequenceSegmentation/LastOutputFolder"
 
+    ATTRIBUTE_PREFIX = "SingleSliceSegmentation_"
+    ORIGINAL_IMAGE_INDEX = ATTRIBUTE_PREFIX + "OriginalImageIndex"
+
     LOGARITHMIC_TRANSFORMATION_DECIMALS = 4
 
     def __init__(self):
@@ -1160,7 +1163,9 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                     slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolume, segmentationNode, ids)
 
                     # Add segmentation to sequence browser
+                    segmentationNode.SetAttribute(self.ORIGINAL_IMAGE_INDEX, str(itemIndex))  # set index for TSA module
                     segSeqBr.SaveProxyNodesState()
+                    segmentationNode.SetAttribute(self.ORIGINAL_IMAGE_INDEX, "None")
                     # segSequenceNode.SetDataNodeAtValue(segmentationNode, indexValue)
                     slicer.mrmlScene.RemoveNode(labelmapVolume)
 
