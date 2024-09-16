@@ -969,7 +969,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           self.availableIndexes.append(self.availableImages)
           for i in range(0,len(self.Labels)):
             temp[self.Labels[i]] = [trainSamples[self.Labels[i]][x] for x in trainSamples.index]
-        csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe(temp)])
+        csvDataFrame = pandas.concat([csvDataFrame, pandas.DataFrame(temp)])
 
         '''csvDataFrame = csvDataFrame.append({"Fold": fold,
                                                 "Set": setType,
@@ -998,7 +998,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           self.availableIndexes[j] = self.availableImages
           for i in range(0,len(self.Labels)):
             temp[self.Labels[i]] = [valSamples[self.Labels[i]][x] for x in valSamples.index]
-        csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe(temp)])
+        csvDataFrame = pandas.concat([csvDataFrame, pandas.DataFrame(temp)])
 
 
         '''for row in range(0, len(labelCSV.index)):
@@ -1028,7 +1028,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           temp["FileName"] = [testSamples["FileName"][i] for i in testSamples.index]
           for i in range(0,len(self.Labels)):
             temp[self.Labels[i]] = [testSamples[self.Labels[i]][x] for x in testSamples.index]
-        csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe(temp)])
+        csvDataFrame = pandas.concat([csvDataFrame, pandas.DataFrame(temp)])
         '''for row in range(0, len(labelCSV.index)):
           csvDataFrame = csvDataFrame.append({"Fold": fold,
                                               "Set": setType,
@@ -1068,7 +1068,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           fileID = file["_id"]
           fileName = file["name"]
           if not ".csv" in fileName:
-            csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe({"Fold": [fold],
+            csvDataFrame = pandas.concat([csvDataFrame, pandas.DataFrame({"Fold": [fold],
                                                 "Set": [setType],
                                                 "Girder_URL": [self.girderURL],
                                                 "Collection_Name": [self.collectionName],
@@ -1099,7 +1099,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           fileID = file["_id"]
           fileName = file["name"]
           if not ".csv" in fileName:
-            csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe({"Fold": [fold],
+            csvDataFrame = pandas.concat([csvDataFrame, pandas.DataFrame({"Fold": [fold],
                                                                           "Set": [setType],
                                                                           "Girder_URL": [self.girderURL],
                                                                           "Collection_Name": [self.collectionName],
@@ -1129,7 +1129,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
           fileID = file["_id"]
           fileName = file["name"]
           if not ".csv" in fileName:
-            csvDataFrame = pandas.concat([csvDataFrame, pandas.Dataframe({"Fold": [fold],
+            csvDataFrame = pandas.concat([csvDataFrame, pandas.DataFrame({"Fold": [fold],
                                                                           "Set": [setType],
                                                                           "Girder_URL": [self.girderURL],
                                                                           "Collection_Name": [self.collectionName],
