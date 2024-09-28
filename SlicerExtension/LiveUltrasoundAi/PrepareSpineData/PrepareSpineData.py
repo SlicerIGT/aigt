@@ -142,7 +142,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.ctSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.ultrasoundSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-        self.ui.patientID.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
+        self.ui.patientID.connect("editingFinished()", self.updateParameterNodeFromGUI)
         self.ui.ctToUsSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onCtToUsNodeSelected)
 
         # Buttons
@@ -279,6 +279,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.ctSelector.setCurrentNode(self._parameterNode.GetNodeReference("CTVolume"))
         self.ui.ultrasoundSelector.setCurrentNode(self._parameterNode.GetNodeReference("UltrasoundVolume"))
         self.ui.ctToUsSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM))
+        self.ui.patientID.text = (self._parameterNode.GetParameter(self.logic.PATIENT_ID_PARAMETER))
 
         self.ui.sequenceRange.minimum = 0
         if sequenceNode is not None:
@@ -289,8 +290,7 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             self.ui.sequenceRange.setValues(0, seqMax)
         else:
             self.ui.sequenceRange.maximum = 100
-        self.ui.patientID.text = (self._parameterNode.GetParameter("SequenceRange"))
-
+        
         ctToUsNode = self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM)
         if ctToUsNode is not None:
             if ctToUsNode.GetDisplayNode() is None:
@@ -319,13 +319,22 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return
 
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
-
-        self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
-        self._parameterNode.SetNodeReferenceID("CTVolume", self.ui.ctSelector.currentNodeID)
-        self._parameterNode.SetNodeReferenceID("UltrasoundVolume", self.ui.ultrasoundSelector.currentNodeID)
-        self._parameterNode.SetParameter("SequenceRange", self.ui.patientID.text)
-        self._parameterNode.SetParameter("UltrasoundVolume", self.ui.ultrasoundSelector.currentNodeID)
-
+        
+        if self._parameterNode.GetNodeReference("InputVolume") != self.ui.inputSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
+        
+        if self._parameterNode.GetNodeReference("CTVolume") != self.ui.ctSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID("CTVolume", self.ui.ctSelector.currentNodeID)
+        
+        if self._parameterNode.GetNodeReference("UltrasoundVolume") != self.ui.ultrasoundSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID("UltrasoundVolume", self.ui.ultrasoundSelector.currentNodeID)
+        
+        if self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM) != self.ui.ctToUsSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID(self.logic.CT_TO_US_TRANSFORM, self.ui.ctToUsSelector.currentNodeID)
+        
+        if self._parameterNode.GetParameter(self.logic.PATIENT_ID_PARAMETER) != self.ui.patientID.text:
+            self._parameterNode.SetParameter(self.logic.PATIENT_ID_PARAMETER, self.ui.patientID.text)
+        
         self._parameterNode.EndModify(wasModified)
 
     def onVolReview(self):
@@ -356,7 +365,6 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 ultrasound_name = self.ui.ultrasoundSelector.currentNode().GetName()
                 ct_name = self.ui.ctSelector.currentNode().GetName()
                 self.logic.seqReviewLogic(ultrasound_name, ct_name)
-
 
 
     def onGenerateCrop(self):
@@ -575,12 +583,10 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     def onRemoveUnusedVol(self):
         # Input parameters
-        keepBrowserName = self.ui.ultrasoundSelector.currentNode().GetName()
         CTName = self.ui.ctSelector.currentNode().GetName()
-        sequenceName = self.ui.inputSelector.currentNode().GetName()
-        patientMarkups = "patientUsLandmarks_Ras"
-        inputImageName = "Image_Image"
-        keepVolumeNames = [keepBrowserName, CTName, sequenceName, patientMarkups]
+        keepBrowserName = self.ui.inputSelector.currentNode().GetName()
+        inputImageName = self.ui.ultrasoundSelector.currentNode().GetName()
+        keepVolumeNames = [keepBrowserName+"ReconstructionResults", CTName, inputImageName]
 
         # Delete all volume nodes, except for those that are in the keep list
         print("")
@@ -613,6 +619,7 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
     """
 
     CT_TO_US_TRANSFORM = "CtToUsTransformNode"
+    PATIENT_ID_PARAMETER = "PatientID"
 
 
     def __init__(self):
@@ -625,44 +632,9 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
         """
         Initialize parameter node with default settings.
         """
-        if not parameterNode.GetParameter("Threshold"):
-            parameterNode.SetParameter("Threshold", "100.0")
-        if not parameterNode.GetParameter("Invert"):
-            parameterNode.SetParameter("Invert", "false")
-
-    def process(self, inputVolume, outputVolume, imageThreshold, invert=False, showResult=True):
-        """
-        Run the processing algorithm.
-        Can be used without GUI widget.
-        :param inputVolume: volume to be thresholded
-        :param outputVolume: thresholding result
-        :param imageThreshold: values above/below this threshold will be set to 0
-        :param invert: if True then values above the threshold will be set to 0, otherwise values below are set to 0
-        :param showResult: show output volume in slice viewers
-        """
-
-        if not inputVolume or not outputVolume:
-            raise ValueError("Input or output volume is invalid")
-
-        import time
-        startTime = time.time()
-        logging.info('Processing started')
-
-        # Compute the thresholded output volume using the "Threshold Scalar Volume" CLI module
-        cliParams = {
-            'InputVolume': inputVolume.GetID(),
-            'OutputVolume': outputVolume.GetID(),
-            'ThresholdValue': imageThreshold,
-            'ThresholdType': 'Above' if invert else 'Below'
-        }
-        cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True,
-                                 update_display=showResult)
-        # We don't need the CLI module node anymore, remove it to not clutter the scene with it
-        slicer.mrmlScene.RemoveNode(cliNode)
-
-        stopTime = time.time()
-        logging.info(f'Processing completed in {stopTime - startTime:.2f} seconds')
-
+        if not parameterNode.GetParameter(self.PATIENT_ID_PARAMETER):
+            parameterNode.SetParameter(self.PATIENT_ID_PARAMETER, "")
+        
     def volReviewLogic(self, ultrasoundVolumeName, ctVolumeName):
 
         ultrasoundVolume = slicer.mrmlScene.GetFirstNodeByName(ultrasoundVolumeName)
@@ -798,17 +770,5 @@ class PrepareSpineDataTest(ScriptedLoadableModuleTest):
         # Test the module logic
 
         logic = PrepareSpineDataLogic()
-
-        # Test algorithm with non-inverted threshold
-        logic.process(inputVolume, outputVolume, threshold, True)
-        outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-        self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-        self.assertEqual(outputScalarRange[1], threshold)
-
-        # Test algorithm with inverted threshold
-        logic.process(inputVolume, outputVolume, threshold, False)
-        outputScalarRange = outputVolume.GetImageData().GetScalarRange()
-        self.assertEqual(outputScalarRange[0], inputScalarRange[0])
-        self.assertEqual(outputScalarRange[1], inputScalarRange[1])
 
         self.delayDisplay('Test passed')

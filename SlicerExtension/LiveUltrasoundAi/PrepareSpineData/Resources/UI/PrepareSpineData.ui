@@ -23,7 +23,7 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>Sequence node</string>
+         <string>Sequence browser: </string>
         </property>
        </widget>
       </item>
@@ -45,7 +45,7 @@
       <item row="1" column="0">
        <widget class="QLabel" name="label_2">
         <property name="text">
-         <string>Select name</string>
+         <string>Select name: </string>
         </property>
        </widget>
       </item>
@@ -101,7 +101,7 @@
       <item row="3" column="0">
        <widget class="QLabel" name="label_6">
         <property name="text">
-         <string>Ultrasound volume</string>
+         <string>Ultrasound image: </string>
         </property>
        </widget>
       </item>
