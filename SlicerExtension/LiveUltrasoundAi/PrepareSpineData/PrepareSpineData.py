@@ -139,12 +139,15 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
         # (in the selected parameter node).
         self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        self.ui.nameSelector.connect("currentTextChanged(QString)", self.updateParameterNodeFromGUI)
         self.ui.ctSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.ultrasoundSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-        self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
+        self.ui.ultrasoundVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.patientID.connect("editingFinished()", self.updateParameterNodeFromGUI)
-        self.ui.ctToUsSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onCtToUsNodeSelected)
-
+        self.ui.ctToUsSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+        
+        self.ui.sequenceRange.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
+        
         # Buttons
         self.ui.generateCrop.connect('clicked(bool)', self.onGenerateCrop)
         self.ui.removeHidden.connect('clicked(bool)', self.onRemoveHidden)
@@ -178,14 +181,6 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """
         # Do not react to parameter node changes (GUI wlil be updated when the user enters into the module)
         self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
-
-
-    def onCtToUsNodeSelected(self, ctToUsNode):
-        if ctToUsNode is not None:
-            self._parameterNode.SetNodeReferenceID(self.logic.CT_TO_US_TRANSFORM, ctToUsNode.GetID())
-        else:
-            self._parameterNode.SetNodeReferenceID(self.logic.CT_TO_US_TRANSFORM, "")
-
 
     def onShowInteractorToggled(self, toggled):
         """
@@ -275,12 +270,20 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         sequenceNode = slicer.mrmlScene.GetNodeByID(sequenceNodeID)
 
         # Update node selectors and sliders
-        self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
-        self.ui.ctSelector.setCurrentNode(self._parameterNode.GetNodeReference("CTVolume"))
-        self.ui.ultrasoundSelector.setCurrentNode(self._parameterNode.GetNodeReference("UltrasoundVolume"))
-        self.ui.ctToUsSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM))
+        self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.INPUT_SEQUENCE_BROWSER))
+        self.ui.nameSelector.currentText = (self._parameterNode.GetParameter(self.logic.SCAN_NAME))
+        self.ui.ctSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.CT_VOLUME))
+        self.ui.ultrasoundSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_IMAGE))
+        self.ui.ultrasoundVolumeSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_VOLUME))
         self.ui.patientID.text = (self._parameterNode.GetParameter(self.logic.PATIENT_ID_PARAMETER))
-
+        self.ui.ctToUsSelector.setCurrentNode(self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM))
+        
+        ctVolume = self._parameterNode.GetNodeReference(self.logic.CT_VOLUME)
+        ctToUsNode = self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM)
+        
+        if ctVolume and ctToUsNode:
+            ctVolume.SetAndObserveTransformNodeID(ctToUsNode.GetID())
+        
         self.ui.sequenceRange.minimum = 0
         if sequenceNode is not None:
             # get sequence max
@@ -291,11 +294,9 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         else:
             self.ui.sequenceRange.maximum = 100
         
-        ctToUsNode = self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM)
         if ctToUsNode is not None:
             if ctToUsNode.GetDisplayNode() is None:
                 ctToUsNode.CreateDefaultDisplayNodes()
-
             editorVisible = ctToUsNode.GetDisplayNode().GetEditorVisibility()
             self.ui.showInteractor.enabled = True
             if editorVisible:
@@ -320,39 +321,39 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         wasModified = self._parameterNode.StartModify()  # Modify all properties in a single batch
         
-        if self._parameterNode.GetNodeReference("InputVolume") != self.ui.inputSelector.currentNode():
-            self._parameterNode.SetNodeReferenceID("InputVolume", self.ui.inputSelector.currentNodeID)
+        if self._parameterNode.GetNodeReference(self.logic.INPUT_SEQUENCE_BROWSER) != self.ui.inputSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID(self.logic.INPUT_SEQUENCE_BROWSER, self.ui.inputSelector.currentNodeID)
         
-        if self._parameterNode.GetNodeReference("CTVolume") != self.ui.ctSelector.currentNode():
-            self._parameterNode.SetNodeReferenceID("CTVolume", self.ui.ctSelector.currentNodeID)
+        if self._parameterNode.GetParameter(self.logic.SCAN_NAME) != self.ui.nameSelector.currentText:
+            self._parameterNode.SetParameter(self.logic.SCAN_NAME, self.ui.nameSelector.currentText)
         
-        if self._parameterNode.GetNodeReference("UltrasoundVolume") != self.ui.ultrasoundSelector.currentNode():
-            self._parameterNode.SetNodeReferenceID("UltrasoundVolume", self.ui.ultrasoundSelector.currentNodeID)
+        if self._parameterNode.GetNodeReference(self.logic.CT_VOLUME) != self.ui.ctSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID(self.logic.CT_VOLUME, self.ui.ctSelector.currentNodeID)
         
-        if self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM) != self.ui.ctToUsSelector.currentNode():
-            self._parameterNode.SetNodeReferenceID(self.logic.CT_TO_US_TRANSFORM, self.ui.ctToUsSelector.currentNodeID)
+        if self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_IMAGE) != self.ui.ultrasoundSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID(self.logic.ULTRASOUND_IMAGE, self.ui.ultrasoundSelector.currentNodeID)
+            
+        if self._parameterNode.GetNodeReference(self.logic.ULTRASOUND_VOLUME) != self.ui.ultrasoundVolumeSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID(self.logic.ULTRASOUND_VOLUME, self.ui.ultrasoundVolumeSelector.currentNodeID)
         
         if self._parameterNode.GetParameter(self.logic.PATIENT_ID_PARAMETER) != self.ui.patientID.text:
             self._parameterNode.SetParameter(self.logic.PATIENT_ID_PARAMETER, self.ui.patientID.text)
         
+        if self._parameterNode.GetNodeReference(self.logic.CT_TO_US_TRANSFORM) != self.ui.ctToUsSelector.currentNode():
+            self._parameterNode.SetNodeReferenceID(self.logic.CT_TO_US_TRANSFORM, self.ui.ctToUsSelector.currentNodeID)
+        
         self._parameterNode.EndModify(wasModified)
 
     def onVolReview(self):
-        with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
-            if self.ui.ctSelector.currentNode() and self.ui.ultrasoundSelector.currentNode():
-                ultrasound_name = self.ui.ultrasoundSelector.currentNode().GetName()
-                ct_name = self.ui.ctSelector.currentNode().GetName()
-                # Compute output
-                self.logic.volReviewLogic(ultrasound_name, ct_name)
+        if self.ui.ctSelector.currentNode() and self.ui.ultrasoundSelector.currentNode():
+            self.logic.setupVolumeReview()
 
     def onSeqReview(self):
         # Make sure views are unlinked
-
         sliceCompositeNodes = slicer.util.getNodesByClass("vtkMRMLSliceCompositeNode")
         defaultSliceCompositeNode = slicer.mrmlScene.GetDefaultNodeByClass("vtkMRMLSliceCompositeNode")
         if not defaultSliceCompositeNode:
-            defaultSliceCompositeNode = slicer.mrmlScene.CreateNodeByClass("vtkMRMLSliceCompositeNode")
-            defaultSliceCompositeNode.UnRegister(None)  # CreateNodeByClass is factory method, need to unregister the result
+            defaultSliceCompositeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSliceCompositeNode")
             slicer.mrmlScene.AddDefaultNode(defaultSliceCompositeNode)
         sliceCompositeNodes.append(defaultSliceCompositeNode)
         for sliceCompositeNode in sliceCompositeNodes:
@@ -360,150 +361,144 @@ class PrepareSpineDataWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Setting up volumes for views
 
-        with slicer.util.tryWithErrorDisplay("Failed to set up views for seqeunce review", waitCursor=True):
-            if self.ui.ctSelector.currentNode() and self.ui.ultrasoundSelector.currentNode():
-                ultrasound_name = self.ui.ultrasoundSelector.currentNode().GetName()
-                ct_name = self.ui.ctSelector.currentNode().GetName()
-                self.logic.seqReviewLogic(ultrasound_name, ct_name)
+        if self.ui.ctSelector.currentNode() and self.ui.ultrasoundSelector.currentNode():
+            self.logic.setupSequenceReview()
 
 
     def onGenerateCrop(self):
-        with slicer.util.tryWithErrorDisplay("Failed to compute results.", waitCursor=True):
-            startTimeStamp = self.ui.sequenceRange.minimumValue
-            endTimeStamp = self.ui.sequenceRange.maximumValue
-            originalSequenceBrowser = self.ui.inputSelector.currentNode().GetName()
-            croppedSequenceBrowserName = self.ui.nameSelector.currentText
-            eraseOriginal = False
-            listSynchronizedNodes = ["Image_Image", "ImageToTransd", "TransdToReference"]
+        startTimeStamp = self.ui.sequenceRange.minimumValue
+        endTimeStamp = self.ui.sequenceRange.maximumValue
+        croppedSequenceBrowserName = self.ui.nameSelector.currentText
+        
+        listSynchronizedNodeNames = ["Image_Image", "ImageToTransd", "TransdToReference"]
 
-            originalSequenceBrowser = slicer.mrmlScene.GetFirstNodeByName(originalSequenceBrowser)
-            croppedSequenceBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode")
-            croppedSequenceBrowser.SetName(slicer.mrmlScene.GetUniqueNameByString(croppedSequenceBrowserName))
-            listSequenceNodes = []
-            for aSynchronizedNode in listSynchronizedNodes:
-                sequenceNodeAdded = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode",
-                                                                       "Sequence_" + aSynchronizedNode)
-                listSequenceNodes.append(sequenceNodeAdded)
+        originalSequenceBrowser = self._parameterNode.GetNodeReference(self.logic.INPUT_SEQUENCE_BROWSER)
+        croppedSequenceBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode")
+        croppedSequenceBrowser.SetName(slicer.mrmlScene.GetUniqueNameByString(croppedSequenceBrowserName))
+        listSequenceNodes = []
+        for aSynchronizedNodeName in listSynchronizedNodeNames:
+            sequenceNodeAdded = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode",
+                                                                    "Sequence_" + aSynchronizedNodeName)
+            listSequenceNodes.append(sequenceNodeAdded)
 
-            sequenceBrowserLogic = slicer.modules.sequences.logic()
-            for aSequenceNode, aSynchronizedNode in zip(listSequenceNodes, listSynchronizedNodes):
-                croppedSequenceBrowser.AddSynchronizedSequenceNodeID(aSequenceNode.GetID())
-                sequenceBrowserLogic.AddSynchronizedNode(aSequenceNode,
-                                                         slicer.mrmlScene.GetFirstNodeByName(aSynchronizedNode),
-                                                         croppedSequenceBrowser)
-                croppedSequenceBrowser.SetRecording(aSequenceNode, True)
+        sequenceBrowserLogic = slicer.modules.sequences.logic()
+        for aSequenceNode, aSynchronizedNodeName in zip(listSequenceNodes, listSynchronizedNodeNames):
+            croppedSequenceBrowser.AddSynchronizedSequenceNodeID(aSequenceNode.GetID())
+            sequenceBrowserLogic.AddSynchronizedNode(aSequenceNode,
+                                                     slicer.mrmlScene.GetFirstNodeByName(aSynchronizedNodeName),
+                                                     croppedSequenceBrowser)
+            croppedSequenceBrowser.SetRecording(aSequenceNode, True)
 
-            startIndex = 0
-            endIndex = 0
-            for itemIndex in range(1, originalSequenceBrowser.GetNumberOfItems()):
-                previousTimeSeconds = float(originalSequenceBrowser.GetFormattedIndexValue(itemIndex - 1))
-                currentTimeSeconds = float(originalSequenceBrowser.GetFormattedIndexValue(itemIndex))
-                if (startTimeStamp >= previousTimeSeconds) and (
-                        startTimeStamp <= currentTimeSeconds):
-                    startIndex = itemIndex
-                if (endTimeStamp >= previousTimeSeconds) and (endTimeStamp <= currentTimeSeconds):
-                    endIndex = itemIndex
+        startIndex = 0
+        endIndex = 0
+        for itemIndex in range(1, originalSequenceBrowser.GetNumberOfItems()):
+            previousTimeSeconds = float(originalSequenceBrowser.GetFormattedIndexValue(itemIndex - 1))
+            currentTimeSeconds = float(originalSequenceBrowser.GetFormattedIndexValue(itemIndex))
+            if (startTimeStamp >= previousTimeSeconds) and (startTimeStamp <= currentTimeSeconds):
+                startIndex = itemIndex
+            if (endTimeStamp >= previousTimeSeconds) and (endTimeStamp <= currentTimeSeconds):
+                endIndex = itemIndex
 
-            # Set up frame skipping when tracking info is missing (identity transforms)
+        # Set up frame skipping when tracking info is missing (identity transforms)
 
-            transdToReferenceMatrix = vtk.vtkMatrix4x4()
-            skipInvalid = self.ui.skipInvalidTrackingCheckBox.checked
-            transdToReference = slicer.mrmlScene.GetFirstNodeByName("TransdToReference")
-            if transdToReference is None and skipInvalid == True:
-                logging.warning("Could not find TransdToReference transform. Not skipping any frames.")
-                skipInvalid = False
+        transdToReferenceMatrix = vtk.vtkMatrix4x4()
+        skipInvalid = self.ui.skipInvalidTrackingCheckBox.checked
+        transdToReference = slicer.mrmlScene.GetFirstNodeByName("TransdToReference")
+        if transdToReference is None and skipInvalid == True:
+            logging.warning("Could not find TransdToReference transform. Not skipping any frames.")
+            skipInvalid = False
 
-            # Copy desired sequences, within a period of time, to the new sequence browser
-            progressbar = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(), windowTitle='Cropping sequence...',
-                                                           autoClose=True)
-            progress = 0
-            steps = endIndex - startIndex + 1
-            progressbar.setCancelButton(None)
+        # Copy desired sequences, within a period of time, to the new sequence browser
+        progressbar = slicer.util.createProgressDialog(parent=slicer.util.mainWindow(), windowTitle='Cropping sequence...',
+                                                        autoClose=True)
+        progress = 0
+        steps = endIndex - startIndex + 1
+        progressbar.setCancelButton(None)
 
-            slicer.app.pauseRender()  # Speeds up iteration by blocking rendering in 2D and 3D views
+        slicer.app.pauseRender()  # Speeds up iteration by blocking rendering in 2D and 3D views
 
-            for itemIndex in range(startIndex, endIndex + 1):
-                originalSequenceBrowser.SetSelectedItemNumber(itemIndex)
-                if skipInvalid:
-                    transdToReference.GetMatrixTransformToParent(transdToReferenceMatrix)
-                    p_Ref = transdToReferenceMatrix.MultiplyFloatPoint([0.0, 0.0, 0.0, 1.0])
-                    if p_Ref[0] != 0.0 or p_Ref[1] != 0.0 or p_Ref[2] != 0.0:
-                        croppedSequenceBrowser.SaveProxyNodesState()
-                    else:
-                        print(f"Skipping item: {itemIndex}")
-                else:
+        for itemIndex in range(startIndex, endIndex + 1):
+            originalSequenceBrowser.SetSelectedItemNumber(itemIndex)
+            if skipInvalid:
+                transdToReference.GetMatrixTransformToParent(transdToReferenceMatrix)
+                p_Ref = transdToReferenceMatrix.MultiplyFloatPoint([0.0, 0.0, 0.0, 1.0])
+                if p_Ref[0] != 0.0 or p_Ref[1] != 0.0 or p_Ref[2] != 0.0:
                     croppedSequenceBrowser.SaveProxyNodesState()
-                progressStep = 100 / steps
-                # Update progress value
-                progressbar.setValue(progress)
-                progress += progressStep
-                slicer.app.processEvents()
+                else:
+                    print(f"Skipping item: {itemIndex}")
+            else:
+                croppedSequenceBrowser.SaveProxyNodesState()
+            progressStep = 100 / steps
+            # Update progress value
+            progressbar.setValue(progress)
+            progress += progressStep
+            slicer.app.processEvents()
 
-            slicer.app.resumeRender()  # Resume rendering in all views
+        slicer.app.resumeRender()  # Resume rendering in all views
 
-            # Erase the original sequence browser and its linked sequence nodes, if required
+        # Erase the original sequence browser and its linked sequence nodes, if required
 
-            if self.ui.deleteOrig.isChecked():
-                sequenceNodesToDelete = vtk.vtkCollection()
-                originalSequenceBrowser.GetSynchronizedSequenceNodes(sequenceNodesToDelete, True)
-                slicer.mrmlScene.RemoveNode(originalSequenceBrowser)
-                for aSequence in sequenceNodesToDelete:
-                    slicer.mrmlScene.RemoveNode(aSequence)
+        if self.ui.deleteOrig.isChecked():
+            sequenceNodesToDelete = vtk.vtkCollection()
+            originalSequenceBrowser.GetSynchronizedSequenceNodes(sequenceNodesToDelete, True)
+            slicer.mrmlScene.RemoveNode(originalSequenceBrowser)
+            for aSequence in sequenceNodesToDelete:
+                slicer.mrmlScene.RemoveNode(aSequence)
 
-            # Check if there is already a segmentation and erase it
-            segmentationName = "Segmentation"
-            segmentationNode = slicer.mrmlScene.GetFirstNodeByName(segmentationName)
-            if segmentationNode:
-                slicer.mrmlScene.RemoveNode(segmentationNode)
+        # Check if there is already a segmentation and erase it
+        segmentationName = "Segmentation"
+        segmentationNode = slicer.mrmlScene.GetFirstNodeByName(segmentationName)
+        if segmentationNode:
+            slicer.mrmlScene.RemoveNode(segmentationNode)
 
-            # Move Image_image out of any transform
-            imageImageNode = slicer.mrmlScene.GetFirstNodeByName("Image_Image")
-            imageImageNode.SetAndObserveTransformNodeID("")
+        # Move Image_image out of any transform
+        imageImageNode = slicer.mrmlScene.GetFirstNodeByName("Image_Image")
+        imageImageNode.SetAndObserveTransformNodeID("")
 
-            # Add segmentation node
-            segmentationNodeNew = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", segmentationName)
-            segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Transverse process",
-                                                                  (0.501961, 0.682353, 0.501961))
-            segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Spinous process", (0.945098, 0.839216, 0.568627))
-            segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Other bone", (0.694118, 0.478431, 0.396078))
+        # Add segmentation node
+        segmentationNodeNew = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSegmentationNode", segmentationName)
+        segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Transverse process",
+                                                                (0.501961, 0.682353, 0.501961))
+        segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Spinous process", (0.945098, 0.839216, 0.568627))
+        segmentationNodeNew.GetSegmentation().AddEmptySegment("", "Other bone", (0.694118, 0.478431, 0.396078))
 
-            # Move Image_image and Segmentation back to ImageToTransd transform
-            imageToTransdTransform = slicer.mrmlScene.GetFirstNodeByName("ImageToTransd")
-            imageImageNode.SetAndObserveTransformNodeID(imageToTransdTransform.GetID())
-            segmentationNodeNew.SetAndObserveTransformNodeID(imageToTransdTransform.GetID())
+        # Move Image_image and Segmentation back to ImageToTransd transform
+        imageToTransdTransform = slicer.mrmlScene.GetFirstNodeByName("ImageToTransd")
+        imageImageNode.SetAndObserveTransformNodeID(imageToTransdTransform.GetID())
+        segmentationNodeNew.SetAndObserveTransformNodeID(imageToTransdTransform.GetID())
 
-            # Remove SegmentationBrowser, if it exists
-            segmentationBrowserName = "SegmentationBrowser"
-            segmentationBrowser = slicer.mrmlScene.GetFirstNodeByName(segmentationBrowserName)
-            if segmentationBrowser:
-                sequenceNodesToDelete = vtk.vtkCollection()
-                segmentationBrowser.GetSynchronizedSequenceNodes(sequenceNodesToDelete, True)
-                slicer.mrmlScene.RemoveNode(segmentationBrowser)
-                for aSequence in sequenceNodesToDelete:
-                    slicer.mrmlScene.RemoveNode(aSequence)
+        # Remove SegmentationBrowser, if it exists
+        segmentationBrowserName = "SegmentationBrowser"
+        segmentationBrowser = slicer.mrmlScene.GetFirstNodeByName(segmentationBrowserName)
+        if segmentationBrowser:
+            sequenceNodesToDelete = vtk.vtkCollection()
+            segmentationBrowser.GetSynchronizedSequenceNodes(sequenceNodesToDelete, True)
+            slicer.mrmlScene.RemoveNode(segmentationBrowser)
+            for aSequence in sequenceNodesToDelete:
+                slicer.mrmlScene.RemoveNode(aSequence)
 
-            # Create new sequence browser and desired sequences
-            listSynchronizedNodesSegmentation = ["Image_Image", "ImageToTransd", "TransdToReference", segmentationName]
-            segmentationBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode",
-                                                                     segmentationBrowserName)
-            listSequenceNodesSegmentation = []
-            for aSynchronizedNode in listSynchronizedNodesSegmentation:
-                sequenceNodeAdded = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode",
-                                                                       "Sequence_" + aSynchronizedNode)
-                listSequenceNodesSegmentation.append(sequenceNodeAdded)
+        # Create new sequence browser and desired sequences
+        listSynchronizedNodesSegmentation = ["Image_Image", "ImageToTransd", "TransdToReference", segmentationName]
+        segmentationBrowser = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceBrowserNode",
+                                                                    segmentationBrowserName)
+        listSequenceNodesSegmentation = []
+        for aSynchronizedNodeName in listSynchronizedNodesSegmentation:
+            sequenceNodeAdded = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLSequenceNode",
+                                                                    "Sequence_" + aSynchronizedNodeName)
+            listSequenceNodesSegmentation.append(sequenceNodeAdded)
 
-            # Link desired sequences to new sequence browser and link each desired sequence to its corresponding
-            # synchronized node
-            sequenceBrowserLogic = slicer.modules.sequences.logic()
-            for aSequenceNode, aSynchronizedNode in zip(listSequenceNodesSegmentation,
-                                                        listSynchronizedNodesSegmentation):
-                segmentationBrowser.AddSynchronizedSequenceNodeID(aSequenceNode.GetID())
-                sequenceBrowserLogic.AddSynchronizedNode(aSequenceNode,
-                                                         slicer.mrmlScene.GetFirstNodeByName(aSynchronizedNode),
-                                                         segmentationBrowser)
-                segmentationBrowser.SetRecording(aSequenceNode, True)
+        # Link desired sequences to new sequence browser and link each desired sequence to its corresponding
+        # synchronized node
+        sequenceBrowserLogic = slicer.modules.sequences.logic()
+        for aSequenceNode, aSynchronizedNodeName in zip(listSequenceNodesSegmentation,
+                                                    listSynchronizedNodesSegmentation):
+            segmentationBrowser.AddSynchronizedSequenceNodeID(aSequenceNode.GetID())
+            sequenceBrowserLogic.AddSynchronizedNode(aSequenceNode,
+                                                        slicer.mrmlScene.GetFirstNodeByName(aSynchronizedNodeName),
+                                                        segmentationBrowser)
+            segmentationBrowser.SetRecording(aSequenceNode, True)
 
-            progressbar.close()
+        progressbar.close()
 
     def onRemoveHidden(self):
         keepModelNodes = [""] # Not used for now.
@@ -618,9 +613,14 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    CT_TO_US_TRANSFORM = "CtToUsTransformNode"
+    INPUT_SEQUENCE_BROWSER = "InputSequenceBrowser"
+    SCAN_NAME = "ScanName"
+    CT_VOLUME = "CTVolume"
+    ULTRASOUND_IMAGE = "UltrasoundImage"
+    ULTRASOUND_VOLUME = "UltrasoundVolume"
     PATIENT_ID_PARAMETER = "PatientID"
-
+    CT_TO_US_TRANSFORM = "CtToUsTransformNode"
+    
 
     def __init__(self):
         """
@@ -635,12 +635,11 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
         if not parameterNode.GetParameter(self.PATIENT_ID_PARAMETER):
             parameterNode.SetParameter(self.PATIENT_ID_PARAMETER, "")
         
-    def volReviewLogic(self, ultrasoundVolumeName, ctVolumeName):
-
-        ultrasoundVolume = slicer.mrmlScene.GetFirstNodeByName(ultrasoundVolumeName)
-        ctVolume = slicer.mrmlScene.GetFirstNodeByName(ctVolumeName)
-        imageNode = slicer.mrmlScene.GetFirstNodeByName("Image_Image")
-
+    def setupVolumeReview(self):
+        parameterNode = self.getParameterNode()
+        ultrasoundVolume = parameterNode.GetNodeReference(self.ULTRASOUND_VOLUME)
+        ctVolume = parameterNode.GetNodeReference(self.CT_VOLUME)
+        
         layoutManager = slicer.app.layoutManager()
 
         redNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed')
@@ -676,11 +675,11 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
 
         layoutManager.sliceWidget("Red").sliceController().setSliceVisible(False)
 
-    def seqReviewLogic(self, ultrasoundVolumeName, ctVolumeName):
-
-        ultrasoundVolume = slicer.mrmlScene.GetFirstNodeByName(ultrasoundVolumeName)
-        ctVolume = slicer.mrmlScene.GetFirstNodeByName(ctVolumeName)
-        imageNode = slicer.mrmlScene.GetFirstNodeByName("Image_Image")
+    def setupSequenceReview(self):
+        parameterNode = self.getParameterNode()
+        ultrasoundVolume = parameterNode.GetNodeReference(self.ULTRASOUND_VOLUME)
+        ctVolume = parameterNode.GetNodeReference(self.CT_VOLUME)
+        ultrasoundImage = parameterNode.GetNodeReference(self.ULTRASOUND_IMAGE)
 
         layoutManager = slicer.app.layoutManager()
 
@@ -691,6 +690,7 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
 
         cyan = slicer.mrmlScene.GetNodeByID("vtkMRMLColorTableNodeCyan")
         ultrasoundVolume.GetDisplayNode().SetAndObserveColorNodeID(cyan.GetID())
+        ultrasoundImage.GetDisplayNode().SetAndObserveColorNodeID(cyan.GetID())
         yellow = slicer.mrmlScene.GetNodeByID("vtkMRMLColorTableNodeYellow")
         ctVolume.GetDisplayNode().SetAndObserveColorNodeID(yellow.GetID())
 
@@ -700,14 +700,18 @@ class PrepareSpineDataLogic(ScriptedLoadableModuleLogic):
         sliceNames = ["Red", "Green", "Yellow"]
 
         for i, sliceNode in enumerate(sliceNodeList):
-            resliceLogic.SetDriverForSlice(imageNode.GetID(), sliceNode)  # No driver
+            resliceLogic.SetDriverForSlice(ultrasoundImage.GetID(), sliceNode)
             resliceLogic.SetModeForSlice(6, sliceNode)  # Axial, coronal, sagittal
             resliceLogic.SetFlipForSlice(True, sliceNode)
+            
             sliceLogic = layoutManager.sliceWidget(sliceNames[i]).sliceLogic()
-            sliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(imageNode.GetID())
+            sliceLogic.GetSliceCompositeNode().SetBackgroundVolumeID(ultrasoundImage.GetID())
             sliceLogic.GetSliceCompositeNode().SetForegroundVolumeID(ctVolume.GetID())
             sliceLogic.GetSliceCompositeNode().SetForegroundOpacity(0.5)
-            sliceLogic.FitSliceToAll()
+            
+            sliceController = slicer.app.layoutManager().sliceWidget(sliceNames[i]).sliceController()
+            sliceController.fitSliceToBackground()
+            
             if i == 0:
                 sliceLogic.GetSliceCompositeNode().SetForegroundOpacity(0.3)
             elif i == 1:
