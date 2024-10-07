@@ -54,25 +54,30 @@ for seg_filename in os.listdir(input_dir):
         data_files.append(os.path.join(input_dir, seg_filename))
 
 print(f"Found {len(data_files)} segmentation files.")
+logging.info(f"Found {len(data_files)} segmentation files.")
 
 # Read config file
 
 if args.config_file is None:
     args.config_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "prepare_data_config.yaml")
 
+logging.info(f"Reading configuration from {args.config_file}")
+
 with open(args.config_file, "r") as f:
     config = yaml.safe_load(f)
 
 with open(os.path.join(args.output_dir, "prepare_data_config.yaml"), "w") as f:
     yaml.dump(config, f)
+    
+logging.info(f"Saved copy of configuration to {os.path.join(args.output_dir, 'prepare_data_config.yaml')}")
 
 # Read input files, process and filter data, and save new data to disk
 
 for seg_filename in tqdm(data_files):
-    data = np.load(seg_filename)
-    if isinstance(data, np.lib.npyio.NpzFile):
-        data = data[data.files[0]]
-    logging.info(f"Loaded {seg_filename} with shape {data.shape} and value range {np.min(data)} - {np.max(data)}")
+    segmentation_data = np.load(seg_filename)
+    if isinstance(segmentation_data, np.lib.npyio.NpzFile):
+        segmentation_data = segmentation_data[segmentation_data.files[0]]
+    logging.info(f"Loaded {seg_filename} with shape {segmentation_data.shape} and value range {np.min(segmentation_data)} - {np.max(segmentation_data)}")
 
     # Filter data. Keep only segmented ultrasound images with indices stored in _indices.npy file.
 
@@ -83,27 +88,33 @@ for seg_filename in tqdm(data_files):
             indices = indices[indices.files[0]]
         logging.info(f"Loaded {indices_filename} with shape {indices.shape}")
         logging.info(f"First 10 indices: {indices[:10]}")
-        data = data[indices, :, :, :]
-        logging.info(f"Filtered data to shape {data.shape}")
+        segmentation_data = segmentation_data[indices, :, :, :]
+        logging.info(f"Filtered data to shape {segmentation_data.shape}")
     else:
         logging.info("No indices file found. Keeping all data.")
 
     # Resize segmentation images channel by channel.
 
-    resized_data = np.zeros((data.shape[0], config["image_size"], config["image_size"], data.shape[3]), dtype=data.dtype)
-    for i in range(data.shape[0]):
-        for j in range(data.shape[3]):
-            resized_data[i, :, :, j] = cv2.resize(data[i, :, :, j], (config["image_size"], config["image_size"]))
+    resized_data = np.zeros((segmentation_data.shape[0], config["image_size"], config["image_size"], segmentation_data.shape[3]), dtype=segmentation_data.dtype)
+    for i in range(segmentation_data.shape[0]):
+        for j in range(segmentation_data.shape[3]):
+            resized_data[i, :, :, j] = cv2.resize(segmentation_data[i, :, :, j], (config["image_size"], config["image_size"]))
 
     # Save resized images to disk
-
+    
     output_filename = os.path.join(args.output_dir, os.path.basename(seg_filename))
+    
+    if resized_data.size > 0:
+        logging.info(f"Saving segmentation to {output_filename} with shape {resized_data.shape} and value range {np.min(resized_data)} - {np.max(resized_data)}")
+    else:
+        logging.error(f"Skipping {output_filename} becuase array is empty. (shape {resized_data.shape})")
+        logging.debug(f"Data type of {output_filename}: {resized_data.dtype}")
+        continue
+    
     if seg_filename.endswith(".npz"):
         output_filename = output_filename.replace(".npz", ".npy")
     np.save(output_filename, resized_data)
-    logging.info(f"Saved {output_filename} with shape {resized_data.shape} and value range {np.min(resized_data)} - {np.max(resized_data)}")
-    logging.info(f"Data type of {output_filename}: {resized_data.dtype}")
-
+    
     # Find matching ultrasound file and read ultrasound data
 
     ultrasound_filename = seg_filename.replace("_segmentation", "_ultrasound")
@@ -123,9 +134,9 @@ for seg_filename in tqdm(data_files):
         logging.error("num_preceding_ultrasound_frames must be >= 0")
         sys.exit(1)
 
-    resized_data = np.zeros((data.shape[0], config["image_size"], config["image_size"], config["num_preceding_ultrasound_frames"] + 1), dtype=ultrasound_data.dtype)
+    resized_data = np.zeros((segmentation_data.shape[0], config["image_size"], config["image_size"], config["num_preceding_ultrasound_frames"] + 1), dtype=ultrasound_data.dtype)
     
-    for i in range(data.shape[0]):
+    for i in range(segmentation_data.shape[0]):
         for j in range(config["num_preceding_ultrasound_frames"] + 1):
             if i - j >= 0:
                 resized_data[i, :, :, j] = cv2.resize(ultrasound_data[indices[i - j], :, :, 0], (config["image_size"], config["image_size"]))
