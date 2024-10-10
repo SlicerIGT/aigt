@@ -224,8 +224,6 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.verticalFlipCheckbox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.modelInputSizeSpinbox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
         self.ui.applyLogCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-        self.ui.edgeErosionXSpinBox.connect("valueChanged(double)", self.onErodeEdgeX)
-        self.ui.edgeErosionYSpinBox.connect("valueChanged(double)", self.onErodeEdgeY)
         self.ui.thresholdSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
         self.ui.segmentationBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.segmentationNodeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSegmentationNodeChanged)
@@ -235,7 +233,14 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         lastNormalizeSetting = slicer.util.settingsValue(self.logic.LAST_NORMALIZE_SETTING, False, converter=slicer.util.toBool)
         self.ui.normalizeCheckBox.checked = lastNormalizeSetting
         self.ui.normalizeCheckBox.connect("toggled(bool)", self.updateSettingsFromGUI)
-
+        
+        lastErosionX = slicer.util.settingsValue(self.logic.LAST_EROSION_X_SETTING, 0)
+        lastErosionY = slicer.util.settingsValue(self.logic.LAST_EROSION_Y_SETTING, 0)
+        self.ui.edgeErosionXSpinBox.value = float(lastErosionX)
+        self.ui.edgeErosionYSpinBox.value = float(lastErosionY)
+        self.ui.edgeErosionXSpinBox.connect("valueChanged(double)", self.onErodeEdgeX)
+        self.ui.edgeErosionYSpinBox.connect("valueChanged(double)", self.onErodeEdgeY)
+        
         # File paths
         # Set last model folder in UI
         lastModelFolder = slicer.util.settingsValue(self.logic.LAST_MODEL_FOLDER_SETTING, "")
@@ -507,9 +512,6 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode.SetParameter("ModelInputSize", str(self.ui.modelInputSizeSpinbox.value))
         self._parameterNode.SetParameter("Threshold", str(self.ui.thresholdSpinBox.value))
 
-        # Update edge erosion parameters
-        self.logic.erodeCurvilinearMask(self.ui.edgeErosionXSpinBox.value, self.ui.edgeErosionYSpinBox.value)
-
         # Update individual model to use
         if self.ui.useIndividualRadioButton.checked:
             if self.ui.modelComboBox.count > 0:
@@ -555,10 +557,13 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.logic.loadScanConversion(None)
 
     def onErodeEdgeX(self, value):
-        self.logic.erodeCurvilinearMask(value, self.ui.edgeErosionYSpinBox.value)
+        #todo: Save the erosion value to application settings
+        settings = qt.QSettings()
+        settings.setValue(self.logic.LAST_EROSION_X_SETTING, str(value))
 
     def onErodeEdgeY(self, value):
-        self.logic.erodeCurvilinearMask(self.ui.edgeErosionXSpinBox.value, value)
+        settings = qt.QSettings()
+        settings.setValue(self.logic.LAST_EROSION_Y_SETTING, str(value))
 
     def onSegmentationNodeChanged(self, caller=None, event=None):
         self._parameterNode.SetNodeReferenceID("Segmentation", self.ui.segmentationNodeSelector.currentNodeID)
@@ -657,7 +662,11 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.outputTransformSelector.setEnabled(False)
         self.ui.scanConversionPathLineEdit.setEnabled(False)
         self.ui.clearScanConversionButton.setEnabled(False)
-
+        
+        if self.ui.edgeErosionXSpinBox.value > 0 or self.ui.edgeErosionYSpinBox.value > 0:
+            self.logic.loadScanConversion(self.ui.scanConversionPathLineEdit.currentPath)
+            self.logic.erodeCurvilinearMask(self.ui.edgeErosionXSpinBox.value, self.ui.edgeErosionYSpinBox.value)
+        
         # Overall progress bar
         numModels = len(self.logic.getModelsToUse())
         progressMax = numModels * 2 if self.ui.reconstructButton.checked else numModels
@@ -800,6 +809,8 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
     LAST_MODEL_FOLDER_SETTING = "TorchSequenceSegmentation/LastModelFolder"
     LAST_SCAN_CONVERSION_PATH_SETTING = "TorchSequenceSegmentation/LastScanConversionPath"
     LAST_OUTPUT_FOLDER_SETTING = "TorchSequenceSegmentation/LastOutputFolder"
+    LAST_EROSION_X_SETTING = "TorchSequenceSegmentation/LastErosionX"
+    LAST_EROSION_Y_SETTING = "TorchSequenceSegmentation/LastErosionY"
 
     ATTRIBUTE_PREFIX = "SingleSliceSegmentation_"
     ORIGINAL_IMAGE_INDEX = ATTRIBUTE_PREFIX + "OriginalImageIndex"
