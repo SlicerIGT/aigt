@@ -45,7 +45,7 @@ from monai.metrics import (
 )
 
 from lr_scheduler import PolyLRScheduler, LinearWarmupWrapper
-from UltrasoundDataset import UltrasoundDataset
+from datasets import UltrasoundDataset
 
 
 # Parse command line arguments

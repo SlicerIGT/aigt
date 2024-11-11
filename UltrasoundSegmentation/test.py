@@ -14,7 +14,7 @@ from PIL import Image
 from monai.metrics import DiceMetric, MeanIoU, ConfusionMatrixMetric
 from monai.data import DataLoader
 from monai.transforms import Compose, AsDiscrete
-from UltrasoundDataset import UltrasoundDataset
+from datasets import UltrasoundDataset
 
 from metrics import FuzzyMetrics
 

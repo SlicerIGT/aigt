@@ -42,7 +42,7 @@ from monai.metrics import (
     ConfusionMatrixMetric
 )
 
-from UltrasoundDataset import UltrasoundDataset, ZScoreNormalized
+from datasets import UltrasoundDataset, ZScoreNormalized
 
 
 # Default nnUNet hyperparameters

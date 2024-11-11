@@ -39,7 +39,7 @@ from nnUNet.nnunetv2.experiment_planning.plan_and_preprocess_api import (
 from nnUNet.nnunetv2.run.run_training import get_trainer_from_args
 from nnUNet.nnunetv2.utilities.helpers import dummy_context
 
-from UltrasoundDataset import UltrasoundDataset
+from datasets import UltrasoundDataset
 
 
 # Parse command line arguments
