@@ -1,8 +1,9 @@
 import os
 import glob
-from monai.config import KeysCollection
+import vtk
 import numpy as np
 from torch.utils.data import Dataset
+from monai.config import KeysCollection
 from monai.transforms.transform import MapTransform
 
 
@@ -156,9 +157,35 @@ class SlidingWindowTrackedUSDataset(Dataset):
             for i in range(self.window_size)
         ])  # shape: (window_size, 4, 4) - not affected by transforms
 
-        # compute relative transform between each matrix with the middle frame
+        # define 3 points based on max x, y, and z coordinates of set of transforms
+        from_points = vtk.vtkPoints()
+        from_points.SetNumberOfPoints(3)
+        from_points.SetPoint(0, np.max(transform[:, 0, 3]), 0, 0)
+        from_points.SetPoint(1, 0, np.max(transform[:, 1, 3]), 0)
+        from_points.SetPoint(2, 0, 0, np.max(transform[:, 2, 3]))
+
+        to_points = vtk.vtkPoints()
+        to_points.SetNumberOfPoints(3)
+        to_points.SetPoint(0, 1, 0, 0)
+        to_points.SetPoint(1, 0, 1, 0)
+        to_points.SetPoint(2, 0, 0, 1)
+
+        # fiducial registration
+        landmarkTransform = vtk.vtkLandmarkTransform()
+        landmarkTransform.SetSourceLandmarks(from_points)
+        landmarkTransform.SetTargetLandmarks(to_points)
+        landmarkTransform.SetModeToSimilarity()
+        landmarkTransform.Update()
+
+        # get the transformation matrix
+        matrix = vtk.vtkMatrix4x4()
+        landmarkTransform.GetMatrix(matrix)
+        img_to_norm = np.eye(4)
+        matrix.DeepCopy(img_to_norm.ravel(), matrix)
+
+        # apply transformation to each frame
         for i in range(self.window_size):
-            transform[i] = np.linalg.inv(transform[self.window_size // 2]) @ transform[i]
+            transform[i] = img_to_norm @ transform[i]
         
         data = {
             "image": image,
@@ -184,11 +211,11 @@ class ZScoreNormalized(MapTransform):
     
 
 if __name__ == "__main__":
-    # dataset = SlidingWindowTrackedUSDataset("/mnt/c/Users/chris/Data/Spine/2024_SpineSeg/04_Slices_train")
-    dataset = UltrasoundDataset("/mnt/c/Users/chris/Data/Breast/AIGTData/train")
-    print(dataset.images[:5])
-    print(dataset.segmentations[:5])
-    print(dataset.tfm_matrices[:5])
+    dataset = SlidingWindowTrackedUSDataset("/mnt/e/PerkLab/Data/Spine/SpineTrainingData/04_Slices_train")
+    # dataset = UltrasoundDataset("/mnt/c/Users/chris/Data/Breast/AIGTData/train")
+    # print(dataset.images[:5])
+    # print(dataset.segmentations[:5])
+    # print(dataset.tfm_matrices[:5])
     print(len(dataset))
     print(dataset[0]["image"].shape)
     print(dataset[0]["label"].shape)
