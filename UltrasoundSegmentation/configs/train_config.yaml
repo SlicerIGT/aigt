@@ -5,8 +5,8 @@ loss_function: DiceCE
 lambda_ce: 0.5  # 0.0 for dice, 1.0 for cross-entropy/focal
 class_weights: [0.25, 0.75]  # must be same length as out_channels
 image_size: 128
-in_channels: !!int 1
-out_channels: !!int 2
+in_channels: &in_c !!int 1
+out_channels: &out_c !!int 2
 num_epochs: !!int 100
 batch_size: !!int 64
 learning_rate: !!float 0.0001
@@ -47,4 +47,7 @@ model:
   model_path: /path/to/model.py
   name: CustomNet  # name of the model class
   use_tracking: false  # use tracking data in model input
-  params:  # model-specific parameters
+  params:  
+    in_channels: *in_c
+    out_channels: *out_c
+    # other model-specific parameters here

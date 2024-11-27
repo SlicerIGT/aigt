@@ -302,8 +302,6 @@ def main(args):
         # instantiate model
         model_params = model_cfg.get("params", {})
         model = getattr(module, model_cfg["name"])(
-            in_channels=config["in_channels"],
-            out_channels=config["out_channels"],
             **(model_params if model_params else {})
         )
         use_tracking = model_cfg["use_tracking"]
