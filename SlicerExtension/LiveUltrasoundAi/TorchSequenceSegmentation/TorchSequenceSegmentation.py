@@ -223,6 +223,8 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.verticalFlipCheckbox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.modelInputSizeSpinbox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.previousFramesSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.modelUseTrackingCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.applyLogCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.thresholdSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
         self.ui.segmentationBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
@@ -230,7 +232,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.segmentComboBox.connect("currentIndexChanged(int)", self.onSegmentChanged)
         self.ui.skipFrameSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
 
-        lastNormalizeSetting = slicer.util.settingsValue(self.logic.LAST_NORMALIZE_SETTING, False, converter=slicer.util.toBool)
+        lastNormalizeSetting = slicer.util.settingsValue(self.logic.LAST_NORMALIZE_SETTING, True, converter=slicer.util.toBool)
         self.ui.normalizeCheckBox.checked = lastNormalizeSetting
         self.ui.normalizeCheckBox.connect("toggled(bool)", self.updateSettingsFromGUI)
         
@@ -268,7 +270,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.useIndividualRadioButton.connect("toggled(bool)", self.onModelSelectionMethodChanged)
         self.ui.useAllRadioButton.connect("toggled(bool)", self.onModelSelectionMethodChanged)
         self.ui.inputResliceButton.connect("clicked()", self.onResliceVolume)
-        self.ui.startButton.connect("clicked()", self.onStartButton)
+        self.ui.startButton.connect("toggled(bool)", self.onStartButton)
         self.ui.exportButton.connect("clicked()", self.onExportButton)
         self.ui.clearScanConversionButton.connect("clicked()", self.onClearScanConversion)
         self.ui.recordAsSegmentationButton.checked = False
@@ -456,6 +458,12 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         modelInputSize = self._parameterNode.GetParameter("ModelInputSize")
         self.ui.modelInputSizeSpinbox.setValue(int(modelInputSize) if modelInputSize else 0)
 
+        modelInChannels = self._parameterNode.GetParameter("ModelInChannels")
+        self.ui.previousFramesSpinBox.setValue(int(modelInChannels) - 1 if modelInChannels else 0)
+
+        modelUseTracking = self._parameterNode.GetParameter("ModelUseTracking").lower() == "true"
+        self.ui.modelUseTrackingCheckBox.setChecked(modelUseTracking)
+
         threshold = self._parameterNode.GetParameter("Threshold")
         self.ui.thresholdSpinBox.setValue(int(threshold) if threshold else 0)
 
@@ -475,13 +483,11 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.startButton.setEnabled(sequenceBrowser
                                             and inputVolume
                                             and volumeReconstructionNode
-                                            and self.logic.getModelsToUse()
-                                            and not self.logic.isProcessing)
+                                            and self.logic.getModelsToUse())
         else:
             self.ui.startButton.setEnabled(sequenceBrowser
                                             and inputVolume
-                                            and self.logic.getModelsToUse()
-                                            and not self.logic.isProcessing)
+                                            and self.logic.getModelsToUse())
 
         # All the GUI updates are done
         self._updatingGUIFromParameterNode = False
@@ -510,6 +516,8 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode.SetParameter("FlipVertical", "true" if self.ui.verticalFlipCheckbox.checked else "false")
         self._parameterNode.SetParameter("ApplyLogTransform", "true" if self.ui.applyLogCheckBox.checked else "false")
         self._parameterNode.SetParameter("ModelInputSize", str(self.ui.modelInputSizeSpinbox.value))
+        self._parameterNode.SetParameter("ModelInChannels", str(self.ui.previousFramesSpinBox.value + 1))
+        self._parameterNode.SetParameter("ModelUseTracking", "true" if self.ui.modelUseTrackingCheckBox.checked else "false")
         self._parameterNode.SetParameter("Threshold", str(self.ui.thresholdSpinBox.value))
 
         # Update individual model to use
@@ -642,103 +650,123 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         reconstructionNode = self._parameterNode.GetNodeReference("VolumeReconstruction")
         reconstructionNode.RemoveObservers(reconstructionNode.VolumeAddedToReconstruction)
     
-    def onStartButton(self):
-        # Update GUI
-        self.ui.startButton.setEnabled(False)
-        self.ui.useIndividualRadioButton.setEnabled(False)
-        self.ui.useAllRadioButton.setEnabled(False)
-        self.ui.modelDirectoryButton.setEnabled(False)
-        if self.ui.useIndividualRadioButton.checked:
-            self.ui.modelComboBox.setEnabled(False)
-        self.ui.sequenceBrowserSelector.setEnabled(False)
-        self.ui.inputVolumeSelector.setEnabled(False)
-        self.ui.volumeReconstructionSelector.setEnabled(False)
-        self.ui.reconstructButton.setEnabled(False)
-        self.ui.recordAsSegmentationButton.setEnabled(False)
+    def onStartButton(self, toggled):
+        if toggled:
+            # Update GUI
+            self.ui.startButton.setText("Stop")
+            self.ui.useIndividualRadioButton.setEnabled(False)
+            self.ui.useAllRadioButton.setEnabled(False)
+            self.ui.modelDirectoryButton.setEnabled(False)
+            if self.ui.useIndividualRadioButton.checked:
+                self.ui.modelComboBox.setEnabled(False)
+            self.ui.sequenceBrowserSelector.setEnabled(False)
+            self.ui.inputVolumeSelector.setEnabled(False)
+            self.ui.volumeReconstructionSelector.setEnabled(False)
+            self.ui.reconstructButton.setEnabled(False)
+            self.ui.recordAsSegmentationButton.setEnabled(False)
 
-        self.ui.verticalFlipCheckbox.setEnabled(False)
-        self.ui.applyLogCheckBox.setEnabled(False)
-        self.ui.modelInputSizeSpinbox.setEnabled(False)
-        self.ui.outputTransformSelector.setEnabled(False)
-        self.ui.scanConversionPathLineEdit.setEnabled(False)
-        self.ui.clearScanConversionButton.setEnabled(False)
-        
-        if self.ui.edgeErosionXSpinBox.value > 0 or self.ui.edgeErosionYSpinBox.value > 0:
-            self.logic.loadScanConversion(self.ui.scanConversionPathLineEdit.currentPath)
-            self.logic.erodeCurvilinearMask(self.ui.edgeErosionXSpinBox.value, self.ui.edgeErosionYSpinBox.value)
-        
-        # Overall progress bar
-        numModels = len(self.logic.getModelsToUse())
-        progressMax = numModels * 2 if self.ui.reconstructButton.checked else numModels
-        self.ui.overallProgressBar.setMaximum(progressMax)
-        slicer.app.processEvents()
+            self.ui.verticalFlipCheckbox.setEnabled(False)
+            self.ui.applyLogCheckBox.setEnabled(False)
+            self.ui.modelUseTrackingCheckBox.setEnabled(False)
+            self.ui.modelInputSizeSpinbox.setEnabled(False)
+            self.ui.previousFramesSpinBox.setEnabled(False)
+            self.ui.outputTransformSelector.setEnabled(False)
+            self.ui.scanConversionPathLineEdit.setEnabled(False)
+            self.ui.clearScanConversionButton.setEnabled(False)
+            
+            if self.ui.edgeErosionXSpinBox.value > 0 or self.ui.edgeErosionYSpinBox.value > 0:
+                self.logic.loadScanConversion(self.ui.scanConversionPathLineEdit.currentPath)
+                self.logic.erodeCurvilinearMask(self.ui.edgeErosionXSpinBox.value, self.ui.edgeErosionYSpinBox.value)
+            
+            # Overall progress bar
+            numModels = len(self.logic.getModelsToUse())
+            progressMax = numModels * 2 if self.ui.reconstructButton.checked else numModels
+            self.ui.overallProgressBar.setMaximum(progressMax)
+            slicer.app.processEvents()
 
-        for model in self.logic.getModelsToUse():
-            modelName = model.split(os.sep)[-2]
-            self.ui.overallStatusLabel.setText(f"Using {modelName}...")
-            try:
-                # Generate predictions/reconstructions for each model
-                self.logic.loadModel(model)
+            qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
+            for model in self.logic.getModelsToUse():
+                modelName = model.split(os.sep)[-2]
+                self.ui.overallStatusLabel.setText(f"Using {modelName}...")
+                try:
+                    # Generate predictions/reconstructions for each model
+                    self.logic.loadModel(model)
 
-                # Generate predictions and add to sequence browser
-                self.ui.taskStatusLabel.setText("Generating predictions...")
+                    # Generate predictions and add to sequence browser
+                    self.ui.taskStatusLabel.setText("Generating predictions...")
 
-                # Create a list of sequence browsers nodes that need to be processed
-                if self.logic.getUseAllBrowsers():
-                    sequenceBrowserNodes = slicer.util.getNodesByClass("vtkMRMLSequenceBrowserNode")
-                else:
-                    sequenceBrowserNodes = [self._parameterNode.GetNodeReference("SequenceBrowser")]
+                    # Create a list of sequence browsers nodes that need to be processed
+                    if self.logic.getUseAllBrowsers():
+                        sequenceBrowserNodes = slicer.util.getNodesByClass("vtkMRMLSequenceBrowserNode")
+                    else:
+                        sequenceBrowserNodes = [self._parameterNode.GetNodeReference("SequenceBrowser")]
 
-                #todo: Iterate over sequence browser nodes
-                for sequenceBrowser in sequenceBrowserNodes:
-                    self._parameterNode.SetNodeReferenceID("SequenceBrowser", sequenceBrowser.GetID())
-                    numFrames = sequenceBrowser.GetMasterSequenceNode().GetNumberOfDataNodes() - 1
-                    self.setPredictionProgressBar(numFrames)
-                    self.logic.segmentSequence(model, self.ui.recordAsSegmentationButton.checked, int(self.ui.previousFramesSpinBox.value))
-                    self.resetTaskProgressBar()
-
-                    if self.ui.reconstructButton.checked:
-                        self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
-                        self.ui.taskStatusLabel.setText("Reconstructing volume...")
-                        self.setReconstructionProgressBar()
-                        slicer.app.processEvents()
-                        self.logic.runVolumeReconstruction(model)
+                    #todo: Iterate over sequence browser nodes
+                    for sequenceBrowser in sequenceBrowserNodes:
+                        self._parameterNode.SetNodeReferenceID("SequenceBrowser", sequenceBrowser.GetID())
+                        numFrames = sequenceBrowser.GetMasterSequenceNode().GetNumberOfDataNodes() - 1
+                        self.setPredictionProgressBar(numFrames)
+                        self.logic.segmentSequence(
+                            model, 
+                            self.ui.recordAsSegmentationButton.checked, 
+                            int(self.ui.previousFramesSpinBox.value),
+                            self.ui.modelUseTrackingCheckBox.checked
+                        )
                         self.resetTaskProgressBar()
 
-                    self.ui.overallStatusLabel.setText(f"Done using {modelName}")
-            except Exception as e:
-                logging.info(f"Skipping {modelName} due to error: {e}")
-                logging.info(traceback.format_exc())
-                continue
-            finally:
-                # Update overall progress bar
-                self.resetTaskProgressBar()
-                self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
-                slicer.app.processEvents()
+                        if self.ui.reconstructButton.checked:
+                            self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
+                            self.ui.taskStatusLabel.setText("Reconstructing volume...")
+                            self.setReconstructionProgressBar()
+                            slicer.app.processEvents()
+                            self.logic.runVolumeReconstruction(model)
+                            self.resetTaskProgressBar()
 
-        # Restore UI
-        self.ui.startButton.setEnabled(True)
-        self.ui.overallProgressBar.setValue(0)
-        self.ui.taskStatusLabel.setText("Ready")
-        self.ui.overallStatusLabel.setText("Ready")
-        self.ui.useIndividualRadioButton.setEnabled(True)
-        self.ui.useAllRadioButton.setEnabled(True)
-        self.ui.modelDirectoryButton.setEnabled(True)
-        if self.ui.useIndividualRadioButton.checked:
-            self.ui.modelComboBox.setEnabled(True)
-        self.ui.sequenceBrowserSelector.setEnabled(True)
-        self.ui.inputVolumeSelector.setEnabled(True)
-        self.ui.volumeReconstructionSelector.setEnabled(True)
-        self.ui.reconstructButton.setEnabled(True)
-        self.ui.recordAsSegmentationButton.setEnabled(True)
+                        self.ui.overallStatusLabel.setText(f"Done using {modelName}")
+                except RuntimeError as rte:
+                    logging.error(rte)
+                    self.logic.isProcessing = False
+                    self.logic.stopProcess = False
+                    break
+                except Exception as e:
+                    logging.info(f"Skipping {modelName} due to error: {e}")
+                    logging.info(traceback.format_exc())
+                    self.logic.isProcessing = False
+                    continue
+                finally:
+                    # Update overall progress bar
+                    self.resetTaskProgressBar()
+                    self.ui.overallProgressBar.setValue(self.ui.overallProgressBar.value + 1)
+                    slicer.app.processEvents()
 
-        self.ui.verticalFlipCheckbox.setEnabled(True)
-        self.ui.applyLogCheckBox.setEnabled(True)
-        self.ui.modelInputSizeSpinbox.setEnabled(True)
-        self.ui.outputTransformSelector.setEnabled(True)
-        self.ui.scanConversionPathLineEdit.setEnabled(True)
-        self.ui.clearScanConversionButton.setEnabled(True)
-        slicer.app.processEvents()
+            # Restore UI
+            qt.QApplication.restoreOverrideCursor()
+            self.ui.startButton.setText("Start")
+            self.ui.overallProgressBar.setValue(0)
+            self.ui.taskStatusLabel.setText("Ready")
+            self.ui.overallStatusLabel.setText("Ready")
+            self.ui.useIndividualRadioButton.setEnabled(True)
+            self.ui.useAllRadioButton.setEnabled(True)
+            self.ui.modelDirectoryButton.setEnabled(True)
+            if self.ui.useIndividualRadioButton.checked:
+                self.ui.modelComboBox.setEnabled(True)
+            self.ui.sequenceBrowserSelector.setEnabled(True)
+            self.ui.inputVolumeSelector.setEnabled(True)
+            self.ui.volumeReconstructionSelector.setEnabled(True)
+            self.ui.reconstructButton.setEnabled(True)
+            self.ui.recordAsSegmentationButton.setEnabled(True)
+
+            self.ui.verticalFlipCheckbox.setEnabled(True)
+            self.ui.applyLogCheckBox.setEnabled(True)
+            self.ui.modelUseTrackingCheckBox.setEnabled(True)
+            self.ui.modelInputSizeSpinbox.setEnabled(True)
+            self.ui.previousFramesSpinBox.setEnabled(True)
+            self.ui.outputTransformSelector.setEnabled(True)
+            self.ui.scanConversionPathLineEdit.setEnabled(True)
+            self.ui.clearScanConversionButton.setEnabled(True)
+            slicer.app.processEvents()
+        else:
+            self.logic.stopProcess = True
     
     def onExportButton(self):
         predictionNodes = slicer.util.getNodes("*_Prediction")
@@ -825,6 +853,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         self.progressCallback = None
         self.isProcessing = False
+        self.stopProcess = False
         self.model = None
         self.scanConversionDict = None
         self.cart_x = None
@@ -874,6 +903,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         """
         Load PyTorch model from file.
         """
+        parameterNode = self.getParameterNode()
         if not modelPath:
             logging.warning("Model path is empty")
             self.model = None
@@ -885,11 +915,19 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             self.model = torch.jit.load(modelPath, _extra_files=extra_files).to(DEVICE)
             self.model.eval()
 
-            # Check for model input size metadata
             if extra_files["config.json"]:
+                # Check for model input size metadata
                 config = json.loads(extra_files["config.json"])
                 inputSize = config["shape"][-1]
-                self.getParameterNode().SetParameter("ModelInputSize", str(inputSize))
+                parameterNode.SetParameter("ModelInputSize", str(inputSize))  # assume square
+                parameterNode.SetParameter("ModelInChannels", str(config["shape"][1]))
+
+                # check if model uses tracking data in input
+                try:
+                    parameterNode.SetParameter("ModelUseTracking", str(config["use_tracking"]))
+                except KeyError:  # for backward compatibility
+                    if parameterNode.GetParameter("ModelUseTracking") != "true":  # do not overwrite if checkbox checked
+                        parameterNode.SetParameter("ModelUseTracking", "false")
     
     def loadScanConversion(self, scanConversionPath):
         if not scanConversionPath:
@@ -985,7 +1023,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         parameterNode = self.getParameterNode()
         return parameterNode.GetParameter("UseAllBrowsers") == "true"
 
-    def getPrediction(self, inputArray):
+    def getPrediction(self, inputArray, inputTfmArray=None):
         if not self.model:
             return
 
@@ -1006,10 +1044,15 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         # Convert to tensor and add batch dimension
         inputTensor = torch.from_numpy(inputArray).unsqueeze(0).float().to(DEVICE)
+        if inputTfmArray is not None:
+            inputTfmTensor = torch.from_numpy(inputTfmArray).unsqueeze(0).float().to(DEVICE)
 
         # Run prediction
         with torch.inference_mode():
-            output = self.model(inputTensor)
+            if inputTfmArray is not None:
+                output = self.model(inputTensor, inputTfmTensor)
+            else:
+                output = self.model(inputTensor)
         
         if isinstance(output, list):
             output = output[0]
@@ -1031,13 +1074,15 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         return outputArray
     
-    def segmentSequence(self, modelName, recordAsSegmentation=False, numPreviousFrames=0):
+    def segmentSequence(self, modelName, recordAsSegmentation=False, numPreviousFrames=0, useTracking=False):
         self.isProcessing = True
 
         parameterNode = self.getParameterNode()
         sequencesLogic = slicer.modules.sequences.logic()
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
         inputVolume = parameterNode.GetNodeReference("InputVolume")
+        if useTracking:
+            inputTransform = inputVolume.GetParentTransformNode()
         inputSequence = sequenceBrowser.GetSequenceNode(inputVolume)
         modelBasename = modelName.split(os.sep)[-2]
         segmentName = parameterNode.GetParameter("SegmentName")
@@ -1117,10 +1162,15 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         # create list for previous frame buffer
         if numPreviousFrames > 0:
             frameBufferList = []
+            if useTracking:
+                transformBufferList = []
 
         selectedItemNumber = sequenceBrowser.GetSelectedItemNumber()  # for restoring later
         # Iterate through each item in sequence browser and add generated segmentation
         for itemIndex in range(sequenceBrowser.GetNumberOfItems()):
+            if self.stopProcess:
+                raise RuntimeError("Processing stopped by user")
+            
             # Get current frame
             image = inputSequence.GetNthDataNode(itemIndex)
             imageArray = slicer.util.arrayFromVolume(image)
@@ -1133,18 +1183,65 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             else:
                 inputSize = int(parameterNode.GetParameter("ModelInputSize"))
                 imageArray = cv2.resize(imageArray[0, :, :], (inputSize, inputSize))  # default is bilinear
+            
+            # get tracking data if needed
+            if useTracking:
+                tfmArray = slicer.util.arrayFromTransformMatrix(inputTransform, toWorld=True)
 
             # create numpy array from frame buffer
             if numPreviousFrames > 0:
                 if itemIndex == 0:
                     frameBufferList.append(imageArray)
                     frameBufferList *= numPreviousFrames + 1
+                    if useTracking:
+                        transformBufferList.append(tfmArray)
+                        transformBufferList *= numPreviousFrames + 1
                 inputArray = np.stack(frameBufferList, axis=0)
+                if useTracking:
+                    inputTfmArray = np.stack(transformBufferList, axis=0)
             else:
                 inputArray = np.expand_dims(imageArray, axis=0)
-                            
-            # Generate segmentation
-            prediction = self.getPrediction(inputArray)
+                if useTracking:
+                    inputTfmArray = np.expand_dims(tfmArray, axis=0)
+            
+            # normalize tracking data if needed
+            if useTracking:
+                # define 3 points based on max x, y, and z coordinates of set of transforms
+                fromPoints = vtk.vtkPoints()
+                fromPoints.SetNumberOfPoints(3)
+                fromPoints.SetPoint(0, np.max(inputTfmArray[:, 0, 3]), 0, 0)
+                fromPoints.SetPoint(1, 0, np.max(inputTfmArray[:, 1, 3]), 0)
+                fromPoints.SetPoint(2, 0, 0, np.max(inputTfmArray[:, 2, 3]))
+
+                # set target points to unit vectors
+                toPoints = vtk.vtkPoints()
+                toPoints.SetNumberOfPoints(3)
+                toPoints.SetPoint(0, 1, 0, 0)
+                toPoints.SetPoint(1, 0, 1, 0)
+                toPoints.SetPoint(2, 0, 0, 1)
+
+                # fiducial registration
+                landmarkTransform = vtk.vtkLandmarkTransform()
+                landmarkTransform.SetSourceLandmarks(fromPoints)
+                landmarkTransform.SetTargetLandmarks(toPoints)
+                landmarkTransform.SetModeToSimilarity()
+                landmarkTransform.Update()
+
+                # get the transformation matrix
+                matrix = vtk.vtkMatrix4x4()
+                landmarkTransform.GetMatrix(matrix)
+                imgToNorm = np.eye(4)
+                matrix.DeepCopy(imgToNorm.ravel(), matrix)
+
+                # apply transformation to each frame
+                for i in range(numPreviousFrames + 1):
+                    inputTfmArray[i] = imgToNorm @ inputTfmArray[i]
+
+                # get segmentation
+                prediction = self.getPrediction(inputArray, inputTfmArray)
+            else:
+                # Generate segmentation
+                prediction = self.getPrediction(inputArray)
 
             # Scan convert or resize
             if self.scanConversionDict:
@@ -1182,8 +1279,11 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
             # dequeue first frame and enqueue current frame
             if numPreviousFrames > 0:
-                frameBufferList.pop()
-                frameBufferList.insert(0, imageArray)
+                frameBufferList.pop(0)
+                frameBufferList.append(imageArray)
+                if useTracking:
+                    transformBufferList.pop(0)
+                    transformBufferList.append(tfmArray)
 
             if self.progressCallback:
                 self.progressCallback(itemIndex)

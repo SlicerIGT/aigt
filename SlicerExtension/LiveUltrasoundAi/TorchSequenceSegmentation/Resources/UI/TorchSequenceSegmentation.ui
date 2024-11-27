@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>395</width>
-    <height>988</height>
+    <height>1091</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -407,6 +407,9 @@
         <property name="text">
          <string>Start</string>
         </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
        </widget>
       </item>
      </layout>
@@ -638,14 +641,14 @@
         </property>
        </widget>
       </item>
-      <item row="7" column="0">
+      <item row="8" column="0">
        <widget class="QLabel" name="label_8">
         <property name="text">
          <string>Model input size:</string>
         </property>
        </widget>
       </item>
-      <item row="7" column="1">
+      <item row="8" column="1">
        <widget class="QSpinBox" name="modelInputSizeSpinbox">
         <property name="toolTip">
          <string>Size of the input image of the loaded model. Assumes a square image. Only modify if shape metadata is not included in the TorchScript model.</string>
@@ -655,14 +658,14 @@
         </property>
        </widget>
       </item>
-      <item row="8" column="0">
+      <item row="9" column="0">
        <widget class="QLabel" name="label_11">
         <property name="text">
          <string>Output transform:</string>
         </property>
        </widget>
       </item>
-      <item row="8" column="1">
+      <item row="9" column="1">
        <widget class="qMRMLNodeComboBox" name="outputTransformSelector">
         <property name="enabled">
          <bool>true</bool>
@@ -689,14 +692,14 @@
         </property>
        </widget>
       </item>
-      <item row="10" column="0">
+      <item row="11" column="0">
        <widget class="QLabel" name="label_4">
         <property name="text">
          <string>Scan conversion config:</string>
         </property>
        </widget>
       </item>
-      <item row="10" column="1">
+      <item row="11" column="1">
        <layout class="QHBoxLayout" name="horizontalLayout_5">
         <item>
          <widget class="ctkPathLineEdit" name="scanConversionPathLineEdit">
@@ -731,14 +734,14 @@
         </item>
        </layout>
       </item>
-      <item row="11" column="0">
+      <item row="12" column="0">
        <widget class="QLabel" name="label_19">
         <property name="text">
          <string>Mask edge erosion x (%):</string>
         </property>
        </widget>
       </item>
-      <item row="11" column="1">
+      <item row="12" column="1">
        <widget class="QDoubleSpinBox" name="edgeErosionXSpinBox">
         <property name="decimals">
          <number>2</number>
@@ -751,14 +754,14 @@
         </property>
        </widget>
       </item>
-      <item row="12" column="0">
+      <item row="13" column="0">
        <widget class="QLabel" name="label_20">
         <property name="text">
          <string>Mask edge erosion y (%):</string>
         </property>
        </widget>
       </item>
-      <item row="12" column="1">
+      <item row="13" column="1">
        <widget class="QDoubleSpinBox" name="edgeErosionYSpinBox">
         <property name="maximum">
          <double>1.000000000000000</double>
@@ -768,15 +771,32 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0">
+      <item row="5" column="0">
        <widget class="QLabel" name="label_23">
         <property name="text">
          <string>Number of previous frames:</string>
         </property>
        </widget>
       </item>
-      <item row="4" column="1">
+      <item row="5" column="1">
        <widget class="QSpinBox" name="previousFramesSpinBox"/>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="label_27">
+        <property name="text">
+         <string>Use tracking in model:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QCheckBox" name="modelUseTrackingCheckBox">
+        <property name="toolTip">
+         <string>Include ImageToWorld transformation in model input.</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
