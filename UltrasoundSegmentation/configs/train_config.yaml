@@ -1,0 +1,50 @@
+# Example config file for train.py
+
+network: unet  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet, custom
+loss_function: DiceCE
+lambda_ce: 0.5  # 0.0 for dice, 1.0 for cross-entropy/focal
+class_weights: [0.25, 0.75]  # must be same length as out_channels
+image_size: 128
+in_channels: !!int 1
+out_channels: !!int 2
+num_epochs: !!int 100
+batch_size: !!int 64
+learning_rate: !!float 0.0001
+learning_rate_decay_factor: !!float 0.5
+learning_rate_decay_frequency: !!int 10
+weight_decay: 0.01
+shuffle: !!bool true  # true/false
+seed: !!int 42
+
+dataset:
+  train_folder: /path/to/train
+  val_folder: /path/to/val
+  name: UltrasoundDataset
+  params:  # dataset-specific parameters here
+
+transforms:
+  general:
+    # Basic transforms, do not modify
+    - name: Transposed
+      params:
+        keys: [image, label]
+        indices: [2, 0, 1]
+    - name: ToTensord
+    - name: EnsureTyped
+      params:
+        keys: [image, label]
+        dtype: float32
+    
+    # Add additional transforms here
+    - name: Resized
+      params:
+        keys: [image, label]
+        spatial_size: [128, 128]
+  train:
+
+# Custom model parameters
+model:
+  model_path: /path/to/model.py
+  name: CustomNet  # name of the model class
+  use_tracking: false  # use tracking data in model input
+  params:  # model-specific parameters

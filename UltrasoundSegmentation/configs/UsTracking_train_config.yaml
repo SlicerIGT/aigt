@@ -1,0 +1,87 @@
+# Example config file for train.py
+
+network: custom  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet
+loss_function: dicefocal
+lambda_ce: 0.9  # 0.0 for dice, 1.0 for cross-entropy/focal
+class_weights: [0.2, 0.8]  # must be same length as out_channels
+image_size: 128
+in_channels: &in_c !!int 5
+out_channels: !!int 2
+num_epochs: !!int 1
+batch_size: !!int 128
+learning_rate: !!float 0.001
+learning_rate_decay_factor: !!float 0.5
+learning_rate_decay_frequency: !!int 10
+weight_decay: 0.01
+shuffle: !!bool true  # true/false
+seed: !!int 42
+
+dataset:
+  train_folder: /mnt/c/Users/chris/Data/Spine/2024_SpineSeg/04_Slices_train
+  val_folder: /mnt/c/Users/chris/Data/Spine/2024_SpineSeg/04_Slices_val
+  name: SlidingWindowTrackedUSDataset
+  params:
+    window_size: *in_c
+    gt_idx: 2  # 0: first, 1: middle, 2: last
+
+transforms:
+  general:
+    # Basic transforms, do not modify
+    - name: Transposed
+      params:
+        keys: [image, label]
+        indices: [2, 0, 1]
+    - name: ToTensord
+    - name: EnsureTyped
+      params:
+        keys: [image, label]
+        dtype: float32
+    # Add additional transforms here
+    - name: Resized
+      params:
+        keys: [image, label]
+        spatial_size: [128, 128]
+    - name: ScaleIntensityRanged
+      params:
+        keys: [image]
+        a_min: 0.0       # minimum intensity in the original image
+        a_max: 255.0     # maximum intensity in the original image for 8-bit images
+        b_min: 0.0       # scaled minimum intensity
+        b_max: 1.0       # scaled maximum intensity
+        clip: true
+  train:
+  - name: RandGaussianNoised
+    params:
+      keys: [image]
+      prob: 0.5
+      mean: 0.0
+      std: 0.1
+  - name: RandFlipd
+    params:
+      keys: [image, label]
+      prob: 0.5
+      spatial_axis: [1]
+  - name: RandAdjustContrastd
+    params:
+      keys: [image]
+      prob: 0.5
+      gamma: [0.5, 2]
+  - name: RandAffined
+    params:
+      keys: [image, label]
+      prob: 0.5
+      spatial_size: [128, 128]
+      rotate_range: 0.5
+      shear_range: [0.2, 0.2]
+      translate_range: [20, 20]
+      scale_range: [0.2, 0.2]
+      mode: bilinear
+      padding_mode: zeros
+      cache_grid: true
+
+# Custom model parameters
+model:
+  model_path: /home/chrisyeung/spine-segmentation/train_dualnet.py
+  name: DualEncoderUNet
+  use_tracking: true
+  params:

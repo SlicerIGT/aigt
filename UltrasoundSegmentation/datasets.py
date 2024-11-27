@@ -80,6 +80,10 @@ class UltrasoundDataset(Dataset):
     
 
 class SlidingWindowTrackedUSDataset(Dataset):
+    GT_CHANNEL_IDX_FIRST = 0
+    GT_CHANNEL_IDX_MIDDLE = 1
+    GT_CHANNEL_IDX_LAST = 2
+
     def __init__(
             self, 
             root_folder, 
@@ -87,7 +91,8 @@ class SlidingWindowTrackedUSDataset(Dataset):
             gts_dir="labels", 
             tfms_dir="transforms", 
             transform=None,
-            window_size=4
+            window_size=5,
+            gt_idx=GT_CHANNEL_IDX_LAST
         ):
         # get names of subfolders in imgs_dir, gts_dir, and tfms_dir
         image_scans = [
@@ -126,6 +131,16 @@ class SlidingWindowTrackedUSDataset(Dataset):
         self.transform = transform
         self.window_size = window_size
 
+        # which frame to use for ground truth
+        if gt_idx == self.GT_CHANNEL_IDX_FIRST:
+            self.gt_idx = 0
+        elif gt_idx == self.GT_CHANNEL_IDX_MIDDLE:
+            self.gt_idx = window_size // 2
+        elif gt_idx == self.GT_CHANNEL_IDX_LAST:
+            self.gt_idx = window_size - 1
+        else:
+            raise ValueError("Invalid gt_idx value. Must be 0, 1, or 2.")
+
     def __len__(self):
         return sum(
             len(self.data[scan]["image"]) - self.window_size + 1
@@ -146,8 +161,8 @@ class SlidingWindowTrackedUSDataset(Dataset):
             for i in range(self.window_size)
         ], axis=-1)  # shape: (H, W, window_size)
 
-        # only take middle frame as label
-        label = np.load(self.data[scan]["label"][index + self.window_size // 2])
+        # get gt image
+        label = np.load(self.data[scan]["label"][index + self.gt_idx])
         # If segmentation_data is 2D, add a channel dimension as last dimension
         if len(label.shape) == 2:
             label = np.expand_dims(label, axis=-1)
