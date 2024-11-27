@@ -6,9 +6,7 @@ For experiment tracking:
     - Log training metrics to Weights & Biases
 """
 
-import matplotlib
-matplotlib.use("Agg")  # Use non-interactive backend to avoid error when running on server without GUI
-
+import importlib
 import argparse
 import logging
 import monai
@@ -22,6 +20,8 @@ import yaml
 import wandb
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("Agg")  # Use non-interactive backend to avoid error when running on server without GUI
 
 from tqdm import tqdm
 from time import perf_counter
@@ -44,17 +44,15 @@ from monai.metrics import (
     ConfusionMatrixMetric
 )
 
+import datasets
 from lr_scheduler import PolyLRScheduler, LinearWarmupWrapper
-from datasets import UltrasoundDataset, SlidingWindowTrackedUSDataset
 
 
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--train-data-folder", type=str)
-    parser.add_argument("--val-data-folder", type=str)
     parser.add_argument("--output-dir", type=str)
-    parser.add_argument("--config-file", type=str, default="train_config.yaml")
+    parser.add_argument("--config-file", type=str, default="configs/train_config.yaml")
     parser.add_argument("--num-sample-images", type=int, default=3)
     parser.add_argument("--num-fps-test-images", type=int, default=100)
     parser.add_argument("--save-torchscript", action="store_true")
@@ -90,7 +88,7 @@ def main(args):
     if args.wandb_exp_name is not None:
         experiment_name = f"{args.wandb_exp_name}_{timestamp}"
     else:
-        experiment_name = f"{config['model_name']}_{config['loss_function']}_{timestamp}"
+        experiment_name = f"{config['network']}_{config['loss_function']}_{timestamp}"
     run = wandb.init(
         # Set the project where this run will be logged
         project=args.wandb_project_name,
@@ -182,15 +180,26 @@ def main(args):
     train_transform = Compose(train_transform_list)
     val_transform = Compose(val_transform_list)
 
-    train_dataset = UltrasoundDataset(args.train_data_folder, transform=train_transform)
-    val_dataset = UltrasoundDataset(args.val_data_folder, transform=val_transform)
+    # Create datasets
+    dataset_cfg = config["dataset"]
+    dataset_params = dataset_cfg.get("params", {})
+    train_dataset = getattr(datasets, dataset_cfg["name"])(
+        dataset_cfg["train_folder"],
+        transform=train_transform,
+        **(dataset_params if dataset_params else {})
+    )
+    val_dataset = getattr(datasets, dataset_cfg["name"])(
+        dataset_cfg["val_folder"],
+        transform=val_transform,
+        **(dataset_params if dataset_params else {})
+    )
 
     # Create dataloaders using UltrasoundDataset
     train_dataloader = DataLoader(
         train_dataset, 
         batch_size=config["batch_size"], 
         shuffle=config["shuffle"], 
-        num_workers=2,
+        num_workers=4,
         generator=g
     )
     val_dataloader = DataLoader(
@@ -226,12 +235,13 @@ def main(args):
             softmax=use_softmax,
             lambda_dice=(1.0 - config["lambda_ce"]), 
             lambda_ce=config["lambda_ce"],
-            ce_weight=ce_weight
+            weight=ce_weight
         )
 
     # Construct model
+    use_tracking = False
     dropout_rate = config["dropout_rate"] if "dropout_rate" in config else 0.0
-    if config["model_name"].lower() == "attentionunet":
+    if config["network"].lower() == "attentionunet":
         model = monai.networks.nets.AttentionUnet(
             spatial_dims=2,
             in_channels=config["in_channels"],
@@ -240,20 +250,20 @@ def main(args):
             strides=(2, 2, 2, 2),
             dropout=dropout_rate
         )
-    elif config["model_name"].lower() == "effnetunet":
+    elif config["network"].lower() == "effnetunet":
         model = monai.networks.nets.FlexibleUNet(
             in_channels=config["in_channels"],
             out_channels=config["out_channels"],
             backbone="efficientnet-b4",
             pretrained=True
         )
-    elif config["model_name"].lower() == "unetplusplus":
+    elif config["network"].lower() == "unetplusplus":
         model = monai.networks.nets.BasicUNetPlusPlus(
             spatial_dims=2,
             in_channels=config["in_channels"],
             out_channels=config["out_channels"]
         )
-    elif config["model_name"].lower() == "unetr":
+    elif config["network"].lower() == "unetr":
         model = monai.networks.nets.UNETR(
             in_channels=config["in_channels"],
             out_channels=config["out_channels"],
@@ -261,19 +271,42 @@ def main(args):
             dropout_rate=dropout_rate,
             spatial_dims=2
         )
-    elif config["model_name"].lower() == "swinunetr":
+    elif config["network"].lower() == "swinunetr":
         model = monai.networks.nets.SwinUNETR(
             img_size=config["image_size"],
             in_channels=config["in_channels"],
             out_channels=config["out_channels"],
             spatial_dims=2
         )
-    elif config["model_name"].lower() == "segresnet":
+    elif config["network"].lower() == "segresnet":
         model = monai.networks.nets.SegResNet(
             spatial_dims=2,
             in_channels=config["in_channels"],
             out_channels=config["out_channels"]
         )
+    elif config["network"].lower() == "custom":
+        try:
+            model_cfg = config["model"]
+            model_path = model_cfg["model_path"]
+        except KeyError:
+            logging.error("Custom model not found in config file.")
+            return
+
+        # load custom module
+        module_name = os.path.basename(model_path).split(".")[0]
+        loader = importlib.machinery.SourceFileLoader(module_name, model_path)
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+
+        # instantiate model
+        model_params = model_cfg.get("params", {})
+        model = getattr(module, model_cfg["name"])(
+            in_channels=config["in_channels"],
+            out_channels=config["out_channels"],
+            **(model_params if model_params else {})
+        )
+        use_tracking = model_cfg["use_tracking"]
     else:  # default to unet
         model = monai.networks.nets.UNet(
             spatial_dims=2,
@@ -326,7 +359,7 @@ def main(args):
     # cosine annealing with warmup
     warmup_steps = config["warmup_steps"] if "warmup_steps" in config else 250
     last_cosine_step = start_step - warmup_steps if start_step > warmup_steps else 0
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    lr_scheduler = CosineAnnealingLR(
         optimizer, 
         max_steps - warmup_steps, 
         last_epoch=last_cosine_step - 1
@@ -368,13 +401,17 @@ def main(args):
             labels = batch["label"].to(device=device)
             if config["out_channels"] > 1:
                 labels = monai.networks.one_hot(labels, num_classes=config["out_channels"])
-            outputs = model(inputs)
+            if use_tracking:
+                tfms = batch["transform"].to(device=device)
+                outputs = model(inputs, tfms)
+            else:
+                outputs = model(inputs)
             if isinstance(outputs, list):  # for unet++ output
                 outputs = outputs[0]
             loss = loss_function(outputs, labels)
             loss.backward()
-            scheduler.step()
             optimizer.step()
+            scheduler.step()
             optimizer.zero_grad()
             epoch_loss += loss.item()
         epoch_loss /= step
@@ -391,7 +428,11 @@ def main(args):
                 val_labels = val_batch["label"].to(device=device)
                 if config["out_channels"] > 1:
                     val_labels = monai.networks.one_hot(val_labels, num_classes=config["out_channels"])
-                val_outputs = model(val_inputs)
+                if use_tracking:
+                    val_tfms = val_batch["transform"].to(device=device)
+                    val_outputs = model(val_inputs, val_tfms)
+                else:
+                    val_outputs = model(val_inputs)
                 if isinstance(val_outputs, list):
                     val_outputs = val_outputs[0]
                 loss = loss_function(val_outputs, val_labels)
@@ -438,7 +479,11 @@ def main(args):
         inputs = torch.stack([val_dataset[i]["image"] for i in sample])
         labels = torch.stack([val_dataset[i]["label"] for i in sample])
         with torch.no_grad():
-            outputs = model(inputs.to(device=device))
+            if use_tracking:
+                tfms = torch.stack([torch.from_numpy(val_dataset[i]["transform"]) for i in sample])
+                outputs = model(inputs.to(device=device), tfms.to(device=device))
+            else:
+                outputs = model(inputs.to(device=device))
         if isinstance(outputs, list):
             outputs = outputs[0]
         if isinstance(labels, list):
@@ -508,9 +553,14 @@ def main(args):
             model.eval()  # disable dropout and batchnorm
             ts_model_path = os.path.join(run_dir, "model_traced.pt")
             model = model.to("cpu")
-            example_input = torch.rand(1, config["in_channels"], config["image_size"], config["image_size"])
+            if use_tracking:
+                example_input = (torch.rand(1, config["in_channels"], config["image_size"], config["image_size"]),
+                                 torch.rand(1, config["in_channels"], 4, 4))
+                d = {"shape": example_input[0].shape, "use_tracking": True}
+            else:
+                example_input = torch.rand(1, config["in_channels"], config["image_size"], config["image_size"])
+                d = {"shape": example_input.shape, "use_tracking": False}
             traced_script_module = torch.jit.trace(model, example_input)
-            d = {"shape": example_input.shape}
             extra_files = {"config.json": json.dumps(d)}
             traced_script_module.save(ts_model_path, _extra_files=extra_files)
         
@@ -530,12 +580,19 @@ def main(args):
     logging.info("Measuring inference time...")
     num_test_images = args.num_fps_test_images
     inputs = torch.stack([val_dataset[i]["image"] for i in range(num_test_images)])
+    tfms = torch.stack([torch.from_numpy(val_dataset[i]["transform"]) for i in range(num_test_images)])
     model.to(device)
     model.eval()
     with torch.no_grad():
         start = perf_counter()
         for i in range(num_test_images):
-            model(inputs[i, :, :, :].unsqueeze(0).to(device=device))
+            if use_tracking:
+                model(
+                    inputs[i, :, :, :].unsqueeze(0).to(device=device),
+                    tfms[i, :, :, :].unsqueeze(0).to(device=device)
+                )
+            else:
+                model(inputs[i, :, :, :].unsqueeze(0).to(device=device))
         end = perf_counter()
     avg_inf_time = (end - start) / num_test_images
     avg_inf_fps = 1 / avg_inf_time

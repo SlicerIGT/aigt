@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument("--train-data-folder", type=str)
     parser.add_argument("--val-data-folder", type=str)
     parser.add_argument("--output-dir", type=str)
-    parser.add_argument("--config-file", type=str, default="train_config.yaml")
+    parser.add_argument("--config-file", type=str, default="configs/train_nnunet_config.yaml")
     parser.add_argument("--num-sample-images", type=int, default=3)
     parser.add_argument("--num-fps-test-images", type=int, default=100)
     parser.add_argument("--save-torchscript", action="store_true")

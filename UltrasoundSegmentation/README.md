@@ -164,10 +164,8 @@ Training hyperparameters can be modified on train_config.yaml.
 
 Similar to running the prepare_data.py script, train.py can be run from command line or by configuring a JSON file.
 
-* `--train-data-folder` should be the path of the folder with the training set (which should be a subset of the output of prepare_data.py)
-* `--val-data-folder` should be the path of the folder with validation set 
 * `--output-dir` is the name of the directory in which to save the run
-* `--config-file` is the yaml file detailing the training settings. See [train_config.yaml](train_config.yaml) for an example. Also see [Supported networks](#supported-networks) to see the available networks.
+* `--config-file` is the yaml file detailing the training settings. See [train_config.yaml](configs/train_config.yaml) for an example. Also see [Supported networks](#supported-networks) to see the available networks.
 * `--save-torchscript` saves the model as a torchscript
 * `--save-ckpt-freq` is the integer value for how often (number of epochs) the model saves and is 0 by default
 * `--wandb-entity-name` should be set to your username if you are working on a solo project or the username of the owner of a collaborative team on wandb
@@ -195,9 +193,7 @@ To configure the JSON file for train.py, open the launch.json again. Copy and pa
     "program": "${file}",
     "console": "integratedTerminal",
     "justMyCode": "true",
-    "args": ["--train-data-folder", "D:/data/train",
-             "--val-data-folder", "D:/data/val",
-             "--output-dir", "D:/runs",
+    "args": ["--output-dir", "D:/runs",
              "--save-torchscript", 
              "--save-log"]
 }
@@ -237,9 +233,14 @@ The network architectures that are currently supported (and their required `name
 - UNet++ (`unetplusplus`)
 - UNETR (`unetr`)
 - SegResNet (`segresnet`)
+- Custom network (`custom`)
 - nnUNet (`nnunet`)
 
 Using any of the networks other than the nnUNet will use the hyperparameters described in the config file. Otherwise, due to the nature of the nnUNet, many of the hyperparameters will be automatically set and the config file will be ignored. However, using the nnUNet requires additional packages and flags to be set. This will be described in the following section.
+
+### Use a custom network architecture
+
+A custom network architecture (not from monai) can be trained as well, as long as it is a subclass of `torch.nn.Module`. To do this, include the full path of the network's `.py` file along with the name of the model class to the config file. An example is shown in [train_config.yaml](configs/train_config.yaml).
 
 ### Using the nnUNet
 
@@ -281,7 +282,7 @@ All training data from one dataset are located under the `Dataset` folder, which
 
 The images themselves follow this naming convention: `{CASE_IDENTIFIER}_{CHANNEL}.{FILE_ENDING}`. In the above example, `LN003_0000` is the case identifier, `0000` is the 4-digit channel identifier, and `nii.gz` is the file ending. The segmentations follow a similar convention but without the channel indicator. This will be further explained below.
 
-Luckily, assuming your data has already been converted to slices (hopefully using the `--use-file-prefix` flag), `train.py` will convert the data into the nnUNet format for you. However, you must first set the values of 2 dictionaries in the `.yaml` config file. An example is shown in [train_config.yaml](train_config.yaml):
+Assuming your data has already been converted to slices (hopefully using the `--use-file-prefix` flag), `train.py` will convert the data into the nnUNet format for you. However, you must first set the values of 2 dictionaries in the `.yaml` config file. An example is shown in [train_config.yaml](configs/train_config.yaml):
 
 ```
 # For nnUNet only:
