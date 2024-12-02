@@ -11,7 +11,6 @@ import argparse
 import logging
 import monai
 import random
-import traceback
 import torch
 import os
 import sys
@@ -51,7 +50,7 @@ from lr_scheduler import PolyLRScheduler, LinearWarmupWrapper
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=str)
+    parser.add_argument("--output-dir", type=str, required=True)
     parser.add_argument("--config-file", type=str, default="configs/train_config.yaml")
     parser.add_argument("--num-sample-images", type=int, default=3)
     parser.add_argument("--num-fps-test-images", type=int, default=100)
@@ -63,22 +62,28 @@ def parse_args():
     parser.add_argument("--log-level", type=str, default="INFO")
     parser.add_argument("--save-log", action="store_true")
     parser.add_argument("--resume-ckpt", type=str)
+
     try:
-        return parser.parse_args()
-    except SystemExit as err:
-        traceback.print_exc()
-        sys.exit(err.code)
+        parser, extra_args = parser.parse_known_args()
+        deprecated = ["--train-data-folder", "--val-data-folder"]
+        if any(arg in deprecated for arg in extra_args):
+            print("Error: --train-data-folder and --val-data-folder are deprecated. " 
+                  "Please update your config file to use 'train_folder' and 'val_folder' instead.")
+            return None
+        return parser
+    except SystemExit:
+        return None
 
 
 def main(args):
     # Load config file
     # If config file is not given, use default config
-    # If path is not specified, look for config file in the same folder as this script
+    # If path is not specified, look for config file in the configs folder
     if args.config_file is None:
-        args.config_file = os.path.join(os.path.dirname(__file__), "train_config.yaml")
+        args.config_file = os.path.join(os.path.dirname(__file__), "configs/train_config.yaml")
     else:
         if not os.path.isabs(args.config_file):
-            args.config_file = os.path.join(os.path.dirname(__file__), args.config_file)
+            args.config_file = os.path.join(os.path.dirname(__file__), "configs", args.config_file)
     with open(args.config_file, "r") as f:
         config = yaml.safe_load(f)
     
@@ -605,4 +610,5 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args)
+    if args is not None:
+        main(args)
