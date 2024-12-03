@@ -23,6 +23,7 @@ dataset:
   params:
     window_size: *in_c
     gt_idx: 2  # 0: first, 1: middle, 2: last
+    orig_img_size: 512
 
 transforms:
   general:
