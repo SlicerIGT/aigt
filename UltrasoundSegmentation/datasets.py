@@ -19,6 +19,8 @@ class UltrasoundDataset(Dataset):
         self.images = sorted(glob.glob(os.path.join(root_folder, "**", imgs_dir, "**", "*.npy"), recursive=True))
         self.segmentations = sorted(glob.glob(os.path.join(root_folder, "**", gts_dir, "**", "*.npy"), recursive=True))
         self.tfm_matrices = sorted(glob.glob(os.path.join(root_folder, "**", tfms_dir, "**", "*.npy"), recursive=True))
+
+        assert len(self.images) > 0, "No images found in the input directory."
         assert len(self.images) == len(self.segmentations), "Number of images and segmentations must match."
 
     def __len__(self):
@@ -92,7 +94,8 @@ class SlidingWindowTrackedUSDataset(Dataset):
             tfms_dir="transforms", 
             transform=None,
             window_size=5,
-            gt_idx=GT_CHANNEL_IDX_LAST
+            gt_idx=GT_CHANNEL_IDX_LAST,
+            orig_img_size=512
         ):
         # get names of subfolders in imgs_dir, gts_dir, and tfms_dir
         image_scans = [
@@ -140,6 +143,29 @@ class SlidingWindowTrackedUSDataset(Dataset):
             self.gt_idx = window_size - 1
         else:
             raise ValueError("Invalid gt_idx value. Must be 0, 1, or 2.")
+        
+        # original image size for scaling, can be int or tuple of ints
+        if (isinstance(orig_img_size, int) 
+            or isinstance(orig_img_size, tuple) and len(orig_img_size) == 1):
+            self.img_to_norm = np.diag([*([1 / orig_img_size] * 3), 1])
+        elif isinstance(orig_img_size, tuple):
+            if len(orig_img_size) == 2:
+                l_dim = max(orig_img_size)
+                self.img_to_norm = np.diag([
+                    1 / orig_img_size[0], 
+                    1 / orig_img_size[1], 
+                    1 / orig_img_size[l_dim], 
+                    1
+                ])
+            elif len(orig_img_size) == 3:
+                self.img_to_norm = np.diag([
+                    1 / orig_img_size[0], 
+                    1 / orig_img_size[1], 
+                    1 / orig_img_size[2], 
+                    1
+                ])
+        else:
+            raise ValueError("Invalid orig_img_size. Must be int or tuple.")
 
     def __len__(self):
         return sum(
@@ -167,45 +193,21 @@ class SlidingWindowTrackedUSDataset(Dataset):
         if len(label.shape) == 2:
             label = np.expand_dims(label, axis=-1)
 
-        transform = np.stack([
+        # get ImgToRef transforms
+        img_to_ref = np.stack([
             np.load(self.data[scan]["transform"][index + i])
             for i in range(self.window_size)
-        ])  # shape: (window_size, 4, 4) - not affected by transforms
+        ])  # shape: (window_size, 4, 4) - not affected by augmentations
 
-        # define 3 points based on max x, y, and z coordinates of set of transforms
-        from_points = vtk.vtkPoints()
-        from_points.SetNumberOfPoints(3)
-        from_points.SetPoint(0, np.max(transform[:, 0, 3]), 0, 0)
-        from_points.SetPoint(1, 0, np.max(transform[:, 1, 3]), 0)
-        from_points.SetPoint(2, 0, 0, np.max(transform[:, 2, 3]))
-
-        to_points = vtk.vtkPoints()
-        to_points.SetNumberOfPoints(3)
-        to_points.SetPoint(0, 1, 0, 0)
-        to_points.SetPoint(1, 0, 1, 0)
-        to_points.SetPoint(2, 0, 0, 1)
-
-        # fiducial registration
-        landmarkTransform = vtk.vtkLandmarkTransform()
-        landmarkTransform.SetSourceLandmarks(from_points)
-        landmarkTransform.SetTargetLandmarks(to_points)
-        landmarkTransform.SetModeToSimilarity()
-        landmarkTransform.Update()
-
-        # get the transformation matrix
-        matrix = vtk.vtkMatrix4x4()
-        landmarkTransform.GetMatrix(matrix)
-        img_to_norm = np.eye(4)
-        matrix.DeepCopy(img_to_norm.ravel(), matrix)
-
-        # apply transformation to each frame
+        # calculate ImNToImMain for every other transform and scale
+        ref_to_img_main = np.linalg.inv(img_to_ref[self.gt_idx])
         for i in range(self.window_size):
-            transform[i] = img_to_norm @ transform[i]
-        
+            img_to_ref[i] = self.img_to_norm @ ref_to_img_main @ img_to_ref[i]
+
         data = {
             "image": image,
             "label": label,
-            "transform": transform
+            "transform": img_to_ref
         }
         
         if self.transform:
