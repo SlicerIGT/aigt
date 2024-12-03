@@ -59,7 +59,7 @@ logging.info(f"Found {len(data_files)} segmentation files.")
 # Read config file
 
 if args.config_file is None:
-    args.config_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "prepare_data_config.yaml")
+    args.config_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "configs", "prepare_data_config.yaml")
 
 logging.info(f"Reading configuration from {args.config_file}")
 

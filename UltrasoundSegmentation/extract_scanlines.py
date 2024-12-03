@@ -66,7 +66,7 @@ def main(args):
     # Read config file
 
     if args.scanconvert_config is None:
-        args.scanconvert_config = os.path.join(os.path.abspath(os.path.dirname(__file__)), "scanconvert_config.yaml")
+        args.scanconvert_config = os.path.join(os.path.abspath(os.path.dirname(__file__)), "configs", "scanconvert_config.yaml")
 
     with open(args.scanconvert_config, "r") as f:
         scanconvert_config = yaml.safe_load(f)
