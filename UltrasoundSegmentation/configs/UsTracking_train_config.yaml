@@ -19,7 +19,7 @@ seed: !!int 42
 dataset:
   train_folder: /mnt/c/Users/chris/Data/Spine/2024_SpineSeg/04_Slices_train
   val_folder: /mnt/c/Users/chris/Data/Spine/2024_SpineSeg/04_Slices_val
-  name: SlidingWindowTrackedUSDataset
+  name: LocalTrackedUSDataset
   params:
     window_size: *in_c
     gt_idx: 2  # 0: first, 1: middle, 2: last

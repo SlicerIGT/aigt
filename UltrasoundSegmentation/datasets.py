@@ -1,6 +1,5 @@
 import os
 import glob
-import vtk
 import numpy as np
 from torch.utils.data import Dataset
 from monai.config import KeysCollection
@@ -81,7 +80,124 @@ class UltrasoundDataset(Dataset):
         return data
     
 
-class SlidingWindowTrackedUSDataset(Dataset):
+class GlobalTrackedUSDataset(Dataset):
+    def __init__(
+            self, 
+            root_folder, 
+            imgs_dir="images", 
+            gts_dir="labels", 
+            tfms_dir="transforms", 
+            transform=None
+        ):
+        # get names of subfolders in imgs_dir, gts_dir, and tfms_dir
+        image_scans = [
+            f.name for f in os.scandir(
+                os.path.join(root_folder, imgs_dir)
+            ) if f.is_dir()
+        ]
+        gt_scans = [
+            f.name for f in os.scandir(
+                os.path.join(root_folder, gts_dir)
+            ) if f.is_dir()
+        ]
+        tfm_scans = [
+            f.name for f in os.scandir(
+                os.path.join(root_folder, tfms_dir)
+            ) if f.is_dir()
+        ]
+        assert set(image_scans) == set(gt_scans) == set(tfm_scans), \
+            "Scans in images, labels, and transforms directories must be the same."
+        
+        # get file paths for each scan
+        self.data = {
+            scan: {
+                "image": sorted(glob.glob(os.path.join(
+                    root_folder, imgs_dir, scan, "*.npy"
+                ))),
+                "label": sorted(glob.glob(os.path.join(
+                    root_folder, gts_dir, scan, "*.npy"
+                ))),
+                "transform": sorted(glob.glob(os.path.join(
+                    root_folder, tfms_dir, scan, "*.npy"
+                )))
+            } for scan in image_scans
+        }
+
+        self.transform = transform
+
+        # calculate centering translation and scaling for each scan
+        print("Calculating centering translation and scaling for each scan...")
+        self.norm = {}
+        for scan in self.data:
+            # load transforms for all frames in one array
+            translation = np.stack([
+                np.load(self.data[scan]["transform"][i])[:3, 3]
+                for i in range(len(self.data[scan]["transform"]))
+            ])
+
+            # calculate centering translation matrix
+            center = np.mean(translation, axis=0)
+            centering_mat = np.eye(4)
+            centering_mat[:3, 3] = -center
+
+            # calculate scaling matrix
+            min_z = np.min(translation[:, 2])
+            max_z = np.max(translation[:, 2])
+            range_z = max_z - min_z
+            scaling_factor = 2 / range_z
+            scaling_mat = np.eye(4)
+            scaling_mat[0, 0] = scaling_factor
+            scaling_mat[1, 1] = scaling_factor
+            scaling_mat[2, 2] = scaling_factor
+
+            # compute final normalization matrix
+            norm_mat = scaling_mat @ centering_mat
+            self.norm[scan] = norm_mat
+
+    def __len__(self):
+        # total number of frames in all scans
+        return sum(len(self.data[scan]["image"]) for scan in self.data)
+
+    def __getitem__(self, index):
+        scan = None
+        for key in self.data:
+            scan_len = len(self.data[key]["image"])
+            if index < scan_len:
+                scan = key
+                break
+            index -= scan_len
+        
+        # load data
+        image = np.load(self.data[scan]["image"][index])
+        label = np.load(self.data[scan]["label"][index])
+        transform = np.load(self.data[scan]["transform"][index])
+
+        # If ultrasound_data is 2D, add a channel dimension as last dimension
+        if len(image.shape) == 2:
+            image = np.expand_dims(image, axis=-1)
+
+        # If segmentation_data is 2D, add a channel dimension as last dimension
+        if len(label.shape) == 2:
+            label = np.expand_dims(label, axis=-1)
+        
+        # normalize transformation matrix
+        transform = self.norm[scan] @ transform
+        transform = np.expand_dims(transform, axis=0)  # add batch dimension
+
+        data = {
+            "image": image,
+            "label": label,
+            "transform": transform
+        }
+        
+        # apply augmentation
+        if self.transform:
+            data = self.transform(data)
+        
+        return data
+    
+
+class LocalTrackedUSDataset(Dataset):
     GT_CHANNEL_IDX_FIRST = 0
     GT_CHANNEL_IDX_MIDDLE = 1
     GT_CHANNEL_IDX_LAST = 2
@@ -228,7 +344,8 @@ class ZScoreNormalized(MapTransform):
     
 
 if __name__ == "__main__":
-    dataset = SlidingWindowTrackedUSDataset("/mnt/e/PerkLab/Data/Spine/SpineTrainingData/04_Slices_train")
+    # dataset = LocalTrackedUSDataset("/mnt/e/PerkLab/Data/Spine/SpineTrainingData/04_Slices_train")
+    dataset = GlobalTrackedUSDataset("/mnt/c/Users/chris/Data/Spine/2024_SpineSeg/04_Slices_train")
     # dataset = UltrasoundDataset("/mnt/c/Users/chris/Data/Breast/AIGTData/train")
     # print(dataset.images[:5])
     # print(dataset.segmentations[:5])
