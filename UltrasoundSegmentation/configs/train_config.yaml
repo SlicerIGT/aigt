@@ -1,6 +1,6 @@
 # Example config file for train.py
 
-network: unet  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet, custom
+network: unet  # available networks: unet, attentionunet, effnetunet, unetplusplus, unetr, segresnet, custom
 loss_function: DiceCE
 lambda_ce: 0.5  # 0.0 for dice, 1.0 for cross-entropy/focal
 class_weights: [0.25, 0.75]  # must be same length as out_channels
@@ -46,7 +46,7 @@ transforms:
 model:
   model_path: /path/to/model.py
   name: CustomNet  # name of the model class
-  use_tracking: false  # use tracking data in model input
+  use_tracking_layer: false  # use built-in tracking layer
   params:  
     in_channels: *in_c
     out_channels: *out_c

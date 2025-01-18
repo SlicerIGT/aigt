@@ -183,6 +183,7 @@ class GlobalTrackedUSDataset(Dataset):
         # normalize transformation matrix
         transform = self.norm[scan] @ transform
         transform = np.expand_dims(transform, axis=0)  # add batch dimension
+        transform = transform.astype(np.float32)
 
         data = {
             "image": image,
@@ -319,6 +320,7 @@ class LocalTrackedUSDataset(Dataset):
         ref_to_img_main = np.linalg.inv(img_to_ref[self.gt_idx])
         for i in range(self.window_size):
             img_to_ref[i] = self.img_to_norm @ ref_to_img_main @ img_to_ref[i]
+        img_to_ref = img_to_ref.astype(np.float32)
 
         data = {
             "image": image,

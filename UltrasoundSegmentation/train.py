@@ -20,6 +20,7 @@ import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+import torch.nn as nn
 matplotlib.use("Agg")  # Use non-interactive backend to avoid error when running on server without GUI
 
 from tqdm import tqdm
@@ -44,6 +45,7 @@ from monai.metrics import (
 )
 
 import datasets
+from tracking_module import TrackingModule
 from lr_scheduler import PolyLRScheduler, LinearWarmupWrapper
 
 
@@ -244,7 +246,7 @@ def main(args):
         )
 
     # Construct model
-    use_tracking = False
+    use_tracking_layer = True
     dropout_rate = config["dropout_rate"] if "dropout_rate" in config else 0.0
     if config["network"].lower() == "attentionunet":
         model = monai.networks.nets.AttentionUnet(
@@ -259,7 +261,7 @@ def main(args):
         model = monai.networks.nets.FlexibleUNet(
             in_channels=config["in_channels"],
             out_channels=config["out_channels"],
-            backbone="efficientnet-b4",
+            backbone="efficientnet-b0",
             pretrained=True
         )
     elif config["network"].lower() == "unetplusplus":
@@ -309,7 +311,7 @@ def main(args):
         model = getattr(module, model_cfg["name"])(
             **(model_params if model_params else {})
         )
-        use_tracking = model_cfg["use_tracking"]
+        use_tracking_layer = model_cfg["use_tracking_layer"]
     else:  # default to unet
         model = monai.networks.nets.UNet(
             spatial_dims=2,
@@ -320,6 +322,16 @@ def main(args):
             num_res_units=config["num_res_units"] if "num_res_units" in config else 2,
             dropout=dropout_rate
         )
+
+    # tracking layer is used by default unless otherwise specified in custom model
+    if use_tracking_layer:
+        # check if local (sliding window) or global (single frame)
+        if train_dataset.__class__.__name__ == "LocalTrackedUSDataset":
+            window_size = train_dataset.window_size
+        else:
+            window_size = 1
+        tracking_layer = TrackingModule(config["image_size"], window_size)
+        model = nn.Sequential(tracking_layer, model)
     
     model = model.to(device=device)
     # optimizer = Adam(model.parameters(), config["learning_rate"], weight_decay=config["weight_decay"])
@@ -402,13 +414,13 @@ def main(args):
             step += 1
             inputs = batch["image"].to(device=device)
             labels = batch["label"].to(device=device)
+            tfms = batch["transform"].to(device=device)
             if config["out_channels"] > 1:
                 labels = monai.networks.one_hot(labels, num_classes=config["out_channels"])
-            if use_tracking:
-                tfms = batch["transform"].to(device=device)
-                outputs = model(inputs, tfms)
+            if use_tracking_layer:
+                outputs = model((inputs, tfms))
             else:
-                outputs = model(inputs)
+                outputs = model(inputs, tfms)  # use as separate input
             if isinstance(outputs, list):  # for unet++ output
                 outputs = outputs[0]
             loss = loss_function(outputs, labels)
@@ -429,13 +441,13 @@ def main(args):
                 val_step += 1
                 val_inputs = val_batch["image"].to(device=device)
                 val_labels = val_batch["label"].to(device=device)
+                val_tfms = val_batch["transform"].to(device=device)
                 if config["out_channels"] > 1:
                     val_labels = monai.networks.one_hot(val_labels, num_classes=config["out_channels"])
-                if use_tracking:
-                    val_tfms = val_batch["transform"].to(device=device)
-                    val_outputs = model(val_inputs, val_tfms)
+                if use_tracking_layer:
+                    val_outputs = model((val_inputs, val_tfms))
                 else:
-                    val_outputs = model(val_inputs)
+                    val_outputs = model(val_inputs, val_tfms)  # use as separate input
                 if isinstance(val_outputs, list):
                     val_outputs = val_outputs[0]
                 loss = loss_function(val_outputs, val_labels)
@@ -481,12 +493,12 @@ def main(args):
 
         inputs = torch.stack([val_dataset[i]["image"] for i in sample])
         labels = torch.stack([val_dataset[i]["label"] for i in sample])
+        tfms = torch.stack([torch.from_numpy(val_dataset[i]["transform"]) for i in sample])
         with torch.no_grad():
-            if use_tracking:
-                tfms = torch.stack([torch.from_numpy(val_dataset[i]["transform"]) for i in sample])
-                outputs = model(inputs.to(device=device), tfms.to(device=device))
+            if use_tracking_layer:
+                outputs = model((inputs.to(device=device), tfms.to(device=device)))
             else:
-                outputs = model(inputs.to(device=device))
+                outputs = model(inputs.to(device=device), tfms.to(device=device))
         if isinstance(outputs, list):
             outputs = outputs[0]
         if isinstance(labels, list):
@@ -556,14 +568,12 @@ def main(args):
             model.eval()  # disable dropout and batchnorm
             ts_model_path = os.path.join(run_dir, "model_traced.pt")
             model = model.to("cpu")
-            if use_tracking:
-                example_input = (torch.rand(1, config["in_channels"], config["image_size"], config["image_size"]),
-                                 torch.rand(1, config["in_channels"], 4, 4))
-                d = {"shape": example_input[0].shape, "use_tracking": True}
-            else:
-                example_input = torch.rand(1, config["in_channels"], config["image_size"], config["image_size"])
-                d = {"shape": example_input.shape, "use_tracking": False}
-            traced_script_module = torch.jit.trace(model, example_input)
+            example_input = (
+                torch.rand(1, config["in_channels"], config["image_size"], config["image_size"]),
+                torch.rand(1, config["in_channels"], 4, 4)
+            )
+            d = {"shape": example_input[0].shape, "use_tracking_layer": True}
+            traced_script_module = torch.jit.trace(model, (example_input, ))
             extra_files = {"config.json": json.dumps(d)}
             traced_script_module.save(ts_model_path, _extra_files=extra_files)
         
@@ -589,13 +599,16 @@ def main(args):
     with torch.no_grad():
         start = perf_counter()
         for i in range(num_test_images):
-            if use_tracking:
+            if use_tracking_layer:
+                model((
+                    inputs[i, :, :, :].unsqueeze(0).to(device=device),
+                    tfms[i, :, :, :].unsqueeze(0).to(device=device)
+                ))
+            else:
                 model(
                     inputs[i, :, :, :].unsqueeze(0).to(device=device),
                     tfms[i, :, :, :].unsqueeze(0).to(device=device)
                 )
-            else:
-                model(inputs[i, :, :, :].unsqueeze(0).to(device=device))
         end = perf_counter()
     avg_inf_time = (end - start) / num_test_images
     avg_inf_fps = 1 / avg_inf_time

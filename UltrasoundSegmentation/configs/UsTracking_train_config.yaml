@@ -1,13 +1,13 @@
 # Example config file for train.py
 
-network: custom  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet
+network: attentionunet  # available networks: unet, attentionunet, effnetunet, unetplusplus, unetr, segresnet
 loss_function: dicefocal
 lambda_ce: 0.9  # 0.0 for dice, 1.0 for cross-entropy/focal
-class_weights: [0.2, 0.8]  # must be same length as out_channels
+class_weights: [0.1, 0.9]  # must be same length as out_channels
 image_size: 128
 in_channels: &in_c !!int 5
 out_channels: &out_c !!int 2
-num_epochs: !!int 100
+num_epochs: !!int 300
 batch_size: !!int 128
 learning_rate: !!float 0.001
 learning_rate_decay_factor: !!float 0.5
@@ -84,7 +84,7 @@ transforms:
 model:
   model_path: /home/chrisyeung/spine-segmentation/train_dualnet.py
   name: DualEncoderUNet
-  use_tracking: true
+  use_tracking_layer: false
   params:
     in_channels: *in_c
     out_channels: *out_c
