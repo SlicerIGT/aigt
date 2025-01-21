@@ -223,8 +223,6 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.outputTransformSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
         self.ui.verticalFlipCheckbox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.modelInputSizeSpinbox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
-        self.ui.previousFramesSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
-        self.ui.modelUseTrackingCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.applyLogCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
         self.ui.thresholdSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
         self.ui.segmentationBrowserSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
@@ -274,6 +272,17 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self.ui.exportButton.connect("clicked()", self.onExportButton)
         self.ui.clearScanConversionButton.connect("clicked()", self.onClearScanConversion)
         self.ui.recordAsSegmentationButton.checked = False
+
+        # Tracking widgets
+        self.ui.localTrackingButton.checked = False
+        self.ui.globalTrackingButton.checked = False
+        self.ui.localTrackingButton.connect("toggled(bool)", self.onLocalTrackingButton)
+        self.ui.globalTrackingButton.connect("toggled(bool)", self.onGlobalTrackingButton)
+        self.ui.windowSizeSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.windowTargetFrameComboBox.connect("currentIndexChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.imagePixelNormSpinBox.connect("valueChanged(int)", self.updateParameterNodeFromGUI)
+        self.ui.globalROIComboBox.connect("currentNodeChanged(vtkMRMLNode*)", self.onGlobalROINodeChanged)
+        self.ui.generateROIButton.connect("toggled(bool)", self.onGenerateROIButton)
 
         # Add custom 2D + 3D layout
         customLayout = """
@@ -458,14 +467,32 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         modelInputSize = self._parameterNode.GetParameter("ModelInputSize")
         self.ui.modelInputSizeSpinbox.setValue(int(modelInputSize) if modelInputSize else 0)
 
-        modelInChannels = self._parameterNode.GetParameter("ModelInChannels")
-        self.ui.previousFramesSpinBox.setValue(int(modelInChannels) - 1 if modelInChannels else 0)
-
-        modelUseTracking = self._parameterNode.GetParameter("ModelUseTracking").lower() == "true"
-        self.ui.modelUseTrackingCheckBox.setChecked(modelUseTracking)
+        windowSize = self._parameterNode.GetParameter("WindowSize")
+        self.ui.windowSizeSpinBox.setValue(int(windowSize) if windowSize else 0)
 
         threshold = self._parameterNode.GetParameter("Threshold")
         self.ui.thresholdSpinBox.setValue(int(threshold) if threshold else 0)
+
+        # Tracking parameters
+        trackingMethod = self._parameterNode.GetParameter("TrackingMethod")
+        if trackingMethod == "Local":
+            self.ui.localTrackingButton.setChecked(True)
+        elif trackingMethod == "Global":
+            self.ui.globalTrackingButton.setChecked(True)
+        else:
+            self.ui.localTrackingButton.setChecked(False)
+            self.ui.globalTrackingButton.setChecked(False)
+
+        windowTargetFrame = self._parameterNode.GetParameter("WindowTargetFrame")
+        self.ui.windowTargetFrameComboBox.setCurrentIndex(int(windowTargetFrame) if windowTargetFrame else 0)
+
+        imagePixelNorm = self._parameterNode.GetParameter("ImagePixelNorm")
+        self.ui.imagePixelNormSpinBox.setValue(int(imagePixelNorm) if imagePixelNorm else 0)
+
+        globalROI = self._parameterNode.GetNodeReference("ROI")
+        wasBlocked = self.ui.globalROIComboBox.blockSignals(True)
+        self.ui.globalROIComboBox.setCurrentNode(globalROI)
+        self.ui.globalROIComboBox.blockSignals(wasBlocked)
 
         # Change output transform to parent of input volume
         if inputVolume:
@@ -516,9 +543,12 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         self._parameterNode.SetParameter("FlipVertical", "true" if self.ui.verticalFlipCheckbox.checked else "false")
         self._parameterNode.SetParameter("ApplyLogTransform", "true" if self.ui.applyLogCheckBox.checked else "false")
         self._parameterNode.SetParameter("ModelInputSize", str(self.ui.modelInputSizeSpinbox.value))
-        self._parameterNode.SetParameter("ModelInChannels", str(self.ui.previousFramesSpinBox.value + 1))
-        self._parameterNode.SetParameter("ModelUseTracking", "true" if self.ui.modelUseTrackingCheckBox.checked else "false")
         self._parameterNode.SetParameter("Threshold", str(self.ui.thresholdSpinBox.value))
+
+        # Tracking parameters
+        self._parameterNode.SetParameter("WindowSize", str(self.ui.windowSizeSpinBox.value))
+        self._parameterNode.SetParameter("WindowTargetFrame", str(self.ui.windowTargetFrameComboBox.currentIndex))
+        self._parameterNode.SetParameter("ImagePixelNorm", str(self.ui.imagePixelNormSpinBox.value))
 
         # Update individual model to use
         if self.ui.useIndividualRadioButton.checked:
@@ -573,6 +603,19 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         settings = qt.QSettings()
         settings.setValue(self.logic.LAST_EROSION_Y_SETTING, str(value))
 
+    def onGlobalROINodeChanged(self, caller=None, event=None):
+        currentNode = self.ui.globalROIComboBox.currentNodeID
+        self._parameterNode.SetNodeReferenceID("ROI", currentNode)
+        if currentNode:
+            self.ui.generateROIButton.checked = False
+        else:
+            self.ui.generateROIButton.checked = True
+
+    def onGenerateROIButton(self, toggled):
+        self._parameterNode.SetParameter("GenerateROI", "true" if toggled else "false")
+        if toggled:
+            self.ui.globalROIComboBox.setCurrentNode(None)
+
     def onSegmentationNodeChanged(self, caller=None, event=None):
         self._parameterNode.SetNodeReferenceID("Segmentation", self.ui.segmentationNodeSelector.currentNodeID)
         segmentationNode = self._parameterNode.GetNodeReference("Segmentation")
@@ -601,6 +644,20 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
         else:
             self.ui.modelComboBox.setEnabled(False)
             self.logic.setModelsToUse(self.logic.getAllModelPaths())
+
+    def onLocalTrackingButton(self, toggled):
+        if toggled:
+            self.ui.globalTrackingButton.setChecked(False)
+            self._parameterNode.SetParameter("TrackingMethod", "Local")
+        else:
+            self._parameterNode.SetParameter("TrackingMethod", "None")
+
+    def onGlobalTrackingButton(self, toggled):
+        if toggled:
+            self.ui.localTrackingButton.setChecked(False)
+            self._parameterNode.SetParameter("TrackingMethod", "Global")
+        else:
+            self._parameterNode.SetParameter("TrackingMethod", "None")
 
     def onResliceVolume(self):
         inputVolume = self._parameterNode.GetNodeReference("InputVolume")
@@ -667,9 +724,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
             self.ui.verticalFlipCheckbox.setEnabled(False)
             self.ui.applyLogCheckBox.setEnabled(False)
-            self.ui.modelUseTrackingCheckBox.setEnabled(False)
             self.ui.modelInputSizeSpinbox.setEnabled(False)
-            self.ui.previousFramesSpinBox.setEnabled(False)
             self.ui.outputTransformSelector.setEnabled(False)
             self.ui.scanConversionPathLineEdit.setEnabled(False)
             self.ui.clearScanConversionButton.setEnabled(False)
@@ -708,9 +763,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
                         self.setPredictionProgressBar(numFrames)
                         self.logic.segmentSequence(
                             model, 
-                            self.ui.recordAsSegmentationButton.checked, 
-                            int(self.ui.previousFramesSpinBox.value),
-                            self.ui.modelUseTrackingCheckBox.checked
+                            self.ui.recordAsSegmentationButton.checked
                         )
                         self.resetTaskProgressBar()
 
@@ -758,9 +811,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
             self.ui.verticalFlipCheckbox.setEnabled(True)
             self.ui.applyLogCheckBox.setEnabled(True)
-            self.ui.modelUseTrackingCheckBox.setEnabled(True)
             self.ui.modelInputSizeSpinbox.setEnabled(True)
-            self.ui.previousFramesSpinBox.setEnabled(True)
             self.ui.outputTransformSelector.setEnabled(True)
             self.ui.scanConversionPathLineEdit.setEnabled(True)
             self.ui.clearScanConversionButton.setEnabled(True)
@@ -840,6 +891,10 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
     LAST_EROSION_X_SETTING = "TorchSequenceSegmentation/LastErosionX"
     LAST_EROSION_Y_SETTING = "TorchSequenceSegmentation/LastErosionY"
 
+    TARGET_CHANNEL_IDX_FIRST = 0
+    TARGET_CHANNEL_IDX_MIDDLE = 1
+    TARGET_CHANNEL_IDX_LAST = 2
+
     ATTRIBUTE_PREFIX = "SingleSliceSegmentation_"
     ORIGINAL_IMAGE_INDEX = ATTRIBUTE_PREFIX + "OriginalImageIndex"
 
@@ -880,6 +935,10 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             parameterNode.SetParameter("Threshold", "127")
         if not parameterNode.GetParameter("NumSkipFrames"):
             parameterNode.SetParameter("NumSkipFrames", "0")
+        if not parameterNode.GetParameter("TrackingMethod"):
+            parameterNode.SetParameter("TrackingMethod", "None")
+        if not parameterNode.GetParameter("GenerateROI"):
+            parameterNode.SetParameter("GenerateROI", "true")
     
     def getAllModelPaths(self):
         modelFolder = slicer.util.settingsValue(self.LAST_MODEL_FOLDER_SETTING, "")
@@ -920,14 +979,20 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                 config = json.loads(extra_files["config.json"])
                 inputSize = config["shape"][-1]
                 parameterNode.SetParameter("ModelInputSize", str(inputSize))  # assume square
-                parameterNode.SetParameter("ModelInChannels", str(config["shape"][1]))
+                parameterNode.SetParameter("WindowSize", str(config["shape"][1]))
 
                 # check if model uses tracking data in input
                 try:
-                    parameterNode.SetParameter("ModelUseTracking", str(config["use_tracking"]))
+                    useTrackingLayer = config["use_tracking_layer"]
+                    if useTrackingLayer:
+                        if config["tracking_method"] == "local":
+                            parameterNode.SetParameter("TrackingMethod", "Local")
+                            parameterNode.SetParameter("WindowTargetFrame", str(config["window_target_frame"]))
+                            parameterNode.SetParameter("ImagePixelNorm", str(config["orig_img_size"]))
+                        elif config["tracking_method"] == "global":
+                            parameterNode.SetParameter("TrackingMethod", "Global")
                 except KeyError:  # for backward compatibility
-                    if parameterNode.GetParameter("ModelUseTracking") != "true":  # do not overwrite if checkbox checked
-                        parameterNode.SetParameter("ModelUseTracking", "false")
+                    parameterNode.SetParameter("TrackingMethod", "None")
     
     def loadScanConversion(self, scanConversionPath):
         if not scanConversionPath:
@@ -1050,7 +1115,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         # Run prediction
         with torch.inference_mode():
             if inputTfmArray is not None:
-                output = self.model(inputTensor, inputTfmTensor)
+                output = self.model((inputTensor, inputTfmTensor))
             else:
                 output = self.model(inputTensor)
         
@@ -1074,19 +1139,55 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
 
         return outputArray
     
-    def segmentSequence(self, modelName, recordAsSegmentation=False, numPreviousFrames=0, useTracking=False):
+    def segmentSequence(self, modelName, recordAsSegmentation=False):
         self.isProcessing = True
 
         parameterNode = self.getParameterNode()
         sequencesLogic = slicer.modules.sequences.logic()
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
         inputVolume = parameterNode.GetNodeReference("InputVolume")
-        if useTracking:
-            inputTransform = inputVolume.GetParentTransformNode()
         inputSequence = sequenceBrowser.GetSequenceNode(inputVolume)
         modelBasename = modelName.split(os.sep)[-2]
         segmentName = parameterNode.GetParameter("SegmentName")
         threshold = int(parameterNode.GetParameter("Threshold"))
+
+        # tracking parameters
+        trackingMethod = parameterNode.GetParameter("TrackingMethod")
+        if trackingMethod != "None":
+            inputTransform = inputVolume.GetParentTransformNode()
+            if trackingMethod == "Local":
+                windowSize = int(parameterNode.GetParameter("WindowSize"))
+                windowTargetFrame = int(parameterNode.GetParameter("WindowTargetFrame"))
+                if windowTargetFrame == self.TARGET_CHANNEL_IDX_MIDDLE:
+                    windowTargetFrame = windowSize // 2
+                elif windowTargetFrame == self.TARGET_CHANNEL_IDX_LAST:
+                    windowTargetFrame = windowSize - 1
+                # calculate scaling matrix
+                imagePixelNorm = int(parameterNode.GetParameter("ImagePixelNorm"))
+                imageToNorm = np.diag([*([1 / imagePixelNorm] * 3), 1])
+            else:  # global tracking
+                globalROINode = parameterNode.GetNodeReference("ROI")
+                generateROI = parameterNode.GetParameter("GenerateROI").lower() == "true"
+                if not globalROINode or generateROI:
+                    globalROINode = self.addROINode(inputVolume)
+
+                # calculate centering translation matrix
+                center = globalROINode.GetCenterWorld()
+                centeringMat = np.eye(4)
+                centeringMat[:3, 3] = [-center[0], -center[1], -center[2]]
+
+                # calculate scaling matrix
+                size = np.zeros(3)
+                globalROINode.GetSizeWorld(size)
+                rangeZ = size[2]
+                scalingFactor = 2 / rangeZ
+                scalingMat = np.eye(4)
+                scalingMat[0, 0] = scalingFactor
+                scalingMat[1, 1] = scalingFactor
+                scalingMat[2, 2] = scalingFactor
+
+                # compute final normalization matrix
+                imageToNorm = scalingMat @ centeringMat
 
         # Make new prediction volume to not overwrite existing one
         predictionVolume = parameterNode.GetNodeReference("PredictionVolume")
@@ -1159,12 +1260,6 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         predictionDisplayNode.SetAndObserveColorNodeID("vtkMRMLColorTableNodeGreen")
         slicer.util.setSliceViewerLayers(foreground=predictionVolume, foregroundOpacity=0.3)
 
-        # create list for previous frame buffer
-        if numPreviousFrames > 0:
-            frameBufferList = []
-            if useTracking:
-                transformBufferList = []
-
         selectedItemNumber = sequenceBrowser.GetSelectedItemNumber()  # for restoring later
         # Iterate through each item in sequence browser and add generated segmentation
         for itemIndex in range(sequenceBrowser.GetNumberOfItems()):
@@ -1185,57 +1280,39 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                 imageArray = cv2.resize(imageArray[0, :, :], (inputSize, inputSize))  # default is bilinear
             
             # get tracking data if needed
-            if useTracking:
+            if trackingMethod != "None":
                 tfmArray = slicer.util.arrayFromTransformMatrix(inputTransform, toWorld=True)
+                if trackingMethod == "Global":  # global normalization
+                    tfmArray = imageToNorm @ tfmArray
 
             # create numpy array from frame buffer
-            if numPreviousFrames > 0:
-                if itemIndex == 0:
+            if trackingMethod == "Local":
+                if itemIndex == 0:  # initialize buffer
+                    frameBufferList = [imageArray] * windowSize
+                    transformBufferList = [tfmArray] * windowSize
+                elif itemIndex < windowSize:
+                    for i in range(itemIndex, windowSize):
+                        frameBufferList[i] = imageArray
+                        transformBufferList[i] = tfmArray
+                else:  # update buffer
+                    frameBufferList.pop(0)
                     frameBufferList.append(imageArray)
-                    frameBufferList *= numPreviousFrames + 1
-                    if useTracking:
-                        transformBufferList.append(tfmArray)
-                        transformBufferList *= numPreviousFrames + 1
+                    transformBufferList.pop(0)
+                    transformBufferList.append(tfmArray)
                 inputArray = np.stack(frameBufferList, axis=0)
-                if useTracking:
-                    inputTfmArray = np.stack(transformBufferList, axis=0)
+                inputTfmArray = np.stack(transformBufferList, axis=0)
             else:
                 inputArray = np.expand_dims(imageArray, axis=0)
-                if useTracking:
+                if trackingMethod == "Global":
                     inputTfmArray = np.expand_dims(tfmArray, axis=0)
             
-            # normalize tracking data if needed
-            if useTracking:
-                # define 3 points based on max x, y, and z coordinates of set of transforms
-                fromPoints = vtk.vtkPoints()
-                fromPoints.SetNumberOfPoints(3)
-                fromPoints.SetPoint(0, np.max(inputTfmArray[:, 0, 3]), 0, 0)
-                fromPoints.SetPoint(1, 0, np.max(inputTfmArray[:, 1, 3]), 0)
-                fromPoints.SetPoint(2, 0, 0, np.max(inputTfmArray[:, 2, 3]))
-
-                # set target points to unit vectors
-                toPoints = vtk.vtkPoints()
-                toPoints.SetNumberOfPoints(3)
-                toPoints.SetPoint(0, 1, 0, 0)
-                toPoints.SetPoint(1, 0, 1, 0)
-                toPoints.SetPoint(2, 0, 0, 1)
-
-                # fiducial registration
-                landmarkTransform = vtk.vtkLandmarkTransform()
-                landmarkTransform.SetSourceLandmarks(fromPoints)
-                landmarkTransform.SetTargetLandmarks(toPoints)
-                landmarkTransform.SetModeToSimilarity()
-                landmarkTransform.Update()
-
-                # get the transformation matrix
-                matrix = vtk.vtkMatrix4x4()
-                landmarkTransform.GetMatrix(matrix)
-                imgToNorm = np.eye(4)
-                matrix.DeepCopy(imgToNorm.ravel(), matrix)
-
-                # apply transformation to each frame
-                for i in range(numPreviousFrames + 1):
-                    inputTfmArray[i] = imgToNorm @ inputTfmArray[i]
+            if trackingMethod != "None":
+                if trackingMethod == "Local":  # normalize tracking data in window if needed
+                    # apply transformation to each frame
+                    refToImageMain = np.linalg.inv(inputTfmArray[windowTargetFrame])
+                    for i in range(windowSize):
+                        inputTfmArray[i] = imageToNorm @ refToImageMain @ inputTfmArray[i]
+                    inputTfmArray = inputTfmArray.astype(np.float32)
 
                 # get segmentation
                 prediction = self.getPrediction(inputArray, inputTfmArray)
@@ -1277,33 +1354,25 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                     # segSequenceNode.SetDataNodeAtValue(segmentationNode, indexValue)
                     slicer.mrmlScene.RemoveNode(labelmapVolume)
 
-            # dequeue first frame and enqueue current frame
-            if numPreviousFrames > 0:
-                frameBufferList.pop(0)
-                frameBufferList.append(imageArray)
-                if useTracking:
-                    transformBufferList.pop(0)
-                    transformBufferList.append(tfmArray)
-
             if self.progressCallback:
                 self.progressCallback(itemIndex)
         sequenceBrowser.SetSelectedItemNumber(selectedItemNumber)
 
         self.isProcessing = False
     
-    def addROINode(self, modelName):
+    def addROINode(self, volumeNode):
         parameterNode = self.getParameterNode()
         sequenceBrowser = parameterNode.GetNodeReference("SequenceBrowser")
-        predictionVolume = parameterNode.GetNodeReference("PredictionVolume")
+        sequenceName = sequenceBrowser.GetName()
 
         # Create new ROI node
         roiNode = parameterNode.GetNodeReference("ROI")
-        roiName = self.getUniqueName(roiNode, f"{modelName.split(os.sep)[-2]}_ROI")
-        roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLAnnotationROINode", roiName)
+        roiName = self.getUniqueName(roiNode, f"{sequenceName}_ROI")
+        roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsROINode", roiName)
         parameterNode.SetNodeReferenceID("ROI", roiNode.GetID())
         roiNode.SetDisplayVisibility(False)
         
-        self.volRecLogic.CalculateROIFromVolumeSequence(sequenceBrowser, predictionVolume, roiNode)
+        self.volRecLogic.CalculateROIFromVolumeSequence(sequenceBrowser, volumeNode, roiNode)
 
         return roiNode
 
@@ -1345,7 +1414,9 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         reconstructionNode.SetAndObserveInputSequenceBrowserNode(sequenceBrowser)
         reconstructionNode.SetAndObserveInputVolumeNode(predictionVolume)
 
-        roiNode = self.addROINode(modelName)
+        roiNode = parameterNode.GetNodeReference("ROI")
+        if not roiNode:
+            roiNode = self.addROINode(predictionVolume)
         reconstructionNode.SetAndObserveInputROINode(roiNode)
 
         # Set reconstruction output volume

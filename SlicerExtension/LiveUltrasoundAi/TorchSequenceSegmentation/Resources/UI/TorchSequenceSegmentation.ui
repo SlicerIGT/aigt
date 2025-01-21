@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>395</width>
-    <height>1091</height>
+    <height>1242</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -257,6 +257,160 @@
         <property name="text">
          <string/>
         </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="trackingCollapsibleButton">
+     <property name="text">
+      <string>Tracking</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QPushButton" name="localTrackingButton">
+        <property name="text">
+         <string>Use local tracking</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="frame_2">
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Plain</enum>
+        </property>
+        <layout class="QFormLayout" name="formLayout_5">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_28">
+           <property name="text">
+            <string>Window size:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QSpinBox" name="windowSizeSpinBox"/>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_29">
+           <property name="text">
+            <string>Window target frame:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="windowTargetFrameComboBox">
+           <item>
+            <property name="text">
+             <string>first</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>middle</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>last</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="label_30">
+           <property name="text">
+            <string>Original max image size:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QSpinBox" name="imagePixelNormSpinBox">
+           <property name="maximum">
+            <number>9999</number>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="globalTrackingButton">
+        <property name="text">
+         <string>Use global tracking</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="frame_3">
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Plain</enum>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_4">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_3">
+           <item>
+            <widget class="QLabel" name="label_31">
+             <property name="text">
+              <string>ROI node:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="qMRMLNodeComboBox" name="globalROIComboBox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="nodeTypes">
+              <stringlist notr="true">
+               <string>vtkMRMLMarkupsROINode</string>
+              </stringlist>
+             </property>
+             <property name="hideChildNodeTypes">
+              <stringlist notr="true"/>
+             </property>
+             <property name="renameEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="interactionNodeSingletonTag">
+              <string notr="true"/>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QPushButton" name="generateROIButton">
+           <property name="text">
+            <string>Generate ROI node from sequence</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
@@ -592,6 +746,9 @@
      <property name="text">
       <string>Advanced</string>
      </property>
+     <property name="checkable">
+      <bool>true</bool>
+     </property>
      <property name="collapsed">
       <bool>true</bool>
      </property>
@@ -641,14 +798,14 @@
         </property>
        </widget>
       </item>
-      <item row="8" column="0">
+      <item row="6" column="0">
        <widget class="QLabel" name="label_8">
         <property name="text">
          <string>Model input size:</string>
         </property>
        </widget>
       </item>
-      <item row="8" column="1">
+      <item row="6" column="1">
        <widget class="QSpinBox" name="modelInputSizeSpinbox">
         <property name="toolTip">
          <string>Size of the input image of the loaded model. Assumes a square image. Only modify if shape metadata is not included in the TorchScript model.</string>
@@ -658,14 +815,14 @@
         </property>
        </widget>
       </item>
-      <item row="9" column="0">
+      <item row="7" column="0">
        <widget class="QLabel" name="label_11">
         <property name="text">
          <string>Output transform:</string>
         </property>
        </widget>
       </item>
-      <item row="9" column="1">
+      <item row="7" column="1">
        <widget class="qMRMLNodeComboBox" name="outputTransformSelector">
         <property name="enabled">
          <bool>true</bool>
@@ -692,14 +849,14 @@
         </property>
        </widget>
       </item>
-      <item row="11" column="0">
+      <item row="9" column="0">
        <widget class="QLabel" name="label_4">
         <property name="text">
          <string>Scan conversion config:</string>
         </property>
        </widget>
       </item>
-      <item row="11" column="1">
+      <item row="9" column="1">
        <layout class="QHBoxLayout" name="horizontalLayout_5">
         <item>
          <widget class="ctkPathLineEdit" name="scanConversionPathLineEdit">
@@ -734,14 +891,14 @@
         </item>
        </layout>
       </item>
-      <item row="12" column="0">
+      <item row="10" column="0">
        <widget class="QLabel" name="label_19">
         <property name="text">
          <string>Mask edge erosion x (%):</string>
         </property>
        </widget>
       </item>
-      <item row="12" column="1">
+      <item row="10" column="1">
        <widget class="QDoubleSpinBox" name="edgeErosionXSpinBox">
         <property name="decimals">
          <number>2</number>
@@ -754,47 +911,20 @@
         </property>
        </widget>
       </item>
-      <item row="13" column="0">
+      <item row="11" column="0">
        <widget class="QLabel" name="label_20">
         <property name="text">
          <string>Mask edge erosion y (%):</string>
         </property>
        </widget>
       </item>
-      <item row="13" column="1">
+      <item row="11" column="1">
        <widget class="QDoubleSpinBox" name="edgeErosionYSpinBox">
         <property name="maximum">
          <double>1.000000000000000</double>
         </property>
         <property name="singleStep">
          <double>0.100000000000000</double>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="0">
-       <widget class="QLabel" name="label_23">
-        <property name="text">
-         <string>Number of previous frames:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="1">
-       <widget class="QSpinBox" name="previousFramesSpinBox"/>
-      </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="label_27">
-        <property name="text">
-         <string>Use tracking in model:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
-       <widget class="QCheckBox" name="modelUseTrackingCheckBox">
-        <property name="toolTip">
-         <string>Include ImageToWorld transformation in model input.</string>
-        </property>
-        <property name="text">
-         <string/>
         </property>
        </widget>
       </item>
@@ -859,7 +989,7 @@
     </hint>
     <hint type="destinationlabel">
      <x>376</x>
-     <y>272</y>
+     <y>266</y>
     </hint>
    </hints>
   </connection>
@@ -874,8 +1004,8 @@
      <y>306</y>
     </hint>
     <hint type="destinationlabel">
-     <x>374</x>
-     <y>184</y>
+     <x>376</x>
+     <y>178</y>
     </hint>
    </hints>
   </connection>
@@ -891,7 +1021,7 @@
     </hint>
     <hint type="destinationlabel">
      <x>294</x>
-     <y>231</y>
+     <y>223</y>
     </hint>
    </hints>
   </connection>
@@ -907,7 +1037,7 @@
     </hint>
     <hint type="destinationlabel">
      <x>376</x>
-     <y>748</y>
+     <y>1115</y>
     </hint>
    </hints>
   </connection>
@@ -918,12 +1048,12 @@
    <slot>setVisible(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>193</x>
-     <y>333</y>
+     <x>211</x>
+     <y>569</y>
     </hint>
     <hint type="destinationlabel">
-     <x>164</x>
-     <y>350</y>
+     <x>182</x>
+     <y>621</y>
     </hint>
    </hints>
   </connection>
@@ -938,8 +1068,8 @@
      <y>970</y>
     </hint>
     <hint type="destinationlabel">
-     <x>312</x>
-     <y>366</y>
+     <x>367</x>
+     <y>595</y>
     </hint>
    </hints>
   </connection>
@@ -954,8 +1084,56 @@
      <y>968</y>
     </hint>
     <hint type="destinationlabel">
-     <x>335</x>
-     <y>393</y>
+     <x>367</x>
+     <y>622</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>localTrackingButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>frame_2</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>208</x>
+     <y>327</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>208</x>
+     <y>350</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>globalTrackingButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>frame_3</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>139</x>
+     <y>456</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>137</x>
+     <y>477</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>TorchSequenceSegmentation</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>globalROIComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>242</x>
+     <y>1237</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>234</x>
+     <y>496</y>
     </hint>
    </hints>
   </connection>
