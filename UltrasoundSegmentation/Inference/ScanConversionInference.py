@@ -30,13 +30,20 @@ from scipy.spatial import Delaunay
 
 ROOT = Path(__file__).parent.resolve()
 
+# CONSTANTS
+TRACKING_METHOD_NONE = 0
+TRACKING_METHOD_LOCAL = 1
+TRACKING_METHOD_GLOBAL = 2
+
+
 # Parse command line arguments
 def ScanConversionInference():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, help="Path to torchscript model file.")
-    parser.add_argument("--num-previous-frames", type=int, default=0, help="Number of previous frames to use for inference. Optional.")
-    parser.add_argument("--scanconversion_config", type=str, help="Path to scan conversion config (.yaml) file. Optional.")
+    parser.add_argument("--global-norm", type=str, help="Path to global normalization file. Optional.")
+    parser.add_argument("--scanconversion-config", type=str, help="Path to scan conversion config (.yaml) file. Optional.")
     parser.add_argument("--input-device-name", type=str, default="Image_Image")
+    parser.add_argument("--input-tfm-device-name", type=str, default="ImageToReference")
     parser.add_argument("--output-device-name", type=str, default="Prediction")
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--input-port", type=int, default=18944)
@@ -54,6 +61,7 @@ def ScanConversionInference():
         logging.basicConfig(level=logging.INFO)
     
     run_client(args)
+
 
 def run_client(args):
     """
@@ -79,19 +87,31 @@ def run_client(args):
     transform_message_counter = 0
 
     # Load pytorch model
-
     logging.info("Loading model...")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model_path = args.model if Path(args.model).is_absolute() else f'{str(ROOT)}/{args.model}'
     extra_files = {"config.json": ""}
     model = torch.jit.load(model_path, _extra_files=extra_files).to(device)
     config = json.loads(extra_files["config.json"])
-    input_size = config["shape"][-1]
+    # check if tracking data is used for input
+    try:
+        use_tracking = config["use_tracking_layer"]
+        if use_tracking:
+            if config["tracking_method"] == "local":
+                # TODO: Implement local tracking inference
+                method = TRACKING_METHOD_LOCAL
+                window_size = config["shape"][1]
+                window_target_frame = config["window_target_frame"]
+                image_pixel_norm = config["orig_img_size"]
+            elif config["tracking_method"] == "global":
+                method = TRACKING_METHOD_GLOBAL
+    except KeyError:
+        logging.info("No tracking data used for input")
+        method = TRACKING_METHOD_NONE
     logging.info("Model loaded")
     torch.inference_mode()
 
     # If scan conversion is enabled, compute x_cart, y_cart, vertices, and weights for conversion and interpolation
-
     if args.scanconversion_config:
         logging.info("Loading scan conversion config...")
         with open(args.scanconversion_config, "r") as f:
@@ -113,23 +133,26 @@ def run_client(args):
         mask_array = None
 
     while True:
-        # Print average inference time
+        image_ready = False
+        tfm_ready = False
+
+        # Print average inference time every second
         if time.perf_counter() - start_time > 1.0:
             logging.info("--------------------------------------------------")
-            logging.info(f"Image messages received:   {image_message_counter}")
-            logging.info(f"Transform messages received:   {transform_message_counter}")
+            logging.info(f"Image messages received:     {image_message_counter}")
+            logging.info(f"Transform messages received: {transform_message_counter}")
             if preprocess_counter > 0:
                 avg_preprocess_time = round((preprocess_total_time / preprocess_counter) * 1000, 1)
-                logging.info(f"Average preprocess time:  {avg_preprocess_time} ms")
+                logging.info(f"Average preprocess time:     {avg_preprocess_time} ms")
             if inference_counter > 0:
                 avg_inference_time = round((inference_total_time / inference_counter) * 1000, 1)
-                logging.info(f"Average inference time:   {avg_inference_time} ms")
+                logging.info(f"Average inference time:      {avg_inference_time} ms")
             if postprocess_counter > 0:
                 avg_postprocess_time = round((postprocess_total_time / postprocess_counter) * 1000, 1)
-                logging.info(f"Average postprocess time: {avg_postprocess_time} ms")
+                logging.info(f"Average postprocess time:    {avg_postprocess_time} ms")
             if total_counter > 0:
                 avg_total_time = round((total_time / total_counter) * 1000, 1)
-                logging.info(f"Average total time:       {avg_total_time} ms")
+                logging.info(f"Average total time:          {avg_total_time} ms")
             start_time = time.perf_counter()
             preprocess_counter = 0
             preprocess_total_time = 0
@@ -143,53 +166,65 @@ def run_client(args):
             transform_message_counter = 0
         
         # Receive messages from server
-        messages = input_client.get_latest_messages()
-        for message in messages:
-            if message.device_name == args.input_device_name:  # Image message
-                image_message_counter += 1
-                total_start_time = time.perf_counter()
-        
-                if model is None:
-                    logging.error("Model not loaded. Exiting...")
-                    break
-                
-                # Resize image to model input size
-                orig_img_size = message.image.shape
+        total_start_time = time.perf_counter()
+        image_message = input_client.wait_for_message(args.input_device_name)
+        image_message_counter += 1
 
-                # Preprocess input
-                preprocess_start_time = time.perf_counter()
-                image = preprocess_input(message.image, input_size, scanconversion_config, x_cart, y_cart).to(device)
-                preprocess_total_time += time.perf_counter() - preprocess_start_time
-                preprocess_counter += 1
+        orig_img_size = image_message.image.shape
+        if model is None:
+            logging.error("Model not loaded. Exiting...")
+            break
 
-                # Run inference
-                inference_start_time = time.perf_counter()
+        # Preprocess input
+        preprocess_start_time = time.perf_counter()
+        image = preprocess_image(image_message.image, config["shape"][-1], scanconversion_config, x_cart, y_cart).to(device)
+        # save image for debugging
+        cv2.imwrite(f"e:/PerkLab/Data/Spine/Inference/TestGlobalNorm/image_{image_message_counter}.png", image.squeeze().squeeze().detach().cpu().numpy() * 255)
+        preprocess_total_time += time.perf_counter() - preprocess_start_time
+        preprocess_counter += 1
+        image_ready = True
+
+        # Receive and preprocess transform
+        tfm_message = input_client.wait_for_message(args.input_tfm_device_name)
+        output_tfm_name = tfm_message.device_name.replace("Image", "Pred")
+        transform = tfm_message.matrix
+        transform_pre = preprocess_transform(tfm_message.matrix, method, args, config).to(device)
+        transform_message_counter += 1
+        tfm_ready = True
+
+        # Check if both image and transform are received
+        if image_ready and tfm_ready:
+            # Run inference
+            inference_start_time = time.perf_counter()
+            if method != TRACKING_METHOD_NONE:
+                prediction = model((image, transform_pre))
+            else:
                 prediction = model(image)                
-                if isinstance(prediction, list):
-                    prediction = prediction[0]
-                inference_total_time += time.perf_counter() - inference_start_time
-                inference_counter += 1
+            if isinstance(prediction, list):
+                prediction = prediction[0]
+            inference_total_time += time.perf_counter() - inference_start_time
+            inference_counter += 1
 
-                # Postprocess prediction
-                postprocess_start_time = time.perf_counter()
-                prediction = torch.nn.functional.softmax(prediction, dim=1)
-                prediction = postprocess_prediction(prediction, orig_img_size, scanconversion_config, vertices, weights, mask_array)
-                postprocess_total_time += time.perf_counter() - postprocess_start_time
-                postprocess_counter += 1
+            # Postprocess prediction
+            postprocess_start_time = time.perf_counter()
+            prediction = torch.nn.functional.softmax(prediction, dim=1)
+            prediction = postprocess_prediction(prediction, orig_img_size, scanconversion_config, vertices, weights, mask_array)
+            # save prediction for debugging
+            cv2.imwrite(f"e:/PerkLab/Data/Spine/Inference/TestGlobalNorm/prediction_{image_message_counter}.png", prediction.squeeze() * 255)
+            postprocess_total_time += time.perf_counter() - postprocess_start_time
+            postprocess_counter += 1
 
-                image_message = pyigtl.ImageMessage(prediction, device_name=args.output_device_name)
-                output_server.send_message(image_message, wait=True)
-                
-                total_time += time.perf_counter() - total_start_time
-                total_counter += 1
+            image_message = pyigtl.ImageMessage(prediction, device_name=args.output_device_name)
+            output_server.send_message(image_message, wait=True)
 
-            if message.message_type == "TRANSFORM" and "Image" in message.device_name:  # Image transform message
-                transform_message_counter += 1
-                output_tfm_name = message.device_name.replace("Image", "Pred")
-                tfm_message = pyigtl.TransformMessage(message.matrix, device_name=output_tfm_name)
-                output_server.send_message(tfm_message, wait=True)
+            tfm_message = pyigtl.TransformMessage(transform, device_name=output_tfm_name)
+            output_server.send_message(tfm_message, wait=True)
+            
+            total_time += time.perf_counter() - total_start_time
+            total_counter += 1
 
-def preprocess_input(image, input_size, scanconversion_config=None, x_cart=None, y_cart=None):
+
+def preprocess_image(image, input_size, scanconversion_config=None, x_cart=None, y_cart=None):
     if scanconversion_config is not None:
         # Scan convert image from curvilinear to linear
         num_samples = scanconversion_config["num_samples_along_lines"]
@@ -199,26 +234,45 @@ def preprocess_input(image, input_size, scanconversion_config=None, x_cart=None,
         # Squeeze converted image to remove channel dimension
         converted_image = converted_image.squeeze()
     else:
-        converted_image = cv2.resize(image[0, :, :], (input_size, input_size)) / 255  # default is bilinear
+        converted_image = cv2.resize(image[0, :, :], (input_size, input_size))  # default is bilinear
     
-    converted_image = torch.from_numpy(converted_image).unsqueeze(0).unsqueeze(0).float()
+    converted_image = torch.from_numpy(converted_image).unsqueeze(0).unsqueeze(0).float() / 255.0
     return converted_image
+
+
+def preprocess_transform(transform, method, args, config):
+    if method == TRACKING_METHOD_LOCAL:
+        raise NotImplementedError("Local tracking inference not implemented")
+    elif method == TRACKING_METHOD_GLOBAL:
+        try:
+            image_to_norm = np.load(args.global_norm)
+            transform = transform @ image_to_norm
+            transform = np.expand_dims(transform, axis=0)  # add image channel dimension
+            transform = torch.from_numpy(transform).unsqueeze(0).float()  # add batch dimension
+            return transform
+        except AttributeError:
+            logging.warning("Global normalization file not found, ignoring tracking data input")
+            return transform
+    else:
+        return transform
+
 
 def postprocess_prediction(prediction, original_size, scanconversion_config=None, vertices=None, weights=None, mask_array=None):
     if scanconversion_config is not None:
         # Scan convert prediction from linear to curvilinear
         prediction = prediction.squeeze().detach().cpu().numpy() * 255
-        # Make sure prediction data type is uint8
-        # prediction = prediction.astype(np.uint8)[np.newaxis, ...]
+        prediction = np.clip(prediction, 0, 255)
         prediction = scan_convert(prediction[1], scanconversion_config, vertices, weights)
         if mask_array is not None:
             prediction = prediction * mask_array
         prediction = prediction.astype(np.uint8)[np.newaxis, ...]
     else:
         prediction = prediction.squeeze().detach().cpu().numpy() * 255
+        prediction = np.clip(prediction, 0, 255)
         prediction = cv2.resize(prediction[1], (original_size[2], original_size[1]))
         prediction = prediction.astype(np.uint8)[np.newaxis, ...]
     return prediction
+
 
 def scan_conversion_inverse(scanconversion_config):
     """
@@ -240,7 +294,6 @@ def scan_conversion_inverse(scanconversion_config):
     """
 
     # Create sampling points in polar coordinates
-
     initial_radius = np.deg2rad(scanconversion_config["angle_min_degrees"])
     final_radius = np.deg2rad(scanconversion_config["angle_max_degrees"])
     radius_start_px = scanconversion_config["radius_start_pixels"]
@@ -250,11 +303,11 @@ def scan_conversion_inverse(scanconversion_config):
                            np.linspace(radius_start_px, radius_end_px, scanconversion_config["num_lines"]))
 
     # Convert the polar coordinates to cartesian coordinates
-
     x_cart = r * np.cos(theta) + scanconversion_config["center_coordinate_pixel"][0]
     y_cart = r * np.sin(theta) + scanconversion_config["center_coordinate_pixel"][1]
 
     return x_cart, y_cart
+
 
 def scan_interpolation_weights(scanconversion_config):
     image_size = scanconversion_config["curvilinear_image_size"]
@@ -273,6 +326,7 @@ def scan_interpolation_weights(scanconversion_config):
 
     return vertices, weights
 
+
 def scan_convert(linear_data, scanconversion_config, vertices, weights):
     """
     Scan convert a linear image to a curvilinear image.
@@ -290,6 +344,7 @@ def scan_convert(linear_data, scanconversion_config, vertices, weights):
 
     image_size = scanconversion_config["curvilinear_image_size"]
     return zi.reshape(image_size, image_size)
+
 
 def curvilinear_mask(scanconversion_config):
     """
@@ -326,6 +381,7 @@ def curvilinear_mask(scanconversion_config):
     mask_array = cv2.erode(mask_array, np.ones((erosion_size, erosion_size), np.uint8), iterations=1)
     
     return mask_array
+
 
 if __name__ == "__main__":
     ScanConversionInference()
