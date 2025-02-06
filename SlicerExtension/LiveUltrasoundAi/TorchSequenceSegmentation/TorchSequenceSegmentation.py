@@ -794,6 +794,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
             # Restore UI
             qt.QApplication.restoreOverrideCursor()
+            self.ui.startButton.checked = False
             self.ui.startButton.setText("Start")
             self.ui.overallProgressBar.setValue(0)
             self.ui.taskStatusLabel.setText("Ready")
@@ -817,7 +818,8 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             self.ui.clearScanConversionButton.setEnabled(True)
             slicer.app.processEvents()
         else:
-            self.logic.stopProcess = True
+            if self.logic.isProcessing:
+                self.logic.stopProcess = True
     
     def onExportButton(self):
         predictionNodes = slicer.util.getNodes("*_Prediction")
