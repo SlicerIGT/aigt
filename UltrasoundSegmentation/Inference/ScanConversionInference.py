@@ -178,8 +178,6 @@ def run_client(args):
         # Preprocess input
         preprocess_start_time = time.perf_counter()
         image = preprocess_image(image_message.image, config["shape"][-1], scanconversion_config, x_cart, y_cart).to(device)
-        # save image for debugging
-        cv2.imwrite(f"e:/PerkLab/Data/Spine/Inference/TestGlobalNorm/image_{image_message_counter}.png", image.squeeze().squeeze().detach().cpu().numpy() * 255)
         preprocess_total_time += time.perf_counter() - preprocess_start_time
         preprocess_counter += 1
         image_ready = True
@@ -188,7 +186,7 @@ def run_client(args):
         tfm_message = input_client.wait_for_message(args.input_tfm_device_name)
         output_tfm_name = tfm_message.device_name.replace("Image", "Pred")
         transform = tfm_message.matrix
-        transform_pre = preprocess_transform(tfm_message.matrix, method, args, config).to(device)
+        transform_pre = preprocess_transform(transform, method, args, config).to(device)
         transform_message_counter += 1
         tfm_ready = True
 
@@ -210,7 +208,6 @@ def run_client(args):
             prediction = torch.nn.functional.softmax(prediction, dim=1)
             prediction = postprocess_prediction(prediction, orig_img_size, scanconversion_config, vertices, weights, mask_array)
             # save prediction for debugging
-            cv2.imwrite(f"e:/PerkLab/Data/Spine/Inference/TestGlobalNorm/prediction_{image_message_counter}.png", prediction.squeeze() * 255)
             postprocess_total_time += time.perf_counter() - postprocess_start_time
             postprocess_counter += 1
 
@@ -246,7 +243,7 @@ def preprocess_transform(transform, method, args, config):
     elif method == TRACKING_METHOD_GLOBAL:
         try:
             image_to_norm = np.load(args.global_norm)
-            transform = transform @ image_to_norm
+            transform = image_to_norm @ transform
             transform = np.expand_dims(transform, axis=0)  # add image channel dimension
             transform = torch.from_numpy(transform).unsqueeze(0).float()  # add batch dimension
             return transform
