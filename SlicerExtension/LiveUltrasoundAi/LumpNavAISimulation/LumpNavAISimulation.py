@@ -197,7 +197,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.plotButton.connect("clicked()", self.onPlotFromSequence)
         self.ui.resultsTableView.connect("selectionChanged()", self._checkCanPlotFromSelection)
         self.ui.plotSelectionButton.connect("clicked()", self.onPlotFromSelection)
-        self.ui.outputDirectoryButton.connect("directoryChanged(QString&)", self.onFolderChanged)
+        self.ui.outputDirectoryButton.connect("directoryChanged(const QString)", self.onFolderChanged)
         self.ui.exportButton.connect("clicked()", self.onExport)
         self.ui.stopButton.connect("clicked()", self.onStop)
 
