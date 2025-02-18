@@ -100,6 +100,7 @@ def main(args):
     ultrasound_data_files = sorted(glob.glob(os.path.join(args.input_dir, "*_ultrasound*.npy")))
     segmentation_data_files = sorted(glob.glob(os.path.join(args.input_dir, "*_segmentation*.npy")))
     transform_data_files = sorted(glob.glob(os.path.join(args.input_dir, "*_transform*.npy")))
+    indices_data_files = sorted(glob.glob(os.path.join(args.input_dir, "*_indices*.npy")))
     
     # Print the number of ultrasound and segmentation files found
 
@@ -113,14 +114,15 @@ def main(args):
 
     # Loop over all data files
 
-    for ultrasound_data_file, segmentation_data_file, transform_data_file\
-            in tqdm(zip(ultrasound_data_files, segmentation_data_files, transform_data_files), total=len(ultrasound_data_files)):
+    for ultrasound_data_file, segmentation_data_file, transform_data_file, indices_data_file \
+            in tqdm(zip(ultrasound_data_files, segmentation_data_files, transform_data_files, indices_data_files), total=len(ultrasound_data_files)):
         
         # Load ultrasound and segmentation data
 
         ultrasound_data = np.load(ultrasound_data_file)
         segmentation_data = np.load(segmentation_data_file)
         transform_data = np.load(transform_data_file)
+        indices_data = np.load(indices_data_file)
 
         # Create output arrays
 
@@ -156,10 +158,12 @@ def main(args):
         scanconverted_ultrasound_data_file = os.path.join(args.output_dir, os.path.basename(ultrasound_data_file))
         scanconverted_segmentation_data_file = os.path.join(args.output_dir, os.path.basename(segmentation_data_file))
         transform_data_file = os.path.join(args.output_dir, os.path.basename(transform_data_file))
+        indices_data_file = os.path.join(args.output_dir, os.path.basename(indices_data_file))
 
         np.save(scanconverted_ultrasound_data_file, scanconverted_ultrasound_data)
         np.save(scanconverted_segmentation_data_file, scanconverted_segmentation_data)
         np.save(transform_data_file, transform_data)
+        np.save(indices_data_file, indices_data)
 
 
 if __name__ == "__main__":

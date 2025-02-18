@@ -21,6 +21,7 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_dir", type=str, default="data")
 parser.add_argument("--output_dir", type=str, default="data_prepared")
+parser.add_argument("--save-all-us-frames", action="store_true")
 parser.add_argument("--config_file", type=str)
 parser.add_argument("--log_level", type=str, default="INFO")
 parser.add_argument("--log_file", type=str)
@@ -86,6 +87,8 @@ for seg_filename in tqdm(data_files):
         indices = np.load(indices_filename)
         if isinstance(indices, np.lib.npyio.NpzFile):
             indices = indices[indices.files[0]]
+        indices = np.array(sorted(indices))
+        logging.info(indices)
         logging.info(f"Loaded {indices_filename} with shape {indices.shape}")
         logging.info(f"First 10 indices: {indices[:10]}")
         segmentation_data = segmentation_data[indices, :, :, :]
@@ -127,24 +130,30 @@ for seg_filename in tqdm(data_files):
         ultrasound_data = ultrasound_data[ultrasound_data.files[0]]
     logging.info(f"Loaded {ultrasound_filename} with shape {ultrasound_data.shape} and value range {np.min(ultrasound_data)} - {np.max(ultrasound_data)}")
 
-    # Keep only ultrasound images that have a corresponding segmentation image, with preceding ultrasound frames as requested in separate channels
-    # If there are not enough preceding ultrasound frames, pad extra channels with zeros.
+    if args.save_all_us_frames:
+        # resize
+        resized_data = np.zeros((ultrasound_data.shape[0], config["image_size"], config["image_size"], 1), dtype=ultrasound_data.dtype)
+        for i in range(ultrasound_data.shape[0]):
+            resized_data[i, :, :, 0] = cv2.resize(ultrasound_data[i, :, :, 0], (config["image_size"], config["image_size"]))
 
-    if config["num_preceding_ultrasound_frames"] < 0:
-        logging.error("num_preceding_ultrasound_frames must be >= 0")
-        sys.exit(1)
+    else:
+        # Keep only ultrasound images that have a corresponding segmentation image, with preceding ultrasound frames as requested in separate channels
+        # If there are not enough preceding ultrasound frames, pad extra channels with zeros.
 
-    resized_data = np.zeros((segmentation_data.shape[0], config["image_size"], config["image_size"], config["num_preceding_ultrasound_frames"] + 1), dtype=ultrasound_data.dtype)
-    
-    for i in range(segmentation_data.shape[0]):
-        for j in range(config["num_preceding_ultrasound_frames"] + 1):
-            if i - j >= 0:
-                resized_data[i, :, :, j] = cv2.resize(ultrasound_data[indices[i - j], :, :, 0], (config["image_size"], config["image_size"]))
-            else:
-                resized_data[i, :, :, j] = cv2.resize(ultrasound_data[indices[i], :, :, 0], (config["image_size"], config["image_size"]))
-    
+        if config["num_preceding_ultrasound_frames"] < 0:
+            logging.error("num_preceding_ultrasound_frames must be >= 0")
+            sys.exit(1)
+
+        resized_data = np.zeros((segmentation_data.shape[0], config["image_size"], config["image_size"], config["num_preceding_ultrasound_frames"] + 1), dtype=ultrasound_data.dtype)
+        
+        for i in range(segmentation_data.shape[0]):
+            for j in range(config["num_preceding_ultrasound_frames"] + 1):
+                if i - j >= 0:
+                    resized_data[i, :, :, j] = cv2.resize(ultrasound_data[indices[i - j], :, :, 0], (config["image_size"], config["image_size"]))
+                else:
+                    resized_data[i, :, :, j] = cv2.resize(ultrasound_data[indices[i], :, :, 0], (config["image_size"], config["image_size"]))
+        
     # Save resized images to disk
-
     output_filename = os.path.join(args.output_dir, os.path.basename(ultrasound_filename))
     if ultrasound_filename.endswith(".npz"):
         output_filename = output_filename.replace(".npz", ".npy")
@@ -152,14 +161,16 @@ for seg_filename in tqdm(data_files):
     logging.info(f"Saved {output_filename} with shape {resized_data.shape} and value range {np.min(resized_data)} - {np.max(resized_data)}")
 
     # Load transform file and keep only the transforms that correspond to the segmented ultrasound image
-
     transform_filename = seg_filename.replace("_segmentation", "_transform")
     if os.path.exists(transform_filename):
         transform_data = np.load(transform_filename)
         if isinstance(transform_data, np.lib.npyio.NpzFile):
             transform_data = transform_data[transform_data.files[0]]
         logging.info(f"Loaded {transform_filename} with shape {transform_data.shape}")
-        transform_data = transform_data[indices, :, :]
+
+        if not args.save_all_us_frames:
+            transform_data = transform_data[indices, :, :]
+
         output_filename = os.path.join(args.output_dir, os.path.basename(transform_filename))
         if transform_filename.endswith(".npz"):
             output_filename = output_filename.replace(".npz", ".npy")
@@ -171,7 +182,7 @@ for seg_filename in tqdm(data_files):
     # Copy indices file to output folder
 
     output_filename = os.path.join(args.output_dir, os.path.basename(indices_filename))
-    with open(indices_filename, "rb") as f:
-        with open(output_filename, "wb") as f_out:
-            f_out.write(f.read())
+    if indices_filename.endswith(".npz"):
+        output_filename = output_filename.replace(".npz", ".npy")
+    np.save(output_filename, indices)
     logging.info(f"Copied {indices_filename} to {output_filename}")

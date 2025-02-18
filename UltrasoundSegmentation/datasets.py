@@ -1,6 +1,7 @@
 import os
 import glob
 import numpy as np
+from tqdm import tqdm
 from torch.utils.data import Dataset
 from monai.config import KeysCollection
 from monai.transforms.transform import MapTransform
@@ -89,24 +90,12 @@ class GlobalTrackedUSDataset(Dataset):
             tfms_dir="transforms", 
             transform=None
         ):
-        # get names of subfolders in imgs_dir, gts_dir, and tfms_dir
+        # get names of subfolders (patient id) in imgs_dir
         image_scans = [
             f.name for f in os.scandir(
                 os.path.join(root_folder, imgs_dir)
             ) if f.is_dir()
         ]
-        gt_scans = [
-            f.name for f in os.scandir(
-                os.path.join(root_folder, gts_dir)
-            ) if f.is_dir()
-        ]
-        tfm_scans = [
-            f.name for f in os.scandir(
-                os.path.join(root_folder, tfms_dir)
-            ) if f.is_dir()
-        ]
-        assert set(image_scans) == set(gt_scans) == set(tfm_scans), \
-            "Scans in images, labels, and transforms directories must be the same."
         
         # get file paths for each scan
         self.data = {
@@ -126,9 +115,8 @@ class GlobalTrackedUSDataset(Dataset):
         self.transform = transform
 
         # calculate centering translation and scaling for each scan
-        print("Calculating centering translation and scaling for each scan...")
         self.norm = {}
-        for scan in self.data:
+        for scan in tqdm(self.data, desc="Calculating normalization matrices"):
             # load transforms for all frames in one array
             translation = np.stack([
                 np.load(self.data[scan]["transform"][i])[:3, 3]
@@ -155,22 +143,27 @@ class GlobalTrackedUSDataset(Dataset):
             self.norm[scan] = norm_mat
 
     def __len__(self):
-        # total number of frames in all scans
-        return sum(len(self.data[scan]["image"]) for scan in self.data)
+        # total number of segmented frames in all scans
+        return sum(len(self.data[scan]["label"]) for scan in self.data)
 
     def __getitem__(self, index):
         scan = None
         for key in self.data:
-            scan_len = len(self.data[key]["image"])
+            scan_len = len(self.data[key]["label"])
             if index < scan_len:
                 scan = key
                 break
             index -= scan_len
         
-        # load data
-        image = np.load(self.data[scan]["image"][index])
-        label = np.load(self.data[scan]["label"][index])
-        transform = np.load(self.data[scan]["transform"][index])
+        # load segmentation and matching ultrasound and transform
+        seg_file = self.data[scan]["label"][index]
+        label = np.load(seg_file)
+        image = np.load(seg_file.replace("labels", "images").replace(
+            "segmentation", "ultrasound")
+        )
+        transform = np.load(seg_file.replace("labels", "transforms").replace(
+            "segmentation", "transform")
+        )
 
         # If ultrasound_data is 2D, add a channel dimension as last dimension
         if len(image.shape) == 2:
@@ -211,27 +204,15 @@ class LocalTrackedUSDataset(Dataset):
             tfms_dir="transforms", 
             transform=None,
             window_size=5,
-            gt_idx=GT_CHANNEL_IDX_LAST,
+            gt_idx=GT_CHANNEL_IDX_MIDDLE,
             orig_img_size=512
         ):
-        # get names of subfolders in imgs_dir, gts_dir, and tfms_dir
+        # get names of subfolders (patient id) in imgs_dir
         image_scans = [
             f.name for f in os.scandir(
                 os.path.join(root_folder, imgs_dir)
             ) if f.is_dir()
         ]
-        gt_scans = [
-            f.name for f in os.scandir(
-                os.path.join(root_folder, gts_dir)
-            ) if f.is_dir()
-        ]
-        tfm_scans = [
-            f.name for f in os.scandir(
-                os.path.join(root_folder, tfms_dir)
-            ) if f.is_dir()
-        ]
-        assert set(image_scans) == set(gt_scans) == set(tfm_scans), \
-            "Scans in images, labels, and transforms directories must be the same."
         
         # get file paths for each scan
         self.data = {
@@ -285,35 +266,54 @@ class LocalTrackedUSDataset(Dataset):
             raise ValueError("Invalid orig_img_size. Must be int or tuple.")
 
     def __len__(self):
-        return sum(
-            len(self.data[scan]["image"]) - self.window_size + 1
-            for scan in self.data
-        )
+        # total number of segmented frames in all scans
+        return sum(len(self.data[scan]["label"]) for scan in self.data)
     
     def __getitem__(self, index):
         scan = None
         for key in self.data:
-            scan_len = len(self.data[key]["image"]) - self.window_size + 1
+            scan_len = len(self.data[key]["label"])
             if index < scan_len:
                 scan = key
                 break
             index -= scan_len
         
-        image = np.stack([
-            np.load(self.data[scan]["image"][index + i])[..., 0]
-            for i in range(self.window_size)
-        ], axis=-1)  # shape: (H, W, window_size)
-
         # get gt image
-        label = np.load(self.data[scan]["label"][index + self.gt_idx])
+        seg_file = self.data[scan]["label"][index]
+        label = np.load(seg_file)
         # If segmentation_data is 2D, add a channel dimension as last dimension
         if len(label.shape) == 2:
             label = np.expand_dims(label, axis=-1)
 
+        # get ultrasound indices for window
+        image_idx = int(os.path.basename(seg_file).split("_")[0])
+        if self.gt_idx == 0:
+            for i in range(self.window_size):
+                window_idx = list(range(image_idx, image_idx + self.window_size))
+        elif self.gt_idx == self.window_size - 1:
+            for i in range(self.window_size):
+                window_idx = list(range(image_idx, image_idx - self.window_size, -1))
+        else:  # middle frame
+            window_idx = list(range(
+                image_idx - self.gt_idx, image_idx + self.window_size - self.gt_idx
+            ))
+        # if window_idx is out of bounds, pad with first or last frame
+        for i in range(self.window_size):
+            if window_idx[i] < 0:
+                window_idx[i] = 0
+            elif window_idx[i] >= len(self.data[scan]["image"]):
+                window_idx[i] = len(self.data[scan]["image"]) - 1
+
+        # load ultrasound images
+        image = np.stack([
+            np.load(self.data[scan]["image"][i])[..., 0]
+            for i in window_idx
+        ], axis=-1)  # shape: (H, W, window_size)
+
         # get ImgToRef transforms
         img_to_ref = np.stack([
-            np.load(self.data[scan]["transform"][index + i])
-            for i in range(self.window_size)
+            np.load(self.data[scan]["transform"][i])
+            for i in window_idx
         ])  # shape: (window_size, 4, 4) - not affected by augmentations
 
         # calculate ImNToImMain for every other transform and scale
@@ -346,14 +346,14 @@ class ZScoreNormalized(MapTransform):
     
 
 if __name__ == "__main__":
-    # dataset = LocalTrackedUSDataset("/mnt/e/PerkLab/Data/Spine/SpineTrainingData/04_Slices_train")
-    dataset = GlobalTrackedUSDataset("/mnt/c/Users/chris/Data/Spine/2024_SpineSeg/04_Slices_train")
+    # dataset = LocalTrackedUSDataset("e:/PerkLab/Data/Spine/Verdure/4_Slices")
+    dataset = GlobalTrackedUSDataset("e:/PerkLab/Data/Spine/Verdure/4_Slices")
     # dataset = UltrasoundDataset("/mnt/c/Users/chris/Data/Breast/AIGTData/train")
     # print(dataset.images[:5])
     # print(dataset.segmentations[:5])
     # print(dataset.tfm_matrices[:5])
     print(len(dataset))
-    print(dataset[0]["image"].shape)
-    print(dataset[0]["label"].shape)
-    print(dataset[0]["transform"].shape)
-    print(dataset[0]["transform"])
+    print(dataset[533]["image"].shape)
+    print(dataset[533]["label"].shape)
+    print(dataset[533]["transform"].shape)
+    print(dataset[533]["transform"])

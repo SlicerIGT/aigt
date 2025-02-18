@@ -11,6 +11,7 @@ def parse_args():
     parser.add_argument("--data-folder", type=str)
     parser.add_argument("--output-dir", type=str)
     parser.add_argument("--use-file-prefix", action="store_true")
+    parser.add_argument("--include-unlabeled-frames", action="store_true")
     parser.add_argument("--log_file", type=str)
     return parser.parse_args()
 
@@ -20,6 +21,7 @@ def main(args):
     ultrasound_data_files = sorted(glob.glob(os.path.join(args.data_folder, "*_ultrasound*.npy")))
     segmentation_data_files = sorted(glob.glob(os.path.join(args.data_folder, "*_segmentation*.npy")))
     transform_data_files = sorted(glob.glob(os.path.join(args.data_folder, "*_transform*.npy")))
+    indices_data_files = sorted(glob.glob(os.path.join(args.data_folder, "*_indices*.npy")))
 
     # Make sure output folder exists and save a copy of the configuration file
 
@@ -58,20 +60,31 @@ def main(args):
         os.makedirs(pt_label_dir, exist_ok=True)
         os.makedirs(pt_tfm_dir, exist_ok=True)
 
-        # Read images, segmentations, and transforms
+        # Read images, segmentations, transforms, and indices
         ultrasound_arr = np.load(ultrasound_data_files[pt_idx])
         segmentation_arr = np.load(segmentation_data_files[pt_idx])
         if transform_data_files:
             transform_arr = np.load(transform_data_files[pt_idx])
+        if indices_data_files and indices_data_files[pt_idx]:
+            indices_arr = np.load(indices_data_files[pt_idx])
+        else:
+            indices_arr = None
 
+        seg_idx = 0
         for frame_idx in range(ultrasound_arr.shape[0]):
             # Save individual images
             image_fn = os.path.join(pt_image_dir, f"{frame_idx:04d}_ultrasound.npy")
             np.save(image_fn, ultrasound_arr[frame_idx])
 
-            # Save individual segmentations
-            seg_fn = os.path.join(pt_label_dir, f"{frame_idx:04d}_segmentation.npy")
-            np.save(seg_fn, segmentation_arr[frame_idx])
+            if indices_arr is not None and args.include_unlabeled_frames:
+                if frame_idx in indices_arr:
+                    # Save individual segmentations
+                    seg_fn = os.path.join(pt_label_dir, f"{frame_idx:04d}_segmentation.npy")
+                    np.save(seg_fn, segmentation_arr[seg_idx])
+                    seg_idx += 1
+            else:
+                seg_fn = os.path.join(pt_label_dir, f"{frame_idx:04d}_segmentation.npy")
+                np.save(seg_fn, segmentation_arr[frame_idx])
 
             # Save individual transforms
             if transform_data_files:
