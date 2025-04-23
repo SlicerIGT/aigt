@@ -2,6 +2,7 @@ import logging
 import os
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 from typing import Annotated, Optional, Literal
 
 import qt
@@ -113,6 +114,7 @@ class LumpNavAISimulationParameterNode:
     trackingSeqBr: slicer.vtkMRMLSequenceBrowserNode
     needleToReference: slicer.vtkMRMLLinearTransformNode
     needleTipToNeedle: slicer.vtkMRMLLinearTransformNode
+    cauteryToReference: slicer.vtkMRMLLinearTransformNode
     cauteryTipToCautery: slicer.vtkMRMLLinearTransformNode
     breachWarning: slicer.vtkMRMLBreachWarningNode
     currentResultsTable: slicer.vtkMRMLTableNode
@@ -193,6 +195,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         self.ui.trimRangeWidget.connect("maximumValueIsChanging(double)", self.onTrimRangeChanging)
         self.ui.setStartButton.connect("clicked()", self.onSetStart)
         self.ui.setStopButton.connect("clicked()", self.onSetStop)
+        self.ui.setTransformsButton.connect("clicked()", self.onFreeze)
         self.ui.runButton.connect("clicked()", self.onRun)
         self.ui.plotButton.connect("clicked()", self.onPlotFromSequence)
         self.ui.resultsTableView.connect("selectionChanged()", self._checkCanPlotFromSelection)
@@ -228,6 +231,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleToReference)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanFreeze)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanPlotFromSequence)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
@@ -268,6 +272,7 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setNeedleToReference)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanCreateSurface)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanFreeze)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanPlotFromSequence)
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._populateTable)
@@ -289,6 +294,10 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             # Observer for trim slider
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._setMinMaxTrim)
             self._setMinMaxTrim()
+
+            # Observer for setting reference transforms
+            self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanFreeze)
+            self._checkCanFreeze()
 
             # Observer for run button
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self._checkCanRun)
@@ -370,6 +379,23 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         if currentTime < self.ui.trimRangeWidget.minimumValue:
             self.ui.trimRangeWidget.minimumValue = currentTime
         self.ui.trimRangeWidget.maximumValue = currentTime
+
+    def _checkCanFreeze(self, caller=None, event=None) -> None:
+        if (self._parameterNode 
+            and self._parameterNode.tumorModel 
+            and self._parameterNode.trackingSeqBr 
+            and self._parameterNode.needleToReference 
+            and self._parameterNode.needleTipToNeedle 
+            and self._parameterNode.cauteryToReference 
+            and self._parameterNode.cauteryTipToCautery):
+            self.ui.setTransformsButton.toolTip = _("Freeze reference transforms to current time")
+            self.ui.setTransformsButton.enabled = True
+        else:
+            self.ui.setTransformsButton.toolTip = _("Select needle and cautery transforms")
+            self.ui.setTransformsButton.enabled = False
+
+    def onFreeze(self) -> None:
+        self.logic.setReferenceTransformsToCurrentFrame()
 
     def _checkCanRun(self, caller=None, event=None) -> None:
         if (self._parameterNode
@@ -607,6 +633,37 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         outerSurface.SetInputConnection(convexHull.GetOutputPort())
         outerSurface.Update()
         tumorModel.SetAndObservePolyData(outerSurface.GetOutput())
+
+    def setReferenceTransformsToCurrentFrame(self) -> None:
+        parameterNode = self.getParameterNode()
+        parentTransformNode = parameterNode.needleToReference.GetParentTransformNode()
+
+        # copy current NeedleToReference transform to new transform node
+        currentTime = self.getCurrentTime()
+        refNeedleToRef = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", f"NeedleToRef_{currentTime}")
+        refNeedleToRef.SetAndObserveTransformNodeID(parentTransformNode.GetID())
+        matrix = vtk.vtkMatrix4x4()
+        parameterNode.needleToReference.GetMatrixTransformToWorld(matrix)
+        refNeedleToRef.SetMatrixTransformToParent(matrix)
+        cauteryToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "CauteryToNeedle")
+        cauteryToNeedle.SetAndObserveTransformNodeID(refNeedleToRef.GetID())
+
+        # move tumor, needle, and cautery to new tranforms
+        parameterNode.tumorModel.SetAndObserveTransformNodeID(refNeedleToRef.GetID())
+        parameterNode.needleTipToNeedle.SetAndObserveTransformNodeID(refNeedleToRef.GetID())
+        parameterNode.cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToNeedle.GetID())
+
+        # update CauteryToNeedle transform using transform processor
+        # transformProcessorLogic = slicer.modules.transformprocessor.logic()
+        transformProcessorNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformProcessorNode", "TransformProcessorNode")
+        transformProcessorNode.SetAndObserveInputFromTransformNode(parameterNode.cauteryToReference)
+        transformProcessorNode.SetAndObserveInputToTransformNode(parameterNode.needleToReference)
+        transformProcessorNode.SetAndObserveOutputTransformNode(cauteryToNeedle)
+        transformProcessorNode.SetProcessingMode(transformProcessorNode.PROCESSING_MODE_COMPUTE_FULL_TRANSFORM)
+        transformProcessorNode.SetUpdateModeToAuto()
+
+        # update parameter node
+        parameterNode.needleToReference = refNeedleToRef
     
     def getCurrentTime(self) -> float:
         """
@@ -620,34 +677,6 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
             return float(currentIndex)
         else:
             return 0.0
-    
-    def createResultsTable(self, name) -> slicer.vtkMRMLTableNode:
-        parameterNode = self.getParameterNode()
-        parameterNode.currentResultsTable = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", name)
-        
-        # Add columns to table
-        parameterNode.currentResultsTable.AddColumn()
-        parameterNode.currentResultsTable.RenameColumn(self.TIME_COLUMN, "Time")
-        parameterNode.currentResultsTable.SetColumnProperty(self.TIME_COLUMN, "type", "float")
-        parameterNode.currentResultsTable.SetColumnUnitLabel("Time", "s")
-
-        parameterNode.currentResultsTable.AddColumn()
-        parameterNode.currentResultsTable.RenameColumn(self.MARGIN_STATUS_COLUMN, "Margin Status")
-        parameterNode.currentResultsTable.SetColumnProperty(self.MARGIN_STATUS_COLUMN, "type", "string")
-
-        parameterNode.currentResultsTable.AddColumn()
-        parameterNode.currentResultsTable.RenameColumn(self.DISTANCE_COLUMN, "Distance to Margin")
-        parameterNode.currentResultsTable.SetColumnProperty(self.DISTANCE_COLUMN, "type", "float")
-        parameterNode.currentResultsTable.SetColumnUnitLabel("Distance to Margin", "mm")
-
-        parameterNode.currentResultsTable.AddColumn()
-        parameterNode.currentResultsTable.RenameColumn(self.LOCATION_COLUMN, "Location")
-        parameterNode.currentResultsTable.SetColumnProperty(self.LOCATION_COLUMN, "type", "string")
-
-        # Set table node parameters
-        parameterNode.currentResultsTable.SetUseColumnNameAsColumnHeader(True)
-        parameterNode.currentResultsTable.SetLocked(True)
-        return parameterNode.currentResultsTable
 
     def getRelativeCoordinates(self) -> Annotated[npt.NDArray, Literal[3]]:
         parameterNode = self.getParameterNode()
@@ -718,7 +747,12 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         # Create results table
         modelName = parameterNode.tumorModel.GetName()
         resultsTableName = f"{modelName}_{str(int(start))}-{str(int(stop))}_{self.RESULTS_TABLE_SUFFIX}"
-        resultsTable = self.createResultsTable(resultsTableName)
+        resultsTable = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode", resultsTableName)
+
+        # create results dataframe
+        resultsDf = pd.DataFrame(columns=[
+            "Time (s)", "Distance To Tumour (mm)", "Location"]
+        )
 
         selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
         try:
@@ -733,17 +767,20 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
 
                 # Check distance of cautery to tumor and record in table
                 distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
-                if distanceToTumor < self.DEFAULT_CLOSE_MARGIN:
-                    rowIdx = resultsTable.AddEmptyRow()
-                    resultsTable.SetCellText(rowIdx, self.TIME_COLUMN, sequenceNode.GetNthIndexValue(item))
-                    resultsTable.SetCellText(rowIdx, self.DISTANCE_COLUMN, str(distanceToTumor))
-                    location = self.getAnatomicalPositionFromRelativeCoords(self.getRelativeCoordinates())
-                    resultsTable.SetCellText(rowIdx, self.LOCATION_COLUMN, location)
+                resultsDf = pd.concat([resultsDf, pd.DataFrame([{
+                    "Time (s)": sequenceNode.GetNthIndexValue(item),
+                    "Distance To Tumour (mm)": distanceToTumor,
+                    "Location": self.getAnatomicalPositionFromRelativeCoords(self.getRelativeCoordinates())
+                }])], ignore_index=True)
 
-                    if distanceToTumor <= 0:  # Tumor breach
-                        resultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Breach")
-                    else:  # Close margin
-                        resultsTable.SetCellText(rowIdx, self.MARGIN_STATUS_COLUMN, "Close margin")
+            # convert to table
+            for col_name in resultsDf.columns:
+                array = vtk.vtkVariantArray()
+                array.SetName(str(col_name))
+                for value in resultsDf[col_name]:
+                    array.InsertNextValue(vtk.vtkVariant(str(value)))
+                resultsTable.AddColumn(array)
+            parameterNode.currentResultsTable = resultsTable
 
             logging.info("Trajectory analysis completed")
             exitCode = 0
