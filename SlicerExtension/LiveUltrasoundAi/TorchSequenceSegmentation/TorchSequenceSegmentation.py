@@ -613,6 +613,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
     def onGenerateROIButton(self, toggled):
         self._parameterNode.SetParameter("GenerateROI", "true" if toggled else "false")
+        self.ui.globalROIComboBox.setEnabled(not toggled)
         if toggled:
             self.ui.globalROIComboBox.setCurrentNode(None)
 
@@ -658,7 +659,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
             self._parameterNode.SetParameter("TrackingMethod", "Global")
         else:
             self._parameterNode.SetParameter("TrackingMethod", "None")
-
+    
     def onResliceVolume(self):
         inputVolume = self._parameterNode.GetNodeReference("InputVolume")
         if inputVolume:
@@ -992,7 +993,10 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                             parameterNode.SetParameter("WindowTargetFrame", str(config["window_target_frame"]))
                             parameterNode.SetParameter("ImagePixelNorm", str(config["orig_img_size"]))
                         elif config["tracking_method"] == "global":
-                            parameterNode.SetParameter("TrackingMethod", "Global")
+                            if config["use_identity"]:
+                                parameterNode.SetParameter("TrackingMethod", "Identity")
+                            else:
+                                parameterNode.SetParameter("TrackingMethod", "Global")
                 except KeyError:  # for backward compatibility
                     parameterNode.SetParameter("TrackingMethod", "None")
     
@@ -1167,7 +1171,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                 # calculate scaling matrix
                 imagePixelNorm = int(parameterNode.GetParameter("ImagePixelNorm"))
                 imageToNorm = np.diag([*([1 / imagePixelNorm] * 3), 1])
-            else:  # global tracking
+            elif trackingMethod == "Global":  # global tracking
                 globalROINode = parameterNode.GetNodeReference("ROI")
                 generateROI = parameterNode.GetParameter("GenerateROI").lower() == "true"
                 if not globalROINode or generateROI:
@@ -1282,13 +1286,9 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                 imageArray = cv2.resize(imageArray[0, :, :], (inputSize, inputSize))  # default is bilinear
             
             # get tracking data if needed
-            if trackingMethod != "None":
-                tfmArray = slicer.util.arrayFromTransformMatrix(inputTransform, toWorld=True)
-                if trackingMethod == "Global":  # global normalization
-                    tfmArray = imageToNorm @ tfmArray
-
             # create numpy array from frame buffer
             if trackingMethod == "Local":
+                tfmArray = slicer.util.arrayFromTransformMatrix(inputTransform, toWorld=True)
                 if itemIndex == 0:  # initialize buffer
                     frameBufferList = [imageArray] * windowSize
                     transformBufferList = [tfmArray] * windowSize
@@ -1306,6 +1306,11 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             else:
                 inputArray = np.expand_dims(imageArray, axis=0)
                 if trackingMethod == "Global":
+                    tfmArray = slicer.util.arrayFromTransformMatrix(inputTransform, toWorld=True)
+                    tfmArray = imageToNorm @ tfmArray
+                    inputTfmArray = np.expand_dims(tfmArray, axis=0)
+                if trackingMethod == "Identity":
+                    tfmArray = np.identity(4)
                     inputTfmArray = np.expand_dims(tfmArray, axis=0)
             
             if trackingMethod != "None":
