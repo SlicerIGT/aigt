@@ -640,17 +640,17 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
 
         # copy current NeedleToReference transform to new transform node
         currentTime = self.getCurrentTime()
-        refNeedleToRef = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", f"NeedleToRef_{currentTime}")
-        refNeedleToRef.SetAndObserveTransformNodeID(parentTransformNode.GetID())
+        needleToRas = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", f"NeedleToRas_{currentTime}")
+        # refNeedleToRef.SetAndObserveTransformNodeID(parentTransformNode.GetID())
         matrix = vtk.vtkMatrix4x4()
         parameterNode.needleToReference.GetMatrixTransformToWorld(matrix)
-        refNeedleToRef.SetMatrixTransformToParent(matrix)
+        needleToRas.SetMatrixTransformToParent(matrix)
         cauteryToNeedle = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "CauteryToNeedle")
-        cauteryToNeedle.SetAndObserveTransformNodeID(refNeedleToRef.GetID())
+        cauteryToNeedle.SetAndObserveTransformNodeID(needleToRas.GetID())
 
         # move tumor, needle, and cautery to new tranforms
-        parameterNode.tumorModel.SetAndObserveTransformNodeID(refNeedleToRef.GetID())
-        parameterNode.needleTipToNeedle.SetAndObserveTransformNodeID(refNeedleToRef.GetID())
+        parameterNode.tumorModel.SetAndObserveTransformNodeID(needleToRas.GetID())
+        parameterNode.needleTipToNeedle.SetAndObserveTransformNodeID(needleToRas.GetID())
         parameterNode.cauteryTipToCautery.SetAndObserveTransformNodeID(cauteryToNeedle.GetID())
 
         # update CauteryToNeedle transform using transform processor
@@ -663,7 +663,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         transformProcessorNode.SetUpdateModeToAuto()
 
         # update parameter node
-        parameterNode.needleToReference = refNeedleToRef
+        parameterNode.needleToReference = needleToRas
     
     def getCurrentTime(self) -> float:
         """
@@ -677,6 +677,16 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
             return float(currentIndex)
         else:
             return 0.0
+        
+    def getTumorCenterInNeedle(self) -> Annotated[npt.NDArray, Literal[3]]:
+        parameterNode = self.getParameterNode()
+        tumorModel = parameterNode.tumorModel
+        centerOfMassFilter = vtk.vtkCenterOfMass()
+        centerOfMassFilter.SetInputData(tumorModel.GetPolyData())
+        centerOfMassFilter.SetUseScalarsAsWeights(False)
+        centerOfMassFilter.Update()
+        center = centerOfMassFilter.GetCenter()
+        return center
 
     def getRelativeCoordinates(self) -> Annotated[npt.NDArray, Literal[3]]:
         parameterNode = self.getParameterNode()
@@ -684,26 +694,19 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         # Get cautery tip to RAS transform
         cauteryTipToRasMatrix = vtk.vtkMatrix4x4()
         parameterNode.cauteryTipToCautery.GetMatrixTransformToWorld(cauteryTipToRasMatrix)
-        cauteryTipToRas = cauteryTipToRasMatrix.MultiplyFloatPoint([0, 0, 0, 1])
-        cauteryTipToRas = np.array(cauteryTipToRas)
+        cauteryTipRas = cauteryTipToRasMatrix.MultiplyFloatPoint([0, 0, 0, 1])
+        cauteryTipRas = np.array(cauteryTipRas)
 
         # Get tumor center
-        tumorModel = parameterNode.tumorModel
-        centerOfMassFilter = vtk.vtkCenterOfMass()
-        centerOfMassFilter.SetInputData(tumorModel.GetPolyData())
-        centerOfMassFilter.SetUseScalarsAsWeights(False)
-        centerOfMassFilter.Update()
-        center = centerOfMassFilter.GetCenter()
-
-        # Get tumor center to RAS transform
-        needleToReference = tumorModel.GetParentTransformNode()
+        center = self.getTumorCenterInNeedle()
+        needleToReference = parameterNode.tumorModel.GetParentTransformNode()
         needleToRasMatrix = vtk.vtkMatrix4x4()
         needleToReference.GetMatrixTransformToWorld(needleToRasMatrix)
-        tumorCenterToRas = needleToRasMatrix.MultiplyFloatPoint([center[0], center[1], center[2], 1])
-        tumorCenterToRas = np.array(tumorCenterToRas)
+        tumorCenterRas = needleToRasMatrix.MultiplyFloatPoint([center[0], center[1], center[2], 1])
+        tumorCenterRas = np.array(tumorCenterRas)
 
         # Subtract to get relative position
-        cauteryTipToTumorCenter = cauteryTipToRas[:3] - tumorCenterToRas[:3]
+        cauteryTipToTumorCenter = cauteryTipRas[:3] - tumorCenterRas[:3]
         return cauteryTipToTumorCenter
     
     @staticmethod
@@ -731,6 +734,8 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         self.processing = True
 
         parameterNode = self.getParameterNode()
+        needleToReference = parameterNode.tumorModel.GetParentTransformNode()
+        cauteryTipToCautery = parameterNode.cauteryTipToCautery
         sequenceNode = parameterNode.trackingSeqBr.GetMasterSequenceNode()
         if not parameterNode.breachWarning:
             parameterNode.breachWarning = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLBreachWarningNode")
@@ -751,7 +756,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
 
         # create results dataframe
         resultsDf = pd.DataFrame(columns=[
-            "Time (s)", "Distance To Tumour (mm)", "Location"]
+            "Time (s)", "Distance To Tumour (mm)", "CauteryTipNeedle", "TumorCenterNeedle", "Location"]
         )
 
         selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
@@ -767,9 +772,14 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
 
                 # Check distance of cautery to tumor and record in table
                 distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
+                cauteryTipNeedle = vtk.vtkMatrix4x4()
+                cauteryTipToCautery.GetMatrixTransformToNode(needleToReference, cauteryTipNeedle)
+                cauteryTipNeedle = cauteryTipNeedle.MultiplyFloatPoint([0, 0, 0, 1])
                 resultsDf = pd.concat([resultsDf, pd.DataFrame([{
                     "Time (s)": sequenceNode.GetNthIndexValue(item),
-                    "Distance To Tumour (mm)": distanceToTumor,
+                    "Distance To Tumour (mm)": distanceToTumor, 
+                    "CauteryTipNeedle": cauteryTipNeedle[:3],
+                    "TumorCenterNeedle": self.getTumorCenterInNeedle(),
                     "Location": self.getAnatomicalPositionFromRelativeCoords(self.getRelativeCoordinates())
                 }])], ignore_index=True)
 
