@@ -1,0 +1,47 @@
+# Example config file for train.py
+
+model_name: "unet"  # available networks: unet, attention_unet, effnetunet, unetplusplus, unetr, segresnet
+loss_function: "tversky"
+lambda_ce: 0.5  # 0.0 for dice, 1.0 for cross-entropy/focal
+class_weights: [0.25, 0.75]  # must be same length as out_channels
+image_size: 224
+in_channels: !!int 1
+out_channels: !!int 2
+num_epochs: !!int 200
+batch_size: !!int 128
+learning_rate: !!float 0.0001
+warmup_steps: !!int 100
+weight_decay: 0.01
+dropout_rate: 0.2
+num_res_units: 2
+shuffle: !!bool true  # true/false
+seed: !!int 42
+transforms:
+  general:
+    # Basic transforms, do not modify
+    - name: "Transposed"
+      params:
+        keys: ["image", "label"]
+        indices: [2, 0, 1]
+    - name: "ToTensord"
+    - name: "EnsureTyped"
+      params:
+        keys: ["image", "label"]
+        dtype: "float32"
+    
+    # Add additional transforms here
+  train:
+    - name: RandGaussianNoised
+      params:
+        keys: ["image"]
+        prob: 0.5
+    - name: RandFlipd
+      params:
+        keys: ["image", "label"]
+        prob: 0.5
+        spatial_axis: 1
+    - name: RandRotated
+      params:
+        keys: ["image", "label"]
+        prob: 0.5
+      range_x: 0.26
