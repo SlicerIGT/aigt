@@ -625,6 +625,8 @@ class TrainNeuralNetWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def setupTrainScriptLayout(self,layout):
     self.modelDirectoryFilePathSelector = ctk.ctkDirectoryButton()
     self.modelDirectoryFilePath = os.path.join(self.moduleDir, os.pardir, "Networks")
+    if not os.path.exists(self.modelDirectoryFilePath):
+      os.mkdir(self.modelDirectoryFilePath)
     self.modelDirectoryFilePathSelector.directory = self.modelDirectoryFilePath
     layout.addRow(self.modelDirectoryFilePathSelector)
 
@@ -828,7 +830,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       self.openWarningWidget(self.trainingRunName)
       self.warningWidget.show()
     else:
-      cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
+      cmd = [fr"{self.moduleDir}\Scripts\openTrainCMDPrompt.bat",
              str(self.moduleDir),
              str(self.condaPath),
              str(self.condaEnvName),
@@ -868,7 +870,7 @@ class TrainNeuralNetLogic(ScriptedLoadableModuleLogic):
       for file in os.listdir(os.path.join(baseDir,dir)):
         os.remove(os.path.join(baseDir,dir,file))
       os.removedirs(os.path.join(baseDir,dir))'''
-    cmd = [str(self.moduleDir + "\Scripts\openTrainCMDPrompt.bat"),
+    cmd = [fr"{self.moduleDir}\Scripts\openTrainCMDPrompt.bat",
            str(self.moduleDir),
            str(self.condaPath),
            str(self.condaEnvName),
