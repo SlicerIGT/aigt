@@ -678,7 +678,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         else:
             return 0.0
         
-    def getTumorCenterInNeedle(self) -> Annotated[npt.NDArray, Literal[3]]:
+    def getTumorCenterRas(self) -> Annotated[npt.NDArray, Literal[3]]:
         parameterNode = self.getParameterNode()
         tumorModel = parameterNode.tumorModel
         centerOfMassFilter = vtk.vtkCenterOfMass()
@@ -686,7 +686,24 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         centerOfMassFilter.SetUseScalarsAsWeights(False)
         centerOfMassFilter.Update()
         center = centerOfMassFilter.GetCenter()
+
+        needleToReference = parameterNode.needleToReference
+        if needleToReference:
+            # Transform center to RAS coordinates
+            needleToRasMatrix = vtk.vtkMatrix4x4()
+            needleToReference.GetMatrixTransformToWorld(needleToRasMatrix)
+            center = needleToRasMatrix.MultiplyFloatPoint([center[0], center[1], center[2], 1])
+            center = np.array(center[:3])
+
         return center
+    
+    def getNeedleTipToWorld(self) -> Annotated[npt.NDArray, Literal[3]]:
+        parameterNode = self.getParameterNode()
+        needleTipToNeedle = parameterNode.needleTipToNeedle
+        needleTipWorldMatrix = vtk.vtkMatrix4x4()
+        needleTipToNeedle.GetMatrixTransformToWorld(needleTipWorldMatrix)
+        needleTipToWorldArr = slicer.util.arrayFromVTKMatrix(needleTipWorldMatrix)
+        return needleTipToWorldArr
 
     def getRelativeCoordinates(self) -> Annotated[npt.NDArray, Literal[3]]:
         parameterNode = self.getParameterNode()
@@ -698,15 +715,10 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         cauteryTipRas = np.array(cauteryTipRas)
 
         # Get tumor center
-        center = self.getTumorCenterInNeedle()
-        needleToReference = parameterNode.tumorModel.GetParentTransformNode()
-        needleToRasMatrix = vtk.vtkMatrix4x4()
-        needleToReference.GetMatrixTransformToWorld(needleToRasMatrix)
-        tumorCenterRas = needleToRasMatrix.MultiplyFloatPoint([center[0], center[1], center[2], 1])
-        tumorCenterRas = np.array(tumorCenterRas)
+        center = self.getTumorCenterRas()
 
         # Subtract to get relative position
-        cauteryTipToTumorCenter = cauteryTipRas[:3] - tumorCenterRas[:3]
+        cauteryTipToTumorCenter = cauteryTipRas[:3] - center[:3]
         return cauteryTipToTumorCenter
     
     @staticmethod
@@ -756,7 +768,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
 
         # create results dataframe
         resultsDf = pd.DataFrame(columns=[
-            "Time (s)", "Distance To Tumour (mm)", "CauteryTipNeedle", "TumorCenterNeedle", "Location"]
+            "Time (s)", "Distance To Tumour (mm)", "CauteryTipNeedle", "NeedleTipToRas", "TumorCenterRas", "Location"]
         )
 
         selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
@@ -779,7 +791,8 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
                     "Time (s)": sequenceNode.GetNthIndexValue(item),
                     "Distance To Tumour (mm)": distanceToTumor, 
                     "CauteryTipNeedle": cauteryTipNeedle[:3],
-                    "TumorCenterNeedle": self.getTumorCenterInNeedle(),
+                    "NeedleTipToRas": self.getNeedleTipToWorld(),
+                    "TumorCenterRas": self.getTumorCenterRas(),
                     "Location": self.getAnatomicalPositionFromRelativeCoords(self.getRelativeCoordinates())
                 }])], ignore_index=True)
 

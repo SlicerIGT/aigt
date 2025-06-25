@@ -1037,7 +1037,7 @@
     </hint>
     <hint type="destinationlabel">
      <x>376</x>
-     <y>1115</y>
+     <y>1017</y>
     </hint>
    </hints>
   </connection>
@@ -1048,8 +1048,8 @@
    <slot>setVisible(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>211</x>
-     <y>569</y>
+     <x>229</x>
+     <y>612</y>
     </hint>
     <hint type="destinationlabel">
      <x>182</x>
@@ -1069,7 +1069,7 @@
     </hint>
     <hint type="destinationlabel">
      <x>367</x>
-     <y>595</y>
+     <y>647</y>
     </hint>
    </hints>
   </connection>
@@ -1085,7 +1085,7 @@
     </hint>
     <hint type="destinationlabel">
      <x>367</x>
-     <y>622</y>
+     <y>673</y>
     </hint>
    </hints>
   </connection>
