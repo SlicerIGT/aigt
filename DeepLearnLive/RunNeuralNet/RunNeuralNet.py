@@ -323,10 +323,10 @@ class RunNeuralNetLogic(ScriptedLoadableModuleLogic):
     self.outgoingConnectorNode.Start()
     this_Host = self.getIPAddress()
     if self.incomingHostName == "localhost" or self.incomingHostName == "127.0.0.1" or self.incomingHostName == this_Host:
-      cmd = [fr"{self.moduleDir}\Scripts\\openCMDPrompt.bat",
+      cmd = [fr"{self.moduleDir}\\Scripts\\openCMDPrompt.bat",
              str(self.condaPath),
              str(self.condaEnvName),
-             str(self.moduleDir + "\Scripts"),
+             fr"{self.moduleDir}\\Scripts",
              str(self.networkType),
              str(self.networkPath),
              str(self.networkName),
