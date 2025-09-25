@@ -1,10 +1,12 @@
 import logging
 import traceback
 import os
+import sys
 import glob
 import json
 import qt
 import vtk
+from pathlib import Path
 import numpy as np
 
 import slicer
@@ -53,6 +55,11 @@ except:
     slicer.util.pip_install('pynrrd')
     import nrrd
 
+try:
+    import monai
+except:
+    slicer.util.pip_install('monai')
+    import monai
 
 #
 # TorchSequenceSegmentation
@@ -913,6 +920,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         self.isProcessing = False
         self.stopProcess = False
         self.model = None
+        self.metadata = None
         self.scanConversionDict = None
         self.cart_x = None
         self.cart_y = None
@@ -944,11 +952,26 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             parameterNode.SetParameter("GenerateROI", "true")
     
     def getAllModelPaths(self):
+        parameterNode = self.getParameterNode()
         modelFolder = slicer.util.settingsValue(self.LAST_MODEL_FOLDER_SETTING, "")
         if modelFolder:
-            models = glob.glob(os.path.join(modelFolder, "**", "*.pt"), recursive=True)
-            normModels = [os.path.normpath(model) for model in models]  # normalize paths
-            return normModels
+            if os.path.exists(os.path.join(modelFolder, "configs/metadata.json")):
+                parameterNode.SetParameter("UseMonaiBundle", "true")
+                # sys.path.insert(0, modelFolder)
+                sys.path.insert(0, os.path.join(modelFolder, "scripts"))
+                # MONAI bundle detected
+                cfgDir = Path(os.path.join(modelFolder, "configs"))
+                cfgExts = ["yaml", "yml", "json"]
+                models = []
+                for ext in cfgExts:
+                    models.extend(cfgDir.glob(f"*.{ext}"))
+                normModels = [os.path.normpath(str(model)) for model in models]  # normalize paths
+                return normModels
+            else:
+                parameterNode.SetParameter("UseMonaiBundle", "false")
+                models = glob.glob(os.path.join(modelFolder, "**", "*.pt"), recursive=True)
+                normModels = [os.path.normpath(model) for model in models]  # normalize paths
+                return normModels
         else:
             return []
     
@@ -973,32 +996,43 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
             logging.error("Model file does not exist: " + modelPath)
             self.model = None
         else:
-            extra_files = {"config.json": ""}
-            self.model = torch.jit.load(modelPath, _extra_files=extra_files).to(DEVICE)
-            self.model.eval()
+            if parameterNode.GetParameter("UseMonaiBundle") == "true":
+                config = monai.bundle.ConfigParser()
+                config.read_config(modelPath)
+                self.model = config.get_parsed_content("net")
+                self.model.to(DEVICE)
+                self.model.eval()
 
-            if extra_files["config.json"]:
-                # Check for model input size metadata
-                config = json.loads(extra_files["config.json"])
-                inputSize = config["shape"][-1]
-                parameterNode.SetParameter("ModelInputSize", str(inputSize))  # assume square
-                parameterNode.SetParameter("WindowSize", str(config["shape"][1]))
+                # read metadata for model input and output format
+                with open(os.path.join(os.path.dirname(modelPath), "metadata.json"), "r") as f:
+                    self.metadata = json.load(f)
+            else:
+                extra_files = {"config.json": ""}
+                self.model = torch.jit.load(modelPath, _extra_files=extra_files).to(DEVICE)
+                self.model.eval()
 
-                # check if model uses tracking data in input
-                try:
-                    useTrackingLayer = config["use_tracking_layer"]
-                    if useTrackingLayer:
-                        if config["tracking_method"] == "local":
-                            parameterNode.SetParameter("TrackingMethod", "Local")
-                            parameterNode.SetParameter("WindowTargetFrame", str(config["window_target_frame"]))
-                            parameterNode.SetParameter("ImagePixelNorm", str(config["orig_img_size"]))
-                        elif config["tracking_method"] == "global":
-                            if config["use_identity"]:
-                                parameterNode.SetParameter("TrackingMethod", "Identity")
-                            else:
-                                parameterNode.SetParameter("TrackingMethod", "Global")
-                except KeyError:  # for backward compatibility
-                    parameterNode.SetParameter("TrackingMethod", "None")
+                if extra_files["config.json"]:
+                    # Check for model input size metadata
+                    config = json.loads(extra_files["config.json"])
+                    inputSize = config["shape"][-1]
+                    parameterNode.SetParameter("ModelInputSize", str(inputSize))  # assume square
+                    parameterNode.SetParameter("WindowSize", str(config["shape"][1]))
+
+                    # check if model uses tracking data in input
+                    try:
+                        useTrackingLayer = config["use_tracking_layer"]
+                        if useTrackingLayer:
+                            if config["tracking_method"] == "local":
+                                parameterNode.SetParameter("TrackingMethod", "Local")
+                                parameterNode.SetParameter("WindowTargetFrame", str(config["window_target_frame"]))
+                                parameterNode.SetParameter("ImagePixelNorm", str(config["orig_img_size"]))
+                            elif config["tracking_method"] == "global":
+                                if config["use_identity"]:
+                                    parameterNode.SetParameter("TrackingMethod", "Identity")
+                                else:
+                                    parameterNode.SetParameter("TrackingMethod", "Global")
+                    except KeyError:  # for backward compatibility
+                        parameterNode.SetParameter("TrackingMethod", "None")
     
     def loadScanConversion(self, scanConversionPath):
         if not scanConversionPath:
@@ -1105,31 +1139,73 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
         if toFlip:
             inputArray = np.flip(inputArray, axis=0)
 
-        # Normalize input if needed
-        normalizeInput = slicer.util.settingsValue(self.LAST_NORMALIZE_SETTING, False, converter=slicer.util.toBool)
-        if normalizeInput:
-            if inputArray.max() <= 1.0:
-                logging.info("Input image is already between 0 and 1, skipping normalization.")
-            else:
-                inputArray = inputArray.astype(float) / 255.0
+        if parameterNode.GetParameter("UseMonaiBundle") == "true":
+            # check model input format
+            if self.metadata:
+                inputsMetadata = self.metadata["network_data_format"]["inputs"]
+                inputList = []
+                for v in inputsMetadata.values():
+                    if v["type"] == "image":
+                        numChannels = v["num_channels"]
+                        if numChannels != inputArray.shape[0]:
+                            raise ValueError(f"Input image has {inputArray.shape[0]} channels, but model expects {numChannels} channels.")
+                        spatialShape = v["spatial_shape"]
+                        if inputArray.shape[1:] != spatialShape:
+                            inputArray = cv2.resize(inputArray[0], spatialShape)
+                            inputArray = np.expand_dims(inputArray, axis=0)  # add channel dimension
+                        valueRange = v["value_range"]
+                        if valueRange[0] < 0 or inputArray.max() > valueRange[1]:
+                            # assumes image will always be in range [0, 255]
+                            inputArray = (inputArray / 255.0) * (valueRange[1] - valueRange[0]) + valueRange[0]
+                        imageTensor = torch.from_numpy(inputArray).unsqueeze(0).float().to(DEVICE)
+                        inputList.append(imageTensor)
+                    elif v["type"] == "tuples":
+                        numChannels = v["num_channels"]
+                        spatialShape = v["spatial_shape"]
+                        # create random tensor with (numChannels, *spatialShape)
+                        tupleTensor = torch.randn((numChannels, *spatialShape), device=DEVICE).float()
+                        inputList.append(tupleTensor)
+                    else:
+                        raise ValueError(f"Unsupported input type: {v['type']}")
+                inputTensor = tuple(inputList)
+        else:
+            # Normalize input if needed
+            normalizeInput = slicer.util.settingsValue(self.LAST_NORMALIZE_SETTING, False, converter=slicer.util.toBool)
+            if normalizeInput:
+                if inputArray.max() <= 1.0:
+                    logging.info("Input image is already between 0 and 1, skipping normalization.")
+                else:
+                    inputArray = inputArray.astype(float) / 255.0
 
-        # Convert to tensor and add batch dimension
-        inputTensor = torch.from_numpy(inputArray).unsqueeze(0).float().to(DEVICE)
-        if inputTfmArray is not None:
-            inputTfmTensor = torch.from_numpy(inputTfmArray).unsqueeze(0).float().to(DEVICE)
+            # Convert to tensor and add batch dimension
+            inputTensor = torch.from_numpy(inputArray).unsqueeze(0).float().to(DEVICE)
+            if inputTfmArray is not None:
+                inputTfmTensor = torch.from_numpy(inputTfmArray).unsqueeze(0).float().to(DEVICE)
+            else:
+                inputTensor = (inputTensor,)
 
         # Run prediction
         with torch.inference_mode():
             if inputTfmArray is not None:
                 output = self.model((inputTensor, inputTfmTensor))
             else:
-                output = self.model(inputTensor)
+                output = self.model(*inputTensor)
         
         if isinstance(output, list):
             output = output[0]
-        output = torch.nn.functional.softmax(output, dim=1)
-        outputArray = output.detach().cpu().numpy()
-        outputArray = outputArray[0, 1, :, :]
+        if parameterNode.GetParameter("UseMonaiBundle").lower() == "true":
+            # TODO: make this robust to different output formats
+            if isinstance(output, dict):
+                output = output[list(self.metadata["network_data_format"]["outputs"].keys())[0]]
+        if output.shape[1] == 1:
+            print('sigmoid')
+            output = torch.sigmoid(output)
+            outputArray = output[0, 0, :, :]
+        else:
+            print('softmax')
+            output = torch.nn.functional.softmax(output, dim=1)
+            outputArray = output[0, 1, :, :]
+        outputArray = outputArray.detach().cpu().numpy()
         
         # Flip output back if needed
         if toFlip:
@@ -1332,7 +1408,7 @@ class TorchSequenceSegmentationLogic(ScriptedLoadableModuleLogic):
                 prediction = self.scanConvert(prediction)
                 prediction *= self.curvilinear_mask
             else:
-                prediction = cv2.resize(prediction, (originalImageShape[2], originalImageShape[1]))
+                prediction = cv2.resize(prediction[0], (originalImageShape[2], originalImageShape[1]))[np.newaxis, ...]
 
             slicer.util.updateVolumeFromArray(predictionVolume, prediction)
             indexValue = masterSequenceNode.GetNthIndexValue(itemIndex)
