@@ -356,7 +356,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
                                  self.logic.outputVolume)
         
         pred, probability = self.logic.ProcessMModeImage(self.logic.outputVolume)
-        print(f'Classification: {pred}, Prediction confidence: {probability}')
+        print(f'Classification: {pred}')
         
         slicer.util.getNode('vtkMRMLSliceNodeYellow').SetOrientationToAxial()
         slicer.app.layoutManager().sliceWidget("Yellow").sliceLogic().GetSliceCompositeNode().SetBackgroundVolumeID(self.logic.outputVolume.GetID())
@@ -634,7 +634,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
     def GenerateMMode(self,
                       inputVolume: slicer.vtkMRMLScalarVolumeNode,
                       outputVolume: slicer.vtkMRMLScalarVolumeNode,
-                      paperSpeed_mm_per_px: float = 25.0
+                      paperSpeed_mm_per_px: float = 10.0
                       ) -> None:
         """
         Finds the sequence that the inputVolume is the proxy node of. Samples the inputVolume along the scanline across all frames of the sequence and writes the result to the outputVolume.
@@ -701,7 +701,7 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
             slicer.app.processEvents()
         
         # Compute horizontal scaling factor
-        horizontalPixelSpacing_mm = paperSpeed_mm_per_px/20.0  # Assuming 20 FPS cine rate
+        horizontalPixelSpacing_mm = paperSpeed_mm_per_px/40.0  # Assuming 20 FPS cine rate
         horizontalPixelsPerFrame = horizontalPixelSpacing_mm / inputVolume.GetSpacing()[0]
         
         # Compute alternative horizontal scaling factor for square output
