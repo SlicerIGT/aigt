@@ -2,6 +2,8 @@ import logging
 import os
 import subprocess
 import string
+import json
+from datetime import datetime
 from ctypes import windll
 import vtk
 import qt
@@ -9,7 +11,7 @@ import slicer
 
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-from Resources.model.model import EnsembleClassifier
+from Resources.model.model import EnsembleClassifier, CLASS_NAMES
 
 try:
     import numpy as np
@@ -184,6 +186,7 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         self.ui.setCustomUiButton.connect('toggled(bool)', self.onSetCustomUiButtonClicked)
         self.ui.placeMarkupLineButton.connect('clicked(bool)', self.onPlaceMarkupLineClicked)
         self.ui.generateMModeButton.connect('clicked(bool)', self.onGenerateMModeButtonClicked)
+        self.ui.saveMModeButton.connect('clicked(bool)', self.onSaveMModeButtonClicked)
         self.ui.toggleTestObserverButton.connect('toggled(bool)', self.onToggleRecordingButtonClicked)
 
 
@@ -194,12 +197,14 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         """
         Called when the application closes and the module widget is destroyed.
         """
-        if self.logic.plus_server_process:
+        if self.logic and self.logic.plus_server_process:
             self.logic.plus_server_process.kill()
 
-        slicer.mrmlScene.RemoveNode(self.logic.RawInputIgtlConnectorNode)
-        slicer.mrmlScene.RemoveNode(self.logic.InferenceOutputNode)
-        slicer.mrmlScene.RemoveNode(self.logic.sequenceBrowserUltrasound)
+        if self.logic:
+            try:
+                self.logic.cleanupScene()
+            except Exception as e:
+                logging.warning(f"BLUELungUltrasoundWidget.cleanup: cleanupScene failed: {e}")
 
         self.removeObservers()
 
@@ -364,6 +369,96 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
         slicer.app.layoutManager().resetSliceViews()
 
 
+    def onSaveMModeButtonClicked(self):
+        mmodeNode = self.logic.outputVolume
+        if not mmodeNode or not mmodeNode.GetImageData():
+            logging.warning("No M-mode volume to save. Generate M-mode first.")
+            print("[BLUELungUltrasound] Save M-mode requested but no image data is available.")
+            return
+
+        # Step 1: Ask user for classification
+        class_options = list(CLASS_NAMES.values()) + ["no classification"]
+        classification = qt.QInputDialog.getItem(
+            slicer.util.mainWindow(),
+            "Classify M-mode",
+            "Select classification:",
+            class_options,
+            0,
+            False
+        )
+
+        # In this Slicer/Qt binding getItem returns a single value.
+        # Treat empty/None as cancel.
+        if not classification:
+            print("[BLUELungUltrasound] Classification dialog canceled by user.")
+            return
+
+        # Step 2: Ask user where to save the PNG image
+        filePath = qt.QFileDialog.getSaveFileName(
+            slicer.util.mainWindow(),
+            "Save M-mode",
+            "",
+            "PNG Image (*.png);;All files (*)"
+        )
+
+        # In this Slicer/Qt binding getSaveFileName returns a single value.
+        # Treat empty/None as cancel.
+        if not filePath:
+            print("[BLUELungUltrasound] Save M-mode canceled by user.")
+            return
+
+        # Ensure the file has a .png extension
+        if not filePath.lower().endswith('.png'):
+            filePath = filePath + '.png'
+
+        print(f"[BLUELungUltrasound] Saving M-mode PNG to: {filePath}")
+
+        imageData = mmodeNode.GetImageData()
+        if not imageData:
+            logging.error("M-mode node has no image data to save.")
+            return
+
+        pngWriter = vtk.vtkPNGWriter()
+        pngWriter.SetFileName(filePath)
+        pngWriter.SetInputData(imageData)
+        try:
+            pngWriter.Write()
+            logging.info(f"M-mode PNG saved to {filePath}")
+            print(f"[BLUELungUltrasound] M-mode PNG saved to {filePath}")
+            try:
+                import os
+                exists = os.path.exists(filePath)
+                print(f"[BLUELungUltrasound] File exists on disk: {exists}")
+            except Exception as checkErr:
+                print(f"[BLUELungUltrasound] Error checking saved file: {checkErr}")
+
+            # Step 3: Save JSON metadata next to the image
+            metadata = {
+                "classification": classification,
+                "image_filename": os.path.basename(filePath),
+                "timestamp": datetime.now().isoformat()
+            }
+
+            json_path = os.path.splitext(filePath)[0] + '.json'
+            try:
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(metadata, f, indent=2)
+                print(f"[BLUELungUltrasound] Metadata JSON saved to {json_path}")
+            except Exception as metaErr:
+                logging.error(f"Failed to save metadata JSON to {json_path}: {metaErr}")
+                print(f"[BLUELungUltrasound] Failed to save metadata JSON to {json_path}: {metaErr}")
+
+            try:
+                slicer.util.infoDisplay(
+                    f"M-mode saved.\nImage: {filePath}\nClassification: {classification}"
+                )
+            except Exception as msgErr:
+                print(f"[BLUELungUltrasound] Could not show info message: {msgErr}")
+        except Exception as e:
+            logging.error(f"Failed to save M-mode PNG to {filePath}: {e}")
+            print(f"[BLUELungUltrasound] Failed to save M-mode PNG to {filePath}: {e}")
+
+
     def onToggleRecordingButtonClicked(self, toggled):
         if toggled:
             self.ui.toggleTestObserverButton.text = "Stop Recording"
@@ -416,6 +511,13 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         ScriptedLoadableModuleLogic.__init__(self)
         self.settings = qt.QSettings()
         self.plus_server_process = None
+        # Clean up any leftover nodes from a previous instance of this module
+        # so that reloading the module starts from a clean state.
+        try:
+            self.cleanupScene()
+        except Exception as e:
+            logging.warning(f"BLUELungUltrasoundLogic.cleanupScene on init failed: {e}")
+
         self.setupOpenIgtLink()
 
         self.InferenceOutputNode = slicer.vtkMRMLVectorVolumeNode()
@@ -473,6 +575,71 @@ class BLUELungUltrasoundLogic(ScriptedLoadableModuleLogic):
         self.RawInputIgtlConnectorNode.SetTypeClient('localhost', self.IGTL_RAW_INPUT_PORT)
         slicer.mrmlScene.AddNode(self.RawInputIgtlConnectorNode)
         self.RawInputIgtlConnectorNode.Start()
+
+
+    def cleanupScene(self):
+        """Remove nodes created by this module from the MRML scene.
+
+        Intended to be called when the logic is re-instantiated (module reload)
+        and from the widget's cleanup, so that previous runs do not leave
+        stray nodes and state in the scene.
+        """
+
+        scene = slicer.mrmlScene
+
+        # Stop recording if a sequence browser exists
+        try:
+            if hasattr(self, 'sequenceBrowserUltrasound') and self.sequenceBrowserUltrasound:
+                self.sequenceBrowserUltrasound.SetRecordingActive(False)
+        except Exception as e:
+            logging.warning(f"cleanupScene: could not stop recording: {e}")
+
+        # Stop and remove OpenIGTLink connector
+        try:
+            if hasattr(self, 'RawInputIgtlConnectorNode') and self.RawInputIgtlConnectorNode:
+                self.RawInputIgtlConnectorNode.Stop()
+                if scene.IsNodePresent(self.RawInputIgtlConnectorNode):
+                    scene.RemoveNode(self.RawInputIgtlConnectorNode)
+        except Exception as e:
+            logging.warning(f"cleanupScene: error removing RawInputIgtlConnectorNode: {e}")
+
+        # Helper to remove a node attribute safely
+        def _remove_node_attr(attr_name):
+            try:
+                if hasattr(self, attr_name):
+                    node = getattr(self, attr_name)
+                    if node and scene.IsNodePresent(node):
+                        scene.RemoveNode(node)
+            except Exception as err:
+                logging.warning(f"cleanupScene: error removing {attr_name}: {err}")
+
+        # Remove nodes tracked as attributes
+        for attr in [
+            'InferenceOutputNode',
+            'inputNode',
+            'outputVolume',
+            'gradcamOutputNode',
+            'scanlineMarkup',
+            'sequenceBrowserUltrasound',
+            'sequenceNode',
+        ]:
+            _remove_node_attr(attr)
+
+        # Also remove by name in case they were left from a previous run
+        for nodeName in [
+            self.INPUT_NODE_NAME,
+            self.INFERENCE_NODE_NAME,
+            'M-mode',
+            'GradCAM',
+            'Scanline',
+            'UltrasoundSequenceBrowser',
+        ]:
+            try:
+                node = scene.GetFirstNodeByName(nodeName)
+                if node:
+                    scene.RemoveNode(node)
+            except Exception as err:
+                logging.warning(f"cleanupScene: error removing node by name {nodeName}: {err}")
     
     
     def setDefaultParameters(self, parameterNode):
