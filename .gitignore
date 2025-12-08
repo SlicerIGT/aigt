@@ -7,6 +7,10 @@
 /DeepLearnLive/Networks/CNN_LSTM/lstm_TBME_0.h5
 /DeepLearnLive/Networks/CNN_LSTM/lstm_TBME_0.json
 /UltrasoundObjectDetection/SlicerModule/BLUELungUltrasound/Resources/model/weights
+/UltrasoundObjectDetection/wandb
+/UltrasoundObjectDetection/runs
+/UltrasoundObjectDetection/BLUE Protocol - Object Detection
+
 
 # Ignore pyc files
 *.pyc
