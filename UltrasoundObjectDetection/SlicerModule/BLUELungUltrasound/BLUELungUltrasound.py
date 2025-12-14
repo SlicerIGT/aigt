@@ -376,7 +376,6 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             print("[BLUELungUltrasound] Save M-mode requested but no image data is available.")
             return
 
-        # Step 1: Ask user for classification
         class_options = list(CLASS_NAMES.values()) + ["no classification"]
         classification = qt.QInputDialog.getItem(
             slicer.util.mainWindow(),
@@ -387,13 +386,10 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             False
         )
 
-        # In this Slicer/Qt binding getItem returns a single value.
-        # Treat empty/None as cancel.
         if not classification:
             print("[BLUELungUltrasound] Classification dialog canceled by user.")
             return
 
-        # Step 2: Ask user where to save the PNG image
         filePath = qt.QFileDialog.getSaveFileName(
             slicer.util.mainWindow(),
             "Save M-mode",
@@ -401,13 +397,10 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             "PNG Image (*.png);;All files (*)"
         )
 
-        # In this Slicer/Qt binding getSaveFileName returns a single value.
-        # Treat empty/None as cancel.
         if not filePath:
             print("[BLUELungUltrasound] Save M-mode canceled by user.")
             return
 
-        # Ensure the file has a .png extension
         if not filePath.lower().endswith('.png'):
             filePath = filePath + '.png'
 
@@ -432,9 +425,11 @@ class BLUELungUltrasoundWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
             except Exception as checkErr:
                 print(f"[BLUELungUltrasound] Error checking saved file: {checkErr}")
 
+            pred, _ = self.logic.ProcessMModeImage(self.logic.outputVolume)
             # Step 3: Save JSON metadata next to the image
             metadata = {
-                "classification": classification,
+                "user_classification": classification,
+                "model_classification": pred,
                 "image_filename": os.path.basename(filePath),
                 "timestamp": datetime.now().isoformat()
             }
