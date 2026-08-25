@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>292</width>
-    <height>947</height>
+    <height>1059</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -635,7 +635,7 @@
          <stringlist notr="true"/>
         </property>
         <property name="nameFilter">
-         <string>CauteryTipModel</string>
+         <string>CauteryTip</string>
         </property>
         <property name="nodeTypes">
          <stringlist notr="true">
@@ -885,16 +885,27 @@
          <string>Cautery trajectory settings:</string>
         </property>
         <layout class="QGridLayout" name="gridLayout_3">
-         <item row="1" column="1">
-          <widget class="QDoubleSpinBox" name="cleanThresholdSpinBox">
-           <property name="decimals">
-            <number>1</number>
+         <item row="3" column="0">
+          <widget class="QLabel" name="label_20">
+           <property name="text">
+            <string>Clean threshold speed:</string>
            </property>
-           <property name="value">
-            <double>30.000000000000000</double>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="label_19">
+           <property name="text">
+            <string>Clean trajectory by speed:</string>
            </property>
-           <property name="SlicerParameterName" stdset="0">
-            <string>cleanThreshold</string>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QCheckBox" name="cleanSpeedCheckBox">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
            </property>
           </widget>
          </item>
@@ -905,20 +916,69 @@
            </property>
           </widget>
          </item>
-         <item row="0" column="0">
-          <widget class="QLabel" name="label_17">
-           <property name="text">
-            <string>Clean trajectory:</string>
+         <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="cleanDistThresholdSpinBox">
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="value">
+            <double>30.000000000000000</double>
+           </property>
+           <property name="SlicerParameterName" stdset="0">
+            <string>cleanDistThreshold</string>
            </property>
           </widget>
          </item>
          <item row="0" column="1">
-          <widget class="QCheckBox" name="cleanCheckBox">
+          <widget class="QCheckBox" name="cleanDistCheckBox">
            <property name="text">
             <string/>
            </property>
            <property name="checked">
             <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QDoubleSpinBox" name="cleanSpeedThresholdSpinBox">
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <double>1000.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>10.000000000000000</double>
+           </property>
+           <property name="value">
+            <double>50.000000000000000</double>
+           </property>
+           <property name="SlicerParameterName" stdset="0">
+            <string>cleanSpeedThreshold</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_17">
+           <property name="text">
+            <string>Clean trajectory by distance:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="label_21">
+           <property name="text">
+            <string>Alpha value:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QDoubleSpinBox" name="alphaSpinBox">
+           <property name="value">
+            <double>7.000000000000000</double>
+           </property>
+           <property name="SlicerParameterName" stdset="0">
+            <string>alpha</string>
            </property>
           </widget>
          </item>

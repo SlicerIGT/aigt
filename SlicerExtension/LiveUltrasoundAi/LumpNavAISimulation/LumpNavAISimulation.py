@@ -125,7 +125,9 @@ class LumpNavAISimulationParameterNode:
     smooth: Annotated[float, WithinRange(0, 50)] = 15
     decimate: Annotated[float, WithinRange(0, 1.0)] = 0.25
     closeMarginThreshold: float = 1.0
-    cleanThreshold: float = 30.0
+    cleanDistThreshold: float = 30.0
+    cleanSpeedThreshold: float = 50.0
+    alpha: float = 7.0
 
 
 #
@@ -344,8 +346,11 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
             self.ui.smoothSliderWidget.value = self.logic.DEFAULT_SMOOTH
             self.ui.decimateSliderWidget.value = self.logic.DEFAULT_DECIMATE
             self.ui.closeMarginSpinBox.value = self.logic.DEFAULT_CLOSE_MARGIN
-            self.ui.cleanCheckBox.checked = self.logic.DEFAULT_CLEAN
-            self.ui.cleanThresholdSpinBox.value = self.logic.DEFAULT_CLEAN_THRESHOLD
+            self.ui.cleanDistCheckBox.checked = self.logic.DEFAULT_CLEAN_DIST
+            self.ui.cleanDistThresholdSpinBox.value = self.logic.DEFAULT_CLEAN_DIST_THRESHOLD
+            self.ui.cleanSpeedCheckBox.checked = self.logic.DEFAULT_CLEAN_SPEED
+            self.ui.cleanSpeedThresholdSpinBox.value = self.logic.DEFAULT_CLEAN_SPEED_THRESHOLD
+            self.ui.alphaSpinBox.value = self.logic.DEFAULT_ALPHA
     
     def _setMinMaxTrim(self, caller=None, event=None) -> None:
         if (self._parameterNode 
@@ -446,8 +451,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
 
         start = self.ui.trimRangeWidget.minimumValue
         stop = self.ui.trimRangeWidget.maximumValue
-        clean = self.ui.cleanCheckBox.checked
-        status = self.logic.plotCauteryTrajectory(start, stop, clean)
+        cleanDist = self.ui.cleanDistCheckBox.checked
+        cleanSpeed = self.ui.cleanSpeedCheckBox.checked
+        status = self.logic.plotCauteryTrajectory(start, stop, cleanDist, cleanSpeed)
         # Expand subject hierarchy if successful
         if status == 0:
             self.ui.trajectoryCollapsibleButton.collapsed = False
@@ -478,8 +484,9 @@ class LumpNavAISimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixi
         timestamp = float(self.ui.resultsTableView.selectionModel().selectedRows()[0].data())
         start = timestamp - self._parameterNode.timestampBuffer
         stop = timestamp + self._parameterNode.timestampBuffer
-        clean = self.ui.cleanCheckBox.checked
-        status = self.logic.plotCauteryTrajectory(start, stop, clean)
+        cleanDist = self.ui.cleanDistCheckBox.checked
+        cleanSpeed = self.ui.cleanSpeedCheckBox.checked
+        status = self.logic.plotCauteryTrajectory(start, stop, cleanDist, cleanSpeed)
         # Expand subject hierarchy if successful
         if status == 0:
             self.ui.trajectoryCollapsibleButton.collapsed = False
@@ -544,8 +551,11 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
     DEFAULT_SMOOTH = 15
     DEFAULT_DECIMATE = 0.25
     DEFAULT_CLOSE_MARGIN = 1.0
-    DEFAULT_CLEAN = True
-    DEFAULT_CLEAN_THRESHOLD = 30.0
+    DEFAULT_CLEAN_DIST = True
+    DEFAULT_CLEAN_DIST_THRESHOLD = 30.0
+    DEFAULT_CLEAN_SPEED = True
+    DEFAULT_CLEAN_SPEED_THRESHOLD = 50.0
+    DEFAULT_ALPHA = 7.0
 
     RESULTS_TABLE_SUFFIX = "results"
     LAST_OUTPUT_FOLDER_SETTING =  "LumpNavAISimulation/LastOutputFolder"
@@ -557,6 +567,8 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
 
     TRAJECTORY_MARKUPS_SUFFIX = "CauteryTipMarkups"
     TRAJECTORY_MODEL_SUFFIX = "CauteryTipModel"
+    TRAJECTORY_MARGIN_SUFFIX = "CauteryTipMargin"
+    TRAJECTORY_ALPHA_SUFFIX = "CauteryTipAlpha"
 
     def __init__(self) -> None:
         """
@@ -761,6 +773,14 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         stopItem = sequenceNode.GetItemNumberFromIndexValue(str(stop), False)
         numItems = stopItem - startItem
 
+        # Get first cautery tip position for cautery speed calculation
+        parameterNode.trackingSeqBr.SetSelectedItemNumber(max(startItem - 1, 0))
+        cauteryTipToRasMatrix = vtk.vtkMatrix4x4()
+        cauteryTipToCautery.GetMatrixTransformToWorld(cauteryTipToRasMatrix)
+        cauteryTipRAS = cauteryTipToRasMatrix.MultiplyFloatPoint([0, 0, 0, 1])
+        lastCauteryTipRAS = np.array(cauteryTipRAS)
+        lastTime = float(sequenceNode.GetNthIndexValue(max(startItem - 1, 0)))
+
         # Create results table
         modelName = parameterNode.tumorModel.GetName()
         resultsTableName = f"{modelName}_{str(int(start))}-{str(int(stop))}_{self.RESULTS_TABLE_SUFFIX}"
@@ -768,7 +788,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
 
         # create results dataframe
         resultsDf = pd.DataFrame(columns=[
-            "Time (s)", "Distance To Tumour (mm)", "CauteryTipNeedle", "NeedleTipToRas", "TumorCenterRas", "Location"]
+            "Time (s)", "Distance To Tumour (mm)", "Cautery Speed (mm/s)", "CauteryTipNeedle", "NeedleTipToRas", "TumorCenterRas", "Location"]
         )
 
         selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
@@ -782,14 +802,26 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
 
                 parameterNode.trackingSeqBr.SetSelectedItemNumber(item)
 
-                # Check distance of cautery to tumor and record in table
+                # Collect distance and cautery tip position
                 distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
                 cauteryTipNeedle = vtk.vtkMatrix4x4()
                 cauteryTipToCautery.GetMatrixTransformToNode(needleToReference, cauteryTipNeedle)
                 cauteryTipNeedle = cauteryTipNeedle.MultiplyFloatPoint([0, 0, 0, 1])
+
+                # Get cautery speed data
+                cauteryTipToRASMatrix = vtk.vtkMatrix4x4()
+                cauteryTipToCautery.GetMatrixTransformToWorld(cauteryTipToRASMatrix)
+                cauteryTip_RAS = cauteryTipToRASMatrix.MultiplyFloatPoint([0,0,0,1])
+                cauteryTip_RAS = np.array(cauteryTip_RAS)
+                distanceTraveled = np.linalg.norm(cauteryTip_RAS - lastCauteryTipRAS)
+                lastCauteryTipRAS = cauteryTip_RAS
+                speed = distanceTraveled / (float(sequenceNode.GetNthIndexValue(item)) - lastTime)
+                lastTime = float(sequenceNode.GetNthIndexValue(item))
+
                 resultsDf = pd.concat([resultsDf, pd.DataFrame([{
                     "Time (s)": sequenceNode.GetNthIndexValue(item),
                     "Distance To Tumour (mm)": distanceToTumor, 
+                    "Cautery Speed (mm/s)": speed,
                     "CauteryTipNeedle": cauteryTipNeedle[:3],
                     "NeedleTipToRas": self.getNeedleTipToWorld(),
                     "TumorCenterRas": self.getTumorCenterRas(),
@@ -821,7 +853,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
             self.processing = False
             return exitCode
         
-    def plotCauteryTrajectory(self, start, stop, clean) -> int:
+    def plotCauteryTrajectory(self, start, stop, cleanDist, cleanSpeed, tubeRadius=1.0, marginMM=1.0) -> int:
         logging.info("Plotting cautery trajectory")
         self.processing = True
 
@@ -829,7 +861,7 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         sequenceNode = parameterNode.trackingSeqBr.GetMasterSequenceNode()
 
         # Breach warning node is needed if clean is enabled
-        if clean and not parameterNode.breachWarning:
+        if cleanDist and not parameterNode.breachWarning:
             parameterNode.breachWarning = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLBreachWarningNode")
             parameterNode.breachWarning.SetOriginalColor(*parameterNode.tumorModel.GetDisplayNode().GetColor())
             parameterNode.breachWarning.SetAndObserveWatchedModelNodeID(parameterNode.tumorModel.GetID())
@@ -847,6 +879,20 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
         stopItem = sequenceNode.GetItemNumberFromIndexValue(str(stop), False)
         numItems = stopItem - startItem
 
+        # Get first cautery tip position for cautery speed calculation
+        if cleanSpeed:
+            parameterNode.trackingSeqBr.SetSelectedItemNumber(max(startItem - 1, 0))
+            cauteryTipToCautery = parameterNode.cauteryTipToCautery
+            cauteryTipToRasMatrix = vtk.vtkMatrix4x4()
+            cauteryTipToCautery.GetMatrixTransformToWorld(cauteryTipToRasMatrix)
+            cauteryTipRAS = cauteryTipToRasMatrix.MultiplyFloatPoint([0, 0, 0, 1])
+            lastCauteryTipRAS = np.array(cauteryTipRAS)
+            lastTime = float(sequenceNode.GetNthIndexValue(max(startItem - 1, 0)))
+
+        # Track contiguous runs of accepted points; a run ends wherever a point is filtered out
+        segments = []       # list of segments, each a list of (x, y, z) in needle-tip local coords
+        currentSegment = []
+
         selectedItemNumber = parameterNode.trackingSeqBr.GetSelectedItemNumber()  # for restoring later
         try:
             qt.QApplication.setOverrideCursor(qt.Qt.WaitCursor)
@@ -859,9 +905,30 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
                 parameterNode.trackingSeqBr.SetSelectedItemNumber(item)
 
                 # Check distance to tumor if needed
-                if clean:
+                if cleanDist:
                     distanceToTumor = parameterNode.breachWarning.GetClosestDistanceToModelFromToolTip()
-                    if distanceToTumor > parameterNode.cleanThreshold:
+                    if distanceToTumor > parameterNode.cleanDistThreshold:
+                        # Gap in the trajectory -- close out whatever segment we were building
+                        if currentSegment:
+                            segments.append(currentSegment)
+                            currentSegment = []
+                        continue  # skip this point
+
+                if cleanSpeed:
+                    # Get cautery speed data
+                    cauteryTipToRASMatrix = vtk.vtkMatrix4x4()
+                    parameterNode.cauteryTipToCautery.GetMatrixTransformToWorld(cauteryTipToRASMatrix)
+                    cauteryTip_RAS = cauteryTipToRASMatrix.MultiplyFloatPoint([0,0,0,1])
+                    cauteryTip_RAS = np.array(cauteryTip_RAS)
+                    distanceTraveled = np.linalg.norm(cauteryTip_RAS - lastCauteryTipRAS)
+                    lastCauteryTipRAS = cauteryTip_RAS
+                    speed = distanceTraveled / (float(sequenceNode.GetNthIndexValue(item)) - lastTime)
+                    lastTime = float(sequenceNode.GetNthIndexValue(item))
+                    if speed > parameterNode.cleanSpeedThreshold:
+                        # Gap in the trajectory -- close out whatever segment we were building
+                        if currentSegment:
+                            segments.append(currentSegment)
+                            currentSegment = []
                         continue  # skip this point
 
                 # Get cautery tip to RAS transform
@@ -883,27 +950,162 @@ class LumpNavAISimulationLogic(ScriptedLoadableModuleLogic):
                 slicer.modules.markups.logic().AddControlPoint(
                     cauteryTip_NeedleTip[0], cauteryTip_NeedleTip[1], cauteryTip_NeedleTip[2]
                 )
+
+                # Accumulate into whatever contiguous segment is currently being built
+                currentSegment.append(cauteryTip_NeedleTip[:3])
+
+            # Close out the final segment, if the loop ended mid-run
+            if currentSegment:
+                segments.append(currentSegment)
             
-            # Create cylinder model
+            # Build one polydata containing one polyline per contiguous segment
+            combinedPoints = vtk.vtkPoints()
+            combinedLines = vtk.vtkCellArray()
+            skippedSingletons = 0
+            validSegmentCount = 0
+
+            for segment in segments:
+                if len(segment) < 2:
+                    # A lone surviving point can't form a line -- nothing to tube here
+                    skippedSingletons += 1
+                    continue
+
+                pointIds = [combinedPoints.InsertNextPoint(pt) for pt in segment]
+
+                polyLine = vtk.vtkPolyLine()
+                polyLine.GetPointIds().SetNumberOfIds(len(pointIds))
+                for i, pid in enumerate(pointIds):
+                    polyLine.GetPointIds().SetId(i, pid)
+                combinedLines.InsertNextCell(polyLine)
+                validSegmentCount += 1
+
+            if skippedSingletons:
+                logging.info(f"{skippedSingletons} isolated point(s) could not be connected into a tube segment")
+
+            trajectoryPolyData = vtk.vtkPolyData()
+            trajectoryPolyData.SetPoints(combinedPoints)
+            trajectoryPolyData.SetLines(combinedLines)
+
+            # --- Tube model (path representation) ---
+            tubeFilter = vtk.vtkTubeFilter()
+            tubeFilter.SetInputData(trajectoryPolyData)
+            tubeFilter.SetRadius(tubeRadius)
+            tubeFilter.SetNumberOfSides(20)
+            tubeFilter.CappingOn()
+            tubeFilter.Update()
+
+            # Create the trajectory model directly from the combined tube geometry
             modelName = f"{str(int(start))}-{str(int(stop))}_{self.TRAJECTORY_MODEL_SUFFIX}"
             modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", modelName)
             modelNode.SetAndObserveTransformNodeID(parameterNode.needleTipToNeedle.GetID())
             modelNode.CreateDefaultDisplayNodes()
+            modelNode.SetAndObservePolyData(tubeFilter.GetOutput())
             modelNode.GetDisplayNode().SetColor(0.5, 0.5, 0.5)  # gray
             modelNode.SetDisplayVisibility(True)
-            createModelsLogic = slicer.modules.createmodels.logic()
-            createModelsLogic.CreateCylinder(1.0, 1.0, modelNode)
 
-            # Convert markups to curve model
-            markupsToModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsToModelNode")
-            markupsToModelNode.SetAutoUpdateOutput(False)
-            markupsToModelNode.SetModelType(markupsToModelNode.Curve)
-            markupsToModelNode.SetAndObserveInputNodeID(markupsNode.GetID())
-            markupsToModelNode.SetAndObserveOutputModelNodeID(modelNode.GetID())
-            markupsToModelLogic = slicer.modules.markupstomodel.logic()
-            markupsToModelLogic.UpdateOutputModel(markupsToModelNode)
+            # --- Distance field / margin model (area-spanned representation) ---
+            # Reuses trajectoryPolyData -- vtkImplicitModeller computes distance to the
+            # nearest line segment across ALL polylines, so disconnected segments stay
+            # disconnected in the resulting field rather than bridging the gap.
+            modeller = vtk.vtkImplicitModeller()
+            modeller.SetInputData(trajectoryPolyData)
+            modeller.SetSampleDimensions(100, 100, 100)
+            modeller.SetMaximumDistance(0.25)
+            modeller.AdjustBoundsOn()
+            modeller.SetAdjustDistance(0.2)
+            modeller.Update()
 
-            logging.info("Cautery trajectory plotted")
+            marginContour = vtk.vtkContourFilter()
+            marginContour.SetInputConnection(modeller.GetOutputPort())
+            marginContour.SetValue(0, marginMM)
+            marginContour.Update()
+
+            # Smooth without eroding the margin (windowed sinc preserves volume better than Laplacian)
+            marginSmoother = vtk.vtkWindowedSincPolyDataFilter()
+            marginSmoother.SetInputConnection(marginContour.GetOutputPort())
+            marginSmoother.SetNumberOfIterations(20)
+            marginSmoother.SetPassBand(0.1)
+            marginSmoother.NonManifoldSmoothingOn()
+            marginSmoother.NormalizeCoordinatesOn()
+            marginSmoother.Update()
+
+            marginModelName = f"{str(int(start))}-{str(int(stop))}_{self.TRAJECTORY_MARGIN_SUFFIX}"
+            marginModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", marginModelName)
+            marginModelNode.SetAndObserveTransformNodeID(parameterNode.needleTipToNeedle.GetID())
+            marginModelNode.CreateDefaultDisplayNodes()
+            marginModelNode.SetAndObservePolyData(marginSmoother.GetOutput())
+            marginDisplay = marginModelNode.GetDisplayNode()
+            marginDisplay.SetColor(0.5, 0.5, 0.5)
+            marginDisplay.SetOpacity(0.4)
+            marginModelNode.SetDisplayVisibility(True)
+
+            # --- Alpha shape model (point-density-based area, order/gap-agnostic) ---
+            # Uses only point positions (combinedPoints), not the polyline connectivity --
+            # so unlike the tube/margin models, this can bridge across a "gap" in time
+            # if the cautery physically revisited a nearby location later.
+            pointOnlyPolyData = vtk.vtkPolyData()
+            pointOnlyPolyData.SetPoints(combinedPoints)
+
+            delaunay3D = vtk.vtkDelaunay3D()
+            delaunay3D.SetInputData(pointOnlyPolyData)
+            delaunay3D.SetAlpha(parameterNode.alpha)
+            delaunay3D.SetAlphaTets(True)
+            delaunay3D.SetAlphaTris(True)
+            delaunay3D.SetTolerance(0.001)
+            delaunay3D.Update()
+
+            alphaSurfaceFilter = vtk.vtkGeometryFilter()
+            alphaSurfaceFilter.SetInputConnection(delaunay3D.GetOutputPort())
+            alphaSurfaceFilter.Update()
+
+            # Alpha shape output can include non-triangular polygons -- smoothing filters
+            # expect a pure triangle mesh, so triangulate first
+            triangleFilter = vtk.vtkTriangleFilter()
+            triangleFilter.SetInputConnection(alphaSurfaceFilter.GetOutputPort())
+            triangleFilter.Update()
+
+            # Alpha shapes are also prone to small holes/gaps at the boundary between
+            # kept and discarded tetrahedra -- fill them before smoothing so the smoother
+            # doesn't just soften the edges of a hole rather than closing it
+            fillHoles = vtk.vtkFillHolesFilter()
+            fillHoles.SetInputConnection(triangleFilter.GetOutputPort())
+            fillHoles.SetHoleSize(1000.0)  # generous size cap so it doesn't skip real holes
+            fillHoles.Update()
+
+            # Windowed sinc smoothing -- rounds off sharp vertices/edges without the
+            # volume shrinkage you'd get from a Laplacian smoother (vtkSmoothPolyDataFilter)
+            alphaSmoother = vtk.vtkWindowedSincPolyDataFilter()
+            alphaSmoother.SetInputConnection(fillHoles.GetOutputPort())
+            alphaSmoother.SetNumberOfIterations(30)
+            alphaSmoother.SetPassBand(0.05)      # lower = smoother/rounder, higher = preserves more detail
+            alphaSmoother.BoundarySmoothingOn()
+            alphaSmoother.NonManifoldSmoothingOn()
+            alphaSmoother.NormalizeCoordinatesOn()
+            alphaSmoother.Update()
+
+            # Recompute normals since smoothing can leave them stale/inconsistent, which
+            # shows up as patchy/incorrect shading in the 3D view
+            alphaNormals = vtk.vtkPolyDataNormals()
+            alphaNormals.SetInputConnection(alphaSmoother.GetOutputPort())
+            alphaNormals.ConsistencyOn()
+            alphaNormals.SplittingOff()   # keeps smooth shading across the whole surface rather than faceted
+            alphaNormals.Update()
+
+            alphaModelName = f"{str(int(start))}-{str(int(stop))}_{self.TRAJECTORY_ALPHA_SUFFIX}"
+            alphaModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", alphaModelName)
+            alphaModelNode.SetAndObserveTransformNodeID(parameterNode.needleTipToNeedle.GetID())
+            alphaModelNode.CreateDefaultDisplayNodes()
+            alphaModelNode.SetAndObservePolyData(alphaNormals.GetOutput())
+            alphaDisplay = alphaModelNode.GetDisplayNode()
+            alphaDisplay.SetColor(0.5, 0.5, 0.5)
+            alphaDisplay.SetOpacity(0.4)
+            alphaDisplay.SetEdgeVisibility(True)
+            alphaModelNode.SetDisplayVisibility(True)
+
+            logging.info(
+                f"Cautery trajectory plotted as {validSegmentCount} segment(s); "
+                f"margin model at {marginMM}mm; alpha shape at alpha={parameterNode.alpha}"
+            )
             exitCode = 0
         
         except Exception as e:
