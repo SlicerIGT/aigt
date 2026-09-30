@@ -719,6 +719,7 @@ class TorchSequenceSegmentationWidget(ScriptedLoadableModuleWidget, VTKObservati
 
             # Restore UI
             qt.QApplication.restoreOverrideCursor()
+            self.ui.startButton.setChecked(False)
             self.ui.startButton.setText("Start")
             self.ui.overallProgressBar.setValue(0)
             self.ui.taskStatusLabel.setText("Ready")
